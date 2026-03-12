@@ -42,8 +42,8 @@ EMAIL_PROVIDERS = {
         "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
         "scopes": [
             "openid",
-            "IMAP.AccessAsUser.All",
-            "hSMTP.Send",
+            "https://outlook.office.com/IMAP.AccessAsUser.All",
+            "https://outlook.office.com/SMTP.Send",
             "offline_access"
         ],
         "hint": "Note: Outlook may require an 'App Password' if 2FA is enabled."
@@ -97,6 +97,8 @@ def start_oauth_flow(client_id, client_secret, auth_url, token_url, scopes, redi
 
     @app.route('/')
     def callback():
+        if "error" in request.args:
+            return f"❌ Authorization Error: {request.args.get('error_description', request.args.get('error', 'Unknown error'))}"
         if "code" in request.args:
             try:
                 oauth = OAuth2Session(client_id, scope=scopes, redirect_uri=redirect_uri)
