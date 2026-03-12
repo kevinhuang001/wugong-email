@@ -196,12 +196,14 @@ def run_wizard():
         # 1. Load existing config or initialize new one
         first_use = not os.path.exists(CONFIG_FILE)
         config = {"general": {"encryption_enabled": True, "salt": ""}, "accounts": []}
+        original_accounts_count = 0
         
         if not first_use:
             try:
                 with open(CONFIG_FILE, "r") as f:
                     config = toml.load(f)
-                print(f"Loaded existing config with {len(config.get('accounts', []))} account(s).")
+                original_accounts_count = len(config.get('accounts', []))
+                print(f"Loaded existing config with {original_accounts_count} account(s).")
             except Exception as e:
                 print(f"Error loading config: {e}. Starting fresh.")
                 first_use = True
@@ -405,13 +407,14 @@ def run_wizard():
         print(f"\nConfiguration saved to {CONFIG_FILE} with {len(config['accounts'])} account(s)!")
 
     except KeyboardInterrupt:
-        if config.get("accounts"):
-            # If there are already some accounts configured, save them
+        new_accounts_count = len(config.get("accounts", [])) - original_accounts_count
+        if new_accounts_count > 0:
+            # If there are new accounts added, save them
             with open(CONFIG_FILE, "w") as f:
                 toml.dump(config, f)
-            print(f"\n[!] Configuration interrupted. {len(config['accounts'])} account(s) were saved to {CONFIG_FILE}.")
+            print(f"\n[!] Configuration interrupted. {new_accounts_count} new account(s) were saved to {CONFIG_FILE}.")
         else:
-            print("\n[!] Configuration cancelled. No changes were saved.")
+            print("\n[!] Configuration cancelled. No changes were made.")
         return
 
 if __name__ == "__main__":
