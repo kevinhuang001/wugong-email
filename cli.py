@@ -54,6 +54,20 @@ def main():
     # Configure command
     subparsers.add_parser("configure", help="Run the configuration wizard")
 
+    # Account command
+    account_parser = subparsers.add_parser("account", help="Manage email accounts")
+    account_subparsers = account_parser.add_subparsers(dest="account_command", help="Account operations")
+    
+    # account list
+    account_subparsers.add_parser("list", help="List all configured accounts")
+    
+    # account add
+    account_subparsers.add_parser("add", help="Add a new account (same as configure)")
+    
+    # account delete
+    delete_parser = account_subparsers.add_parser("delete", help="Delete a configured account")
+    delete_parser.add_argument("name", help="Friendly name of the account to delete")
+
     # Update command
     subparsers.add_parser("update", help="Update Wugong Email to the latest version")
 
@@ -151,6 +165,52 @@ def main():
 
     elif args.command == "configure":
         run_wizard()
+
+    elif args.command == "account":
+        if args.account_command == "list":
+            if not manager.accounts:
+                console.print("[yellow]No accounts configured yet. Run 'wugong configure' or 'wugong account add' to get started.[/yellow]")
+                return
+                
+            table = Table(title="Configured Email Accounts")
+            table.add_column("ID", style="cyan", no_wrap=True)
+            table.add_column("Friendly Name", style="magenta")
+            table.add_column("Method", style="green")
+            table.add_column("IMAP Server", style="yellow")
+
+            for idx, acc in enumerate(manager.accounts, 1):
+                table.add_row(
+                    str(idx),
+                    acc.get("friendly_name", "N/A"),
+                    acc.get("login_method", "N/A"),
+                    f"{acc.get('imap_server')}:{acc.get('imap_port')}"
+                )
+            console.print(table)
+            
+        elif args.account_command == "add":
+            run_wizard()
+            
+        elif args.account_command == "delete":
+            account_name = args.name
+            account = manager.get_account_by_name(account_name)
+            if not account:
+                console.print(f"[red]Error: Account '{account_name}' not found.[/red]")
+                return
+                
+            confirm = questionary.confirm(f"Are you sure you want to delete account '{account_name}'?").ask()
+            if confirm:
+                # Remove from manager.accounts
+                manager.accounts = [acc for acc in manager.accounts if acc.get("friendly_name") != account_name]
+                # Update manager.config["accounts"]
+                manager.config["accounts"] = manager.accounts
+                # Save to config file
+                manager._save_config()
+                console.print(f"[green]Successfully deleted account '{account_name}'.[/green]")
+            else:
+                console.print("[yellow]Deletion cancelled.[/yellow]")
+        else:
+            # Show help for account command if no subcommand provided
+            account_parser.print_help()
 
     elif args.command == "update":
         install_dir = os.path.dirname(os.path.abspath(__file__))
