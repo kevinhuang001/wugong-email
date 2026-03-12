@@ -42,7 +42,7 @@ EMAIL_PROVIDERS = {
         "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
         "scopes": [
             "openid",
-            "https://outlook.office.com/IMAP.AccessAsUser.All",
+            "IMAP.AccessAsUser.All",
             "https://outlook.office.com/SMTP.Send",
             "offline_access"
         ],
@@ -139,7 +139,14 @@ def start_oauth_flow(client_id, client_secret, auth_url, token_url, scopes, redi
                 
                 token_data['token'] = token
                 token_data['user_email'] = user_email
-                stop_event.set()
+                
+                # Use a small delay before stopping the server to allow the browser to receive the response
+                def delayed_stop():
+                    import time
+                    time.sleep(1)
+                    stop_event.set()
+                threading.Thread(target=delayed_stop, daemon=True).start()
+                
                 return "✅ Authorization successful! You can close this window and return to the terminal."
             except Exception as e:
                 return f"❌ Error fetching token: {e}"
