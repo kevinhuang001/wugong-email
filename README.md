@@ -14,6 +14,7 @@ A minimalist, secure, TUI-based command-line email manager. Supports multi-accou
 
 ## 🛠️ Installation
 
+### 🍎 macOS / 🐧 Linux
 We provide an automated installation script that handles Python version checks, dependency installation, and environment setup.
 
 1. **Quick Remote Installation**:
@@ -26,12 +27,30 @@ We provide an automated installation script that handles Python version checks, 
    ```bash
    bash install.sh
    ```
-2. **Configure Environment Path**:
+
+3. **Configure Environment Path**:
    After installation, add the following line to your `~/.zshrc` or `~/.bashrc`:
    ```bash
    export PATH="$PATH:$HOME/.wugong"
    ```
    Then apply the changes: `source ~/.zshrc`.
+
+---
+
+### 🪟 Windows
+1. **Quick Remote Installation (PowerShell)**:
+   ```powershell
+   irm https://raw.githubusercontent.com/kevinhuang001/wugong-email/main/install.ps1 | iex
+   ```
+
+2. **Local Installation**:
+   If you have cloned the repository, open PowerShell and run:
+   ```powershell
+   .\install.ps1
+   ```
+
+3. **Configure Environment Path**:
+   Add `%USERPROFILE%\.wugong` to your system's `PATH` environment variable.
 
 ---
 

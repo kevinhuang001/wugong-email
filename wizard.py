@@ -405,7 +405,13 @@ def run_wizard():
         print(f"\nConfiguration saved to {CONFIG_FILE} with {len(config['accounts'])} account(s)!")
 
     except KeyboardInterrupt:
-        print("\n\n[!] Configuration cancelled. No changes were saved.")
+        if config.get("accounts"):
+            # If there are already some accounts configured, save them
+            with open(CONFIG_FILE, "w") as f:
+                toml.dump(config, f)
+            print(f"\n[!] Configuration interrupted. {len(config['accounts'])} account(s) were saved to {CONFIG_FILE}.")
+        else:
+            print("\n[!] Configuration cancelled. No changes were saved.")
         return
 
 if __name__ == "__main__":
