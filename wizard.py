@@ -175,197 +175,238 @@ def start_oauth_flow(client_id, client_secret, auth_url, token_url, scopes, redi
     return token_data
 
 def run_wizard():
-    print("=== Email Configuration Wizard ===")
-    
-    # Determine config path: ENV > USER_CONFIG > LOCAL
-    global CONFIG_FILE
-    env_path = os.environ.get("WUGONG_CONFIG")
-    user_path = os.path.expanduser("~/.config/wugong/config.toml")
-    
-    if env_path:
-        CONFIG_FILE = env_path
-    elif os.path.exists(os.path.dirname(user_path)):
-        CONFIG_FILE = user_path
-    
-    # Ensure directory exists if it's in ~/.config
-    config_dir = os.path.dirname(CONFIG_FILE)
-    if config_dir and not os.path.exists(config_dir):
-        os.makedirs(config_dir, exist_ok=True)
-
-    # 1. Load existing config or initialize new one
-    first_use = not os.path.exists(CONFIG_FILE)
-    config = {"general": {"encryption_enabled": True, "salt": ""}, "accounts": []}
-    
-    if not first_use:
-        try:
-            with open(CONFIG_FILE, "r") as f:
-                config = toml.load(f)
-            print(f"Loaded existing config with {len(config.get('accounts', []))} account(s).")
-        except Exception as e:
-            print(f"Error loading config: {e}. Starting fresh.")
-            first_use = True
-
-    # 2. Setup/Verify encryption
-    if first_use:
-        print("First use detected. Please set up global encryption settings.")
-        encryption_password = questionary.password("Set an encryption password:").ask()
-        if not encryption_password:
-            print("Password cannot be empty.")
-            return
-        encrypt_enabled = questionary.confirm("Enable encryption for sensitive data?").ask()
-        salt = generate_salt()
-        config["general"]["encryption_enabled"] = encrypt_enabled
-        config["general"]["salt"] = base64.b64encode(salt).decode() if encrypt_enabled else ""
-    else:
-        encryption_password = questionary.password("Enter your encryption password to proceed:").ask()
-        encrypt_enabled = config["general"]["encryption_enabled"]
-        salt = base64.b64decode(config["general"]["salt"]) if encrypt_enabled else None
-
-    # 3. Add Account(s) Loop
-    while True:
-        print(f"\n--- Adding Account #{len(config['accounts']) + 1} ---")
+    try:
+        print("=== Email Configuration Wizard ===")
         
-        is_default = False
-        # Check if a default account already exists
-        has_default = any(acc.get("friendly_name") == "default" for acc in config["accounts"])
+        # Determine config path: ENV > USER_CONFIG > LOCAL
+        global CONFIG_FILE
+        env_path = os.environ.get("WUGONG_CONFIG")
+        user_path = os.path.expanduser("~/.config/wugong/config.toml")
         
-        if not has_default:
-            is_default = questionary.confirm("Set this as your default account? (No friendly name required)").ask()
+        if env_path:
+            CONFIG_FILE = env_path
+        elif os.path.exists(os.path.dirname(user_path)):
+            CONFIG_FILE = user_path
         
-        if is_default:
-            friendly_name = "default"
+        # Ensure directory exists if it's in ~/.config
+        config_dir = os.path.dirname(CONFIG_FILE)
+        if config_dir and not os.path.exists(config_dir):
+            os.makedirs(config_dir, exist_ok=True)
+
+        # 1. Load existing config or initialize new one
+        first_use = not os.path.exists(CONFIG_FILE)
+        config = {"general": {"encryption_enabled": True, "salt": ""}, "accounts": []}
+        
+        if not first_use:
+            try:
+                with open(CONFIG_FILE, "r") as f:
+                    config = toml.load(f)
+                print(f"Loaded existing config with {len(config.get('accounts', []))} account(s).")
+            except Exception as e:
+                print(f"Error loading config: {e}. Starting fresh.")
+                first_use = True
+
+        # 2. Setup/Verify encryption
+        if first_use:
+            print("First use detected. Please set up global encryption settings.")
+            encryption_password = questionary.password("Set an encryption password:").ask()
+            if encryption_password is None: raise KeyboardInterrupt
+            if not encryption_password:
+                print("Password cannot be empty.")
+                return
+            encrypt_enabled = questionary.confirm("Enable encryption for sensitive data?").ask()
+            if encrypt_enabled is None: raise KeyboardInterrupt
+            salt = generate_salt()
+            config["general"]["encryption_enabled"] = encrypt_enabled
+            config["general"]["salt"] = base64.b64encode(salt).decode() if encrypt_enabled else ""
         else:
-            friendly_name = questionary.text("Friendly Name (e.g., 'Work Gmail'):").ask()
-            if not friendly_name:
-                print("Friendly Name is required.")
-                continue
+            encryption_password = questionary.password("Enter your encryption password to proceed:").ask()
+            if encryption_password is None: raise KeyboardInterrupt
+            encrypt_enabled = config["general"]["encryption_enabled"]
+            salt = base64.b64decode(config["general"]["salt"]) if encrypt_enabled else None
 
-        # Check if friendly name already exists
-        existing_names = [acc.get("friendly_name") for acc in config.get("accounts", [])]
-        if friendly_name in existing_names:
-            if not questionary.confirm(f"Account '{friendly_name}' already exists. Overwrite?").ask():
-                continue
-            # Remove existing account for overwrite
-            config["accounts"] = [acc for acc in config["accounts"] if acc.get("friendly_name") != friendly_name]
+        # 3. Add Account(s) Loop
+        while True:
+            print(f"\n--- Adding Account #{len(config['accounts']) + 1} ---")
             
-        provider_name = questionary.select(
-            "Select your email provider:",
-            choices=list(EMAIL_PROVIDERS.keys())
-        ).ask()
-        
-        provider_info = EMAIL_PROVIDERS[provider_name]
-        if provider_info["hint"]:
-            print(f"\n[!] {provider_info['hint']}\n")
-
-        login_method = questionary.select(
-            "Choose login method:",
-            choices=provider_info["auth_methods"]
-        ).ask()
-
-        # 1. Ask for Email Account (Username) first for both methods
-        username = questionary.text("Email Account (e.g. yourname@example.com):").ask()
-        if not username:
-            print("Email Account is required.")
-            continue
-
-        imap_server = questionary.text("IMAP Server:", default=provider_info["imap_server"]).ask()
-        imap_port = int(questionary.text("IMAP Port:", default=str(provider_info["imap_port"])).ask())
-        smtp_server = questionary.text("SMTP Server:", default=provider_info["smtp_server"]).ask()
-        smtp_port = int(questionary.text("SMTP Port:", default=str(provider_info["smtp_port"])).ask())
-
-        auth_details = {}
-        if login_method == "Account/Password":
-            pwd_label = "Authorization Code (授权码):" if "授权码" in provider_info["hint"] else "Email Password (or App Password):"
-            password = questionary.password(pwd_label).ask()
+            is_default = False
+            # Check if a default account already exists
+            has_default = any(acc.get("friendly_name") == "default" for acc in config["accounts"])
             
-            if encrypt_enabled:
-                auth_details = {
-                    "username": username,
-                    "password": encrypt_data(password, encryption_password, salt)
-                }
+            if not has_default:
+                is_default = questionary.confirm("Set this as your default account? (No friendly name required)").ask()
+                if is_default is None: raise KeyboardInterrupt
+            
+            if is_default:
+                friendly_name = "default"
             else:
-                auth_details = {"username": username, "password": password}
-        else:
-            # OAuth2 details
-            client_id = questionary.text("OAuth2 Client ID:").ask()
-            client_secret = questionary.password("OAuth2 Client Secret:").ask()
-            auth_url = questionary.text("OAuth2 Authorization URL:", default=provider_info.get("auth_url", "")).ask()
-            token_url = questionary.text("OAuth2 Token URL:", default=provider_info.get("token_url", "")).ask()
-            scopes_input = questionary.text("OAuth2 Scopes (comma separated):", default=",".join(provider_info.get("scopes", []))).ask()
-            scopes = [s.strip() for s in scopes_input.split(",") if s.strip()]
+                friendly_name = questionary.text("Friendly Name (e.g., 'Work Gmail'):").ask()
+                if friendly_name is None: raise KeyboardInterrupt
+                if not friendly_name:
+                    print("Friendly Name is required.")
+                    continue
+
+            # Check if friendly name already exists
+            existing_names = [acc.get("friendly_name") for acc in config.get("accounts", [])]
+            if friendly_name in existing_names:
+                overwrite = questionary.confirm(f"Account '{friendly_name}' already exists. Overwrite?").ask()
+                if overwrite is None: raise KeyboardInterrupt
+                if not overwrite:
+                    continue
+                # Remove existing account for overwrite
+                config["accounts"] = [acc for acc in config["accounts"] if acc.get("friendly_name") != friendly_name]
+                
+            provider_name = questionary.select(
+                "Select your email provider:",
+                choices=list(EMAIL_PROVIDERS.keys())
+            ).ask()
+            if provider_name is None: raise KeyboardInterrupt
             
-            redirect_uri = questionary.text("Redirect URI:", default="http://localhost:5000/").ask()
+            provider_info = EMAIL_PROVIDERS[provider_name]
+            if provider_info["hint"]:
+                print(f"\n[!] {provider_info['hint']}\n")
+
+            login_method = questionary.select(
+                "Choose login method:",
+                choices=provider_info["auth_methods"]
+            ).ask()
+            if login_method is None: raise KeyboardInterrupt
+
+            # 1. Ask for Email Account (Username) first for both methods
+            username = questionary.text("Email Account (e.g. yourname@example.com):").ask()
+            if username is None: raise KeyboardInterrupt
+            if not username:
+                print("Email Account is required.")
+                continue
+
+            imap_server = questionary.text("IMAP Server:", default=provider_info["imap_server"]).ask()
+            if imap_server is None: raise KeyboardInterrupt
             
-            auto_auth = questionary.confirm("Start local server to automatically fetch tokens?").ask()
+            imap_port_str = questionary.text("IMAP Port:", default=str(provider_info["imap_port"])).ask()
+            if imap_port_str is None: raise KeyboardInterrupt
+            imap_port = int(imap_port_str)
             
-            refresh_token = ""
-            access_token = ""
+            smtp_server = questionary.text("SMTP Server:", default=provider_info["smtp_server"]).ask()
+            if smtp_server is None: raise KeyboardInterrupt
             
-            if auto_auth:
-                token_data = start_oauth_flow(client_id, client_secret, auth_url, token_url, scopes, redirect_uri)
-                if token_data and 'token' in token_data:
-                    token = token_data['token']
-                    refresh_token = token.get('refresh_token', '')
-                    access_token = token.get('access_token', '')
-                    # If token_data has an email, update the username
-                    detected_email = token_data.get('user_email', '')
-                    if detected_email and detected_email != username:
-                        if questionary.confirm(f"Detected email '{detected_email}' differs from '{username}'. Use detected email?").ask():
-                            username = detected_email
-                    
-                    print(f"\nSuccessfully obtained tokens!")
+            smtp_port_str = questionary.text("SMTP Port:", default=str(provider_info["smtp_port"])).ask()
+            if smtp_port_str is None: raise KeyboardInterrupt
+            smtp_port = int(smtp_port_str)
+
+            auth_details = {}
+            if login_method == "Account/Password":
+                pwd_label = "Authorization Code (授权码):" if "授权码" in provider_info["hint"] else "Email Password (or App Password):"
+                password = questionary.password(pwd_label).ask()
+                if password is None: raise KeyboardInterrupt
+                
+                if encrypt_enabled:
+                    auth_details = {
+                        "username": username,
+                        "password": encrypt_data(password, encryption_password, salt)
+                    }
                 else:
-                    print("Failed to obtain tokens automatically. You can enter them manually.")
-            
-            if not refresh_token:
-                refresh_token = questionary.text("OAuth2 Refresh Token (optional):").ask()
-
-            if encrypt_enabled:
-                auth_details = {
-                    "username": username,
-                    "client_id": encrypt_data(client_id, encryption_password, salt),
-                    "client_secret": encrypt_data(client_secret, encryption_password, salt),
-                    "auth_url": auth_url,
-                    "token_url": token_url,
-                    "redirect_uri": redirect_uri,
-                    "scopes": scopes,
-                    "refresh_token": encrypt_data(refresh_token, encryption_password, salt) if refresh_token else "",
-                    "access_token": encrypt_data(access_token, encryption_password, salt) if access_token else ""
-                }
+                    auth_details = {"username": username, "password": password}
             else:
-                auth_details = {
-                    "username": username,
-                    "client_id": client_id,
-                    "client_secret": client_secret,
-                    "auth_url": auth_url,
-                    "token_url": token_url,
-                    "redirect_uri": redirect_uri,
-                    "scopes": scopes,
-                    "refresh_token": refresh_token,
-                    "access_token": access_token
-                }
+                # OAuth2 details
+                client_id = questionary.text("OAuth2 Client ID:").ask()
+                if client_id is None: raise KeyboardInterrupt
+                
+                client_secret = questionary.password("OAuth2 Client Secret:").ask()
+                if client_secret is None: raise KeyboardInterrupt
+                
+                auth_url = questionary.text("OAuth2 Authorization URL:", default=provider_info.get("auth_url", "")).ask()
+                if auth_url is None: raise KeyboardInterrupt
+                
+                token_url = questionary.text("OAuth2 Token URL:", default=provider_info.get("token_url", "")).ask()
+                if token_url is None: raise KeyboardInterrupt
+                
+                scopes_input = questionary.text("OAuth2 Scopes (comma separated):", default=",".join(provider_info.get("scopes", []))).ask()
+                if scopes_input is None: raise KeyboardInterrupt
+                scopes = [s.strip() for s in scopes_input.split(",") if s.strip()]
+                
+                redirect_uri = questionary.text("Redirect URI:", default="http://localhost:5000/").ask()
+                if redirect_uri is None: raise KeyboardInterrupt
+                
+                auto_auth = questionary.confirm("Start local server to automatically fetch tokens?").ask()
+                if auto_auth is None: raise KeyboardInterrupt
+                
+                refresh_token = ""
+                access_token = ""
+                
+                if auto_auth:
+                    token_data = start_oauth_flow(client_id, client_secret, auth_url, token_url, scopes, redirect_uri)
+                    if token_data and 'token' in token_data:
+                        token = token_data['token']
+                        refresh_token = token.get('refresh_token', '')
+                        access_token = token.get('access_token', '')
+                        # If token_data has an email, update the username
+                        detected_email = token_data.get('user_email', '')
+                        if detected_email and detected_email != username:
+                            use_detected = questionary.confirm(f"Detected email '{detected_email}' differs from '{username}'. Use detected email?").ask()
+                            if use_detected is None: raise KeyboardInterrupt
+                            if use_detected:
+                                username = detected_email
+                        
+                        print(f"\nSuccessfully obtained tokens!")
+                    else:
+                        print("Failed to obtain tokens automatically. You can enter them manually.")
+                
+                if not refresh_token:
+                    refresh_token = questionary.text("OAuth2 Refresh Token (optional):").ask()
+                    if refresh_token is None: raise KeyboardInterrupt
 
-        # Create account object
-        account = {
-            "friendly_name": friendly_name,
-            "login_method": login_method,
-            "imap_server": imap_server,
-            "imap_port": imap_port,
-            "smtp_server": smtp_server,
-            "smtp_port": smtp_port,
-            "auth": auth_details
-        }
-        
-        config["accounts"].append(account)
-        
-        if not questionary.confirm("Add another account?").ask():
-            break
+                if encrypt_enabled:
+                    auth_details = {
+                        "username": username,
+                        "client_id": encrypt_data(client_id, encryption_password, salt),
+                        "client_secret": encrypt_data(client_secret, encryption_password, salt),
+                        "auth_url": auth_url,
+                        "token_url": token_url,
+                        "redirect_uri": redirect_uri,
+                        "scopes": scopes,
+                        "refresh_token": encrypt_data(refresh_token, encryption_password, salt) if refresh_token else "",
+                        "access_token": encrypt_data(access_token, encryption_password, salt) if access_token else ""
+                    }
+                else:
+                    auth_details = {
+                        "username": username,
+                        "client_id": client_id,
+                        "client_secret": client_secret,
+                        "auth_url": auth_url,
+                        "token_url": token_url,
+                        "redirect_uri": redirect_uri,
+                        "scopes": scopes,
+                        "refresh_token": refresh_token,
+                        "access_token": access_token
+                    }
 
-    # 4. Save to config.toml
-    with open(CONFIG_FILE, "w") as f:
-        toml.dump(config, f)
+            # Create account object
+            account = {
+                "friendly_name": friendly_name,
+                "login_method": login_method,
+                "imap_server": imap_server,
+                "imap_port": imap_port,
+                "smtp_server": smtp_server,
+                "smtp_port": smtp_port,
+                "auth": auth_details
+            }
+            
+            config["accounts"].append(account)
+            
+            add_another = questionary.confirm("Add another account?").ask()
+            if add_another is None: raise KeyboardInterrupt
+            if not add_another:
+                break
 
-    print(f"\nConfiguration saved to {CONFIG_FILE} with {len(config['accounts'])} account(s)!")
+        # 4. Save to config.toml
+        with open(CONFIG_FILE, "w") as f:
+            toml.dump(config, f)
+
+        print(f"\nConfiguration saved to {CONFIG_FILE} with {len(config['accounts'])} account(s)!")
+
+    except KeyboardInterrupt:
+        print("\n\n[!] Configuration cancelled. No changes were saved.")
+        return
 
 if __name__ == "__main__":
     run_wizard()

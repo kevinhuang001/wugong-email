@@ -95,18 +95,18 @@ All search parameters follow **AND** logic, meaning all conditions must be met s
 
 ## 🛠️ Update and Uninstall
 
-Utility scripts are provided in the installation directory for maintenance:
+Maintenance is now integrated directly into the `wugong` command:
 
 1. **Update**:
-   Run `./update.sh` in the source repository. It checks for new commits in the remote repository and syncs changes to your installation upon confirmation.
+   Checks for new commits in the remote repository and syncs changes to your installation upon confirmation.
    ```bash
-   ./update.sh
+   wugong update
    ```
 
 2. **Uninstall**:
-   Run `./uninstall.sh` to remove the installation directory `~/.wugong` and configuration directory `~/.config/wugong`.
+   Removes the installation directory `~/.wugong` and configuration directory `~/.config/wugong` (with a prompt to keep configuration).
    ```bash
-   ./uninstall.sh
+   wugong uninstall
    ```
 
 ---

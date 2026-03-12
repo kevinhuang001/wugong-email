@@ -198,7 +198,7 @@ class MailManager:
                 query_parts.append(f'BEFORE {search_criteria["before"]}')
             
             if query_parts:
-                query = "(" + " ".join(query_parts) + ")" if len(query_parts) > 1 else query_parts[0]
+                query = " ".join(query_parts)
 
         status, messages = mail.search(None, query)
         

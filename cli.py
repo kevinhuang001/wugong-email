@@ -54,6 +54,12 @@ def main():
     # Configure command
     subparsers.add_parser("configure", help="Run the configuration wizard")
 
+    # Update command
+    subparsers.add_parser("update", help="Update Wugong Email to the latest version")
+
+    # Uninstall command
+    subparsers.add_parser("uninstall", help="Uninstall Wugong Email")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -96,55 +102,71 @@ def main():
             console.print(f"[red]Error: Account '{args.account}' not found.[/red]")
             return
 
-            password = ""
-            if manager.encryption_enabled:
-                password = questionary.password(f"Enter encryption password for '{args.account}':").ask()
-                if not password:
-                    return
+        password = ""
+        if manager.encryption_enabled:
+            password = questionary.password(f"Enter encryption password for '{args.account}':").ask()
+            if not password:
+                return
 
-            with console.status(f"[bold green]Fetching emails for {args.account}...") as status:
-                try:
-                    search_criteria = {
-                        "keyword": args.keyword,
-                        "from": args.from_user,
-                        "since": args.since,
-                        "before": args.before
-                    }
-                    emails = manager.fetch_emails(account, password, limit=args.limit, search_criteria=search_criteria)
+        with console.status(f"[bold green]Fetching emails for {args.account}...") as status:
+            try:
+                search_criteria = {
+                    "keyword": args.keyword,
+                    "from": args.from_user,
+                    "since": args.since,
+                    "before": args.before
+                }
+                emails = manager.fetch_emails(account, password, limit=args.limit, search_criteria=search_criteria)
+                
+                title = f"Latest {len(emails)} Emails for {args.account}"
+                if any(search_criteria.values()):
+                    active_filters = [f"{k}={v}" for k, v in search_criteria.items() if v]
+                    title += f" (Filters: {', '.join(active_filters)})"
+
+                table = Table(title=title, show_lines=False)
+                table.add_column("S", justify="center", width=1) # Status column
+                table.add_column("ID", style="cyan", justify="right")
+                table.add_column("From", style="magenta", width=25)
+                table.add_column("Subject", style="white", overflow="ellipsis")
+                table.add_column("Date", style="green", no_wrap=True)
+
+                for em in emails:
+                    # Mark unread with *
+                    status_mark = "" if em.get("seen") else "*"
                     
-                    title = f"Latest {len(emails)} Emails for {args.account}"
-                    if any(search_criteria.values()):
-                        active_filters = [f"{k}={v}" for k, v in search_criteria.items() if v]
-                        title += f" (Filters: {', '.join(active_filters)})"
-
-                    table = Table(title=title, show_lines=False)
-                    table.add_column("S", justify="center", width=1) # Status column
-                    table.add_column("ID", style="cyan", justify="right")
-                    table.add_column("From", style="magenta", width=25)
-                    table.add_column("Subject", style="white", overflow="ellipsis")
-                    table.add_column("Date", style="green", no_wrap=True)
-
-                    for em in emails:
-                        # Mark unread with *
-                        status_mark = "" if em.get("seen") else "*"
-                        
-                        # Clean subject and from for single-line display
-                        subject = em["subject"].replace("\n", " ").replace("\r", "")
-                        from_user = em["from"].replace("\n", " ").replace("\r", "")
-                        
-                        table.add_row(
-                            status_mark,
-                            em["id"],
-                            from_user,
-                            subject,
-                            format_short_date(em["date"])
-                        )
-                    console.print(table)
-                except Exception as e:
-                    console.print(f"[red]Error: {e}[/red]")
+                    # Clean subject and from for single-line display
+                    subject = em["subject"].replace("\n", " ").replace("\r", "")
+                    from_user = em["from"].replace("\n", " ").replace("\r", "")
+                    
+                    table.add_row(
+                        status_mark,
+                        em["id"],
+                        from_user,
+                        subject,
+                        format_short_date(em["date"])
+                    )
+                console.print(table)
+            except Exception as e:
+                console.print(f"[red]Error: {e}[/red]")
 
     elif args.command == "configure":
         run_wizard()
+
+    elif args.command == "update":
+        install_dir = os.path.dirname(os.path.abspath(__file__))
+        update_script = os.path.join(install_dir, "update.sh")
+        if os.path.exists(update_script):
+            os.system(f"bash {update_script}")
+        else:
+            console.print(f"[red]Error: update.sh not found in {install_dir}[/red]")
+
+    elif args.command == "uninstall":
+        install_dir = os.path.dirname(os.path.abspath(__file__))
+        uninstall_script = os.path.join(install_dir, "uninstall.sh")
+        if os.path.exists(uninstall_script):
+            os.system(f"bash {uninstall_script}")
+        else:
+            console.print(f"[red]Error: uninstall.sh not found in {install_dir}[/red]")
 
     elif args.command == "read":
         account = manager.get_account_by_name(args.account)

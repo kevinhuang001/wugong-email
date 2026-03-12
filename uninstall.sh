@@ -33,9 +33,14 @@ fi
 
 # 3. Remove Configuration Directory
 if [ -d "$CONFIG_DIR" ]; then
-    echo -e "${BLUE}📁 Removing configuration directory: $CONFIG_DIR...${NC}"
-    rm -rf "$CONFIG_DIR"
-    echo -e "${GREEN}✅ Configuration directory removed.${NC}"
+    read -p "Do you want to keep your configuration and email accounts? (Y/n) " keep_config
+    if [[ "$keep_config" =~ ^[Nn]$ ]]; then
+        echo -e "${BLUE}📁 Removing configuration directory: $CONFIG_DIR...${NC}"
+        rm -rf "$CONFIG_DIR"
+        echo -e "${GREEN}✅ Configuration directory removed.${NC}"
+    else
+        echo -e "${GREEN}📁 Configuration directory $CONFIG_DIR kept.${NC}"
+    fi
 else
     echo -e "${YELLOW}ℹ️  Configuration directory $CONFIG_DIR not found, skipping.${NC}"
 fi
