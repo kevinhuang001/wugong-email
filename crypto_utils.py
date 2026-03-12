@@ -1,0 +1,31 @@
+import base64
+import os
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.fernet import Fernet
+
+def derive_key(password: str, salt: bytes) -> bytes:
+    """Derives a 32-byte key from a password and salt using PBKDF2."""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100000,
+    )
+    return base64.urlsafe_b64encode(kdf.derive(password.encode()))
+
+def encrypt_data(data: str, password: str, salt: bytes) -> str:
+    """Encrypts a string using a password and salt."""
+    key = derive_key(password, salt)
+    f = Fernet(key)
+    return f.encrypt(data.encode()).decode()
+
+def decrypt_data(encrypted_data: str, password: str, salt: bytes) -> str:
+    """Decrypts a string using a password and salt."""
+    key = derive_key(password, salt)
+    f = Fernet(key)
+    return f.decrypt(encrypted_data.encode()).decode()
+
+def generate_salt() -> bytes:
+    """Generates a random 16-byte salt."""
+    return os.urandom(16)
