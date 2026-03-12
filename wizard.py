@@ -42,12 +42,8 @@ EMAIL_PROVIDERS = {
         "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
         "scopes": [
             "openid",
-            "profile",
             "https://outlook.office.com/IMAP.AccessAsUser.All",
             "https://outlook.office.com/SMTP.Send",
-            "https://outlook.office.com/Mail.Read",
-            "https://outlook.office.com/Mail.Send",
-            "https://outlook.office.com/User.Read",
             "offline_access"
         ],
         "hint": "Note: Outlook may require an 'App Password' if 2FA is enabled."
@@ -224,6 +220,28 @@ def run_wizard():
         else:
             encryption_password = questionary.password("Enter your encryption password to proceed:").ask()
             if encryption_password is None: raise KeyboardInterrupt
+            
+            # Simple validation: Try to decrypt one piece of sensitive data if it exists
+            if config.get("accounts"):
+                first_acc = config["accounts"][0]
+                first_auth = first_acc.get("auth", {})
+                sensitive_keys = ["password", "client_id", "client_secret", "refresh_token", "access_token"]
+                
+                test_val = None
+                for k in sensitive_keys:
+                    if first_auth.get(k):
+                        test_val = first_auth[k]
+                        break
+                
+                if test_val:
+                    from crypto_utils import decrypt_data
+                    from rich import print as rprint
+                    try:
+                        decrypt_data(test_val, encryption_password, base64.b64decode(config["general"]["salt"]))
+                    except Exception:
+                        rprint("[red]Error: Incorrect encryption password. Access denied.[/red]")
+                        return
+            
             encrypt_enabled = config["general"]["encryption_enabled"]
             salt = base64.b64decode(config["general"]["salt"]) if encrypt_enabled else None
 
