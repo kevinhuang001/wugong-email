@@ -43,7 +43,7 @@ EMAIL_PROVIDERS = {
         "scopes": [
             "openid",
             "IMAP.AccessAsUser.All",
-            "https://outlook.office.com/SMTP.Send",
+            "hSMTP.Send",
             "offline_access"
         ],
         "hint": "Note: Outlook may require an 'App Password' if 2FA is enabled."
