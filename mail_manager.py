@@ -4,6 +4,7 @@ from email.header import decode_header
 import toml
 import base64
 import requests
+import os
 from crypto_utils import decrypt_data, encrypt_data
 
 class MailManager:

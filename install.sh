@@ -77,15 +77,7 @@ export WUGONG_CONFIG="$CONFIG_FILE"
 python3 "$INSTALL_DIR/cli.py" "\$@"
 EOF
 
-# 'wugong-wizard' wrapper
-cat > wugong-wizard <<EOF
-#!/bin/bash
-source "$INSTALL_DIR/.venv/bin/activate"
-export WUGONG_CONFIG="$CONFIG_FILE"
-python3 "$INSTALL_DIR/wizard.py" "\$@"
-EOF
-
-chmod +x wugong wugong-wizard
+chmod +x wugong
 
 # 7. Cleanup temp dir if created
 if [ -n "$TEMP_DIR" ]; then
@@ -100,7 +92,7 @@ echo -e "Config:   $CONFIG_FILE"
 echo -e "\n${BLUE}To use 'wugong' from anywhere, add this to your .zshrc or .bashrc:${NC}"
 echo -e "${GREEN}export PATH=\"\$PATH:$INSTALL_DIR\"${NC}"
 echo -e "--------------------------------------------------"
-echo -e "Run ${GREEN}wugong-wizard${NC} to configure your first account."
+echo -e "Run ${GREEN}wugong configure${NC} to setup your accounts."
 echo -e "Run ${GREEN}wugong list${NC} to view your emails."
 echo -e "Run ${GREEN}./update.sh${NC} in the installation directory to update."
 echo -e "Run ${GREEN}./uninstall.sh${NC} in the installation directory to uninstall."

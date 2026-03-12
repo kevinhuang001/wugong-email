@@ -37,10 +37,10 @@ We provide an automated installation script that handles Python version checks, 
 
 ## 🚀 Quick Start
 
-### 1. Configure Account (Wizard)
+### 1. Configure Account
 Run the configuration wizard to add your first email account.
 ```bash
-wugong-wizard
+wugong configure
 ```
 *Tip: You can set the first account as the "default account" to skip entering the account name in future `list` commands.*
 

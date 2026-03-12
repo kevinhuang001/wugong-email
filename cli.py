@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from mail_manager import MailManager
+from wizard import run_wizard
 
 console = Console()
 
@@ -49,6 +50,9 @@ def main():
     read_parser = subparsers.add_parser("read", help="Read a specific email")
     read_parser.add_argument("--account", "-a", required=True, help="Account name")
     read_parser.add_argument("--id", "-i", required=True, help="Email ID to read")
+
+    # Configure command
+    subparsers.add_parser("configure", help="Run the configuration wizard")
 
     args = parser.parse_args()
 
@@ -138,6 +142,9 @@ def main():
                     console.print(table)
                 except Exception as e:
                     console.print(f"[red]Error: {e}[/red]")
+
+    elif args.command == "configure":
+        run_wizard()
 
     elif args.command == "read":
         account = manager.get_account_by_name(args.account)
