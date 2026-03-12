@@ -2,6 +2,7 @@
 
 # --- Configuration ---
 INSTALL_DIR="$HOME/.wugong"
+REPO_URL="https://github.com/kevinhuang001/wugong-email.git"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- Colors ---
@@ -13,43 +14,58 @@ NC='\033[0m'
 
 echo -e "${BLUE}🔄 Checking for updates for Wugong Email...${NC}"
 
-# 1. Check if it's a git repository
+# 1. Check if it's a git repository or needs to be cloned
 if [ ! -d "$REPO_DIR/.git" ]; then
-    echo -e "${RED}❌ Error: This script must be run from a git repository.${NC}"
-    exit 1
+    echo -e "${YELLOW}ℹ️  Not running from a git repository. Using $REPO_URL as source.${NC}"
+    TEMP_DIR=$(mktemp -d)
+    git clone --depth 1 "$REPO_URL" "$TEMP_DIR" || { echo -e "${RED}❌ Error: Failed to clone repository.${NC}"; exit 1; }
+    SOURCE_DIR="$TEMP_DIR"
+    UPDATE_NEEDED=true
+else
+    echo -e "${BLUE}📡 Fetching remote changes from $REPO_URL...${NC}"
+    cd "$REPO_DIR" || exit
+    # Ensure remote URL is correct
+    git remote set-url origin "$REPO_URL" 2>/dev/null || git remote add origin "$REPO_URL"
+    git fetch origin
+
+    LOCAL=$(git rev-parse @)
+    REMOTE=$(git rev-parse @{u})
+
+    if [ "$LOCAL" = "$REMOTE" ]; then
+        echo -e "${GREEN}✅ Wugong Email is already up to date.${NC}"
+        exit 0
+    fi
+    SOURCE_DIR="$REPO_DIR"
+    UPDATE_NEEDED=true
 fi
 
-# 2. Fetch remote changes
-echo -e "${BLUE}📡 Fetching remote changes...${NC}"
-git fetch origin
+# 2. Ask for confirmation
+if [ "$UPDATE_NEEDED" = true ]; then
+    echo -e "${YELLOW}🔔 A new version of Wugong Email is available!${NC}"
+    read -p "Do you want to update to the latest version? (y/N) " confirm
 
-# 3. Compare local and remote
-LOCAL=$(git rev-parse @)
-REMOTE=$(git rev-parse @{u})
-
-if [ "$LOCAL" = "$REMOTE" ]; then
-    echo -e "${GREEN}✅ Wugong Email is already up to date.${NC}"
-    exit 0
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}❌ Update cancelled.${NC}"
+        [ -n "$TEMP_DIR" ] && rm -rf "$TEMP_DIR"
+        exit 0
+    fi
 fi
 
-# 4. Ask for confirmation
-echo -e "${YELLOW}🔔 A new version of Wugong Email is available!${NC}"
-read -p "Do you want to update to the latest version? (y/N) " confirm
-
-if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-    echo -e "${BLUE}❌ Update cancelled.${NC}"
-    exit 0
+# 3. Perform Update
+if [ -n "$TEMP_DIR" ]; then
+    echo -e "${BLUE}🚀 Using files from cloned repository...${NC}"
+else
+    echo -e "${BLUE}🚀 Pulling latest changes...${NC}"
+    git pull origin main || git pull origin master
 fi
 
-# 5. Perform Update
-echo -e "${BLUE}🚀 Updating source code...${NC}"
-git pull origin main || git pull origin master
-
-# 6. Update Installation (if exists)
+# 4. Update Installation
 if [ -d "$INSTALL_DIR" ]; then
     echo -e "${BLUE}📦 Updating installed files in $INSTALL_DIR...${NC}"
-    cp "$REPO_DIR"/*.py "$INSTALL_DIR/"
-    cp "$REPO_DIR"/requirements.txt "$INSTALL_DIR/"
+    cp "$SOURCE_DIR"/*.py "$INSTALL_DIR/"
+    cp "$SOURCE_DIR"/requirements.txt "$INSTALL_DIR/"
+    cp "$SOURCE_DIR"/uninstall.sh "$INSTALL_DIR/"
+    cp "$SOURCE_DIR"/update.sh "$INSTALL_DIR/"
 
     # Update dependencies
     cd "$INSTALL_DIR" || exit
@@ -65,7 +81,12 @@ if [ -d "$INSTALL_DIR" ]; then
     fi
     echo -e "${GREEN}✅ Installation updated.${NC}"
 else
-    echo -e "${YELLOW}ℹ️  Installation directory $INSTALL_DIR not found, only updated the source code.${NC}"
+    echo -e "${YELLOW}ℹ️  Installation directory $INSTALL_DIR not found, update only applied to source.${NC}"
+fi
+
+# 5. Cleanup
+if [ -n "$TEMP_DIR" ]; then
+    rm -rf "$TEMP_DIR"
 fi
 
 echo -e "\n${GREEN}🎉 Wugong Email has been updated successfully!${NC}"

@@ -16,7 +16,13 @@ A minimalist, secure, TUI-based command-line email manager. Supports multi-accou
 
 We provide an automated installation script that handles Python version checks, dependency installation, and environment setup.
 
-1. **Run Installation**:
+1. **Quick Remote Installation**:
+   ```bash
+   curl -sSL https://raw.githubusercontent.com/kevinhuang001/wugong-email/main/install.sh | bash
+   ```
+
+2. **Local Installation**:
+   If you have cloned the repository, run:
    ```bash
    bash install.sh
    ```

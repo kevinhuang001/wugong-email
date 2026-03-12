@@ -5,6 +5,7 @@ INSTALL_DIR="$HOME/.wugong"
 CONFIG_DIR="$HOME/.config/wugong"
 CONFIG_FILE="$CONFIG_DIR/config.toml"
 MIN_PYTHON_VERSION="3.8"
+REPO_URL="https://github.com/kevinhuang001/wugong-email.git"
 
 # --- Colors ---
 RED='\033[0;31m'
@@ -27,19 +28,30 @@ if [[ $(echo -e "$PYTHON_VERSION\n$MIN_PYTHON_VERSION" | sort -V | head -n1) != 
 fi
 echo -e "${GREEN}✅ Python $PYTHON_VERSION found.${NC}"
 
-# 2. Create Directories
+# 2. Check if running via curl or local
+if [ -f "cli.py" ] && [ -f "wizard.py" ]; then
+    echo -e "${BLUE}📂 Local source files found. Using current directory.${NC}"
+    SOURCE_DIR=$(pwd)
+else
+    echo -e "${BLUE}📡 Source files not found locally. Cloning from GitHub...${NC}"
+    TEMP_DIR=$(mktemp -d)
+    git clone --depth 1 "$REPO_URL" "$TEMP_DIR" || { echo -e "${RED}❌ Error: Failed to clone repository.${NC}"; exit 1; }
+    SOURCE_DIR="$TEMP_DIR"
+fi
+
+# 3. Create Directories
 echo -e "${BLUE}📁 Creating directories...${NC}"
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$CONFIG_DIR"
 
-# 3. Copy Files
-echo -e "${BLUE}📦 Copying source files...${NC}"
-cp *.py "$INSTALL_DIR/"
-cp requirements.txt "$INSTALL_DIR/"
-cp uninstall.sh "$INSTALL_DIR/"
-cp update.sh "$INSTALL_DIR/"
+# 4. Copy Files
+echo -e "${BLUE}📦 Copying source files from $SOURCE_DIR...${NC}"
+cp "$SOURCE_DIR"/*.py "$INSTALL_DIR/"
+cp "$SOURCE_DIR"/requirements.txt "$INSTALL_DIR/"
+cp "$SOURCE_DIR"/uninstall.sh "$INSTALL_DIR/"
+cp "$SOURCE_DIR"/update.sh "$INSTALL_DIR/"
 
-# 4. Setup Virtual Environment and Install Dependencies
+# 5. Setup Virtual Environment and Install Dependencies
 cd "$INSTALL_DIR" || exit
 if command -v uv &> /dev/null; then
     echo -e "${GREEN}✨ uv found! Using uv for faster installation...${NC}"
@@ -54,7 +66,7 @@ else
     pip install -r requirements.txt
 fi
 
-# 5. Create Wrapper Scripts
+# 6. Create Wrapper Scripts
 echo -e "${BLUE}🔨 Creating executable wrappers...${NC}"
 
 # Main 'wugong' CLI wrapper
@@ -75,7 +87,12 @@ EOF
 
 chmod +x wugong wugong-wizard
 
-# 6. Final Instructions
+# 7. Cleanup temp dir if created
+if [ -n "$TEMP_DIR" ]; then
+    rm -rf "$TEMP_DIR"
+fi
+
+# 8. Final Instructions
 echo -e "\n${GREEN}🎉 Installation Complete!${NC}"
 echo -e "--------------------------------------------------"
 echo -e "Location: $INSTALL_DIR"
