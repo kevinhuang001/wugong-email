@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.9] - 2026-03-13
+
+### Changed
+- **Encryption Logic**: Master password is now required if *either* credential encryption or local email body encryption is enabled.
+- **CLI Password Prompts**: Updated all CLI commands to prompt for the master password if email body encryption is enabled, even if credential encryption is off.
+
 ## [1.8.8] - 2026-03-13
 
 ### Changed

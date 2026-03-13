@@ -279,19 +279,27 @@ def init_wizard():
         config_path = config.get_config_path()
         current_config = config.load_config(config_path)
         
-        # 1. Encryption Setup (Mandatory)
-        print("\n[Mandatory] To protect your email credentials and data, a master password is required.")
-        encryption_password = questionary.password("Set your master encryption password:").ask()
-        if encryption_password is None: raise KeyboardInterrupt
-        if not encryption_password:
-            print("❌ Master password cannot be empty. Initialization aborted.")
-            return False
-            
-        encrypt_enabled = True
-        salt_val = base64.b64encode(generate_salt()).decode()
+        # 1. Encryption Setup
+        encrypt_creds = questionary.confirm("Enable credential encryption? (Highly Recommended)", default=True).ask()
+        if encrypt_creds is None: raise KeyboardInterrupt
         
         encrypt_emails = questionary.confirm("Encrypt locally cached email bodies?", default=True).ask()
         if encrypt_emails is None: raise KeyboardInterrupt
+        
+        encrypt_enabled = encrypt_creds or encrypt_emails
+        encryption_password = None
+        salt_val = ""
+        
+        if encrypt_enabled:
+            print("\n[Mandatory] Since you enabled encryption, a master password is required.")
+            encryption_password = questionary.password("Set your master encryption password:").ask()
+            if encryption_password is None: raise KeyboardInterrupt
+            if not encryption_password:
+                print("❌ Master password cannot be empty when encryption is enabled. Initialization aborted.")
+                return False
+            salt_val = base64.b64encode(generate_salt()).decode()
+        else:
+            print("\n[Warning] Encryption is disabled. Your credentials and data will be stored in plain text.")
         
         # 2. Sync Interval & Scheduling
         sync_interval = questionary.text("Sync interval in minutes (e.g., 5, 10, 60. Enter 0 to disable auto-sync):", default="10").ask()
@@ -310,7 +318,7 @@ def init_wizard():
         if "general" not in current_config:
             current_config["general"] = {}
             
-        current_config["general"]["encryption_enabled"] = encrypt_enabled
+        current_config["general"]["encryption_enabled"] = encrypt_creds
         current_config["general"]["encrypt_emails"] = encrypt_emails
         current_config["general"]["salt"] = salt_val
         current_config["general"]["sync_interval"] = interval

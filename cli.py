@@ -34,7 +34,8 @@ def handle_list(args, manager):
 
     # Get password once if encryption is enabled (assume same password for all for simplicity in CLI)
     password = ""
-    if manager.encryption_enabled:
+    # We need a password if either credentials or emails are encrypted
+    if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):
         # Check if we are in a terminal (for background cron jobs)
         if not sys.stdin.isatty():
             # If not in a terminal, we can't ask for a password.
@@ -155,7 +156,8 @@ def handle_read(args, manager):
 
     account_name = account.get("friendly_name") or "default"
     password = ""
-    if manager.encryption_enabled:
+    # We need a password if either credentials or emails are encrypted
+    if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):
         password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
         if not password:
             return
@@ -210,7 +212,8 @@ def handle_delete(args, manager):
 
     account_name = account.get("friendly_name") or "default"
     password = ""
-    if manager.encryption_enabled:
+    # We need a password if either credentials or emails are encrypted
+    if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):
         password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
         if not password:
             return
@@ -237,7 +240,8 @@ def handle_send(args, manager):
 
     account_name = account.get("friendly_name") or "default"
     password = ""
-    if manager.encryption_enabled:
+    # We need a password if either credentials or emails are encrypted
+    if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):
         password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
         if not password:
             return
@@ -352,7 +356,8 @@ def handle_sync(args, manager):
         target_accounts = [acc]
 
     password = ""
-    if manager.encryption_enabled:
+    # We need a password if either credentials or emails are encrypted
+    if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):
         if args.account == "all":
             prompt_text = "Enter encryption password for all accounts:"
         else:
