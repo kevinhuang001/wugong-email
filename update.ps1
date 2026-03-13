@@ -15,14 +15,14 @@ if (-not (Test-Path (Join-Path $ScriptDir ".git"))) {
     $LocalVersion = ""
     $VersionFile = Join-Path $InstallDir ".version"
     if (Test-Path $VersionFile) {
-        $LocalVersion = Get-Content $VersionFile
+        $LocalVersion = (Get-Content $VersionFile).Trim()
     }
 
-    # Get remote head commit hash
-    $RemoteVersion = (git ls-remote $RepoUrl HEAD | ForEach-Object { $_.Split("`t")[0] })
+    # Get remote head version
+    $RemoteVersion = (Invoke-RestMethod -Uri "https://raw.githubusercontent.com/kevinhuang001/wugong-email/main/.version").Trim()
     
     if ($LocalVersion -eq $RemoteVersion -and $LocalVersion -ne "") {
-        Write-Host "✅ Wugong Email is already up to date." -ForegroundColor Green
+        Write-Host "✅ Wugong Email is already up to date (v$LocalVersion)." -ForegroundColor Green
         exit 0
     }
 
@@ -45,16 +45,16 @@ if (-not (Test-Path (Join-Path $ScriptDir ".git"))) {
     # Hide git output
     git fetch origin 2>$null | Out-Null
     
-    $Local = git rev-parse HEAD
-    $Remote = git rev-parse @{u}
+    $LocalVersion = (Get-Content (Join-Path $ScriptDir ".version") 2>$null).Trim()
+    $RemoteVersion = (git show origin/main:.version | Out-String).Trim()
     
-    if ($Local -eq $Remote) {
-        Write-Host "✅ Wugong Email is already up to date." -ForegroundColor Green
+    if ($LocalVersion -eq $RemoteVersion -and $LocalVersion -ne "") {
+        Write-Host "✅ Wugong Email is already up to date (v$LocalVersion)." -ForegroundColor Green
         exit 0
     }
     $SourceDir = $ScriptDir
     $UpdateNeeded = $true
-    $NewVersion = $Remote
+    $NewVersion = $RemoteVersion
 }
 
 # 2. Ask for confirmation

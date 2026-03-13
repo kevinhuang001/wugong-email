@@ -20,16 +20,16 @@ if [ ! -d "$REPO_DIR/.git" ]; then
     TEMP_DIR=$(mktemp -d)
     
     # Check if we have a local version to compare with
-    LOCAL_COMMIT=""
+    LOCAL_VERSION=""
     if [ -f "$INSTALL_DIR/.version" ]; then
-        LOCAL_COMMIT=$(cat "$INSTALL_DIR/.version")
+        LOCAL_VERSION=$(cat "$INSTALL_DIR/.version")
     fi
 
-    # Get remote head commit hash without full clone first
-    REMOTE_COMMIT=$(git ls-remote "$REPO_URL" HEAD | awk '{print $1}')
+    # Get remote head version from .version file
+    REMOTE_VERSION=$(curl -sSL "https://raw.githubusercontent.com/kevinhuang001/wugong-email/main/.version" | tr -d '\n\r')
     
-    if [ "$LOCAL_COMMIT" = "$REMOTE_COMMIT" ] && [ -n "$LOCAL_COMMIT" ]; then
-        echo -e "${GREEN}✅ Wugong Email is already up to date.${NC}"
+    if [ "$LOCAL_VERSION" = "$REMOTE_VERSION" ] && [ -n "$LOCAL_VERSION" ]; then
+        echo -e "${GREEN}✅ Wugong Email is already up to date (v$LOCAL_VERSION).${NC}"
         [ -d "$TEMP_DIR" ] && rm -rf "$TEMP_DIR"
         exit 0
     fi
@@ -38,7 +38,7 @@ if [ ! -d "$REPO_DIR/.git" ]; then
     git clone --depth 1 "$REPO_URL" "$TEMP_DIR" &>/dev/null || { echo -e "${RED}❌ Error: Failed to clone repository.${NC}"; exit 1; }
     SOURCE_DIR="$TEMP_DIR"
     UPDATE_NEEDED=true
-    NEW_VERSION="$REMOTE_COMMIT"
+    NEW_VERSION="$REMOTE_VERSION"
 else
     echo -e "${BLUE}📡 Fetching remote changes...${NC}"
     cd "$REPO_DIR" || exit
@@ -46,16 +46,16 @@ else
     git remote set-url origin "$REPO_URL" 2>/dev/null || git remote add origin "$REPO_URL"
     git fetch origin &>/dev/null
 
-    LOCAL=$(git rev-parse HEAD)
-    REMOTE=$(git rev-parse @{u})
+    LOCAL_VERSION=$(cat "$REPO_DIR/.version" 2>/dev/null)
+    REMOTE_VERSION=$(git show origin/main:.version | tr -d '\n\r')
 
-    if [ "$LOCAL" = "$REMOTE" ]; then
-        echo -e "${GREEN}✅ Wugong Email is already up to date.${NC}"
+    if [ "$LOCAL_VERSION" = "$REMOTE_VERSION" ] && [ -n "$LOCAL_VERSION" ]; then
+        echo -e "${GREEN}✅ Wugong Email is already up to date (v$LOCAL_VERSION).${NC}"
         exit 0
     fi
     SOURCE_DIR="$REPO_DIR"
     UPDATE_NEEDED=true
-    NEW_VERSION="$REMOTE"
+    NEW_VERSION="$REMOTE_VERSION"
 fi
 
 # 2. Ask for confirmation
