@@ -202,7 +202,7 @@ def test_imap_connection(imap_server, imap_port, username, password=None, access
     except Exception as e:
         return False, str(e)
 
-def setup_scheduling(interval_minutes):
+def setup_scheduling(interval_minutes, encryption_password=None):
     """Sets up a periodic sync task using Cron (Unix) or Task Scheduler (Windows)."""
     system = platform.system()
     
@@ -241,7 +241,13 @@ def setup_scheduling(interval_minutes):
             # Windows redirection uses >> and 2>&1
             # Note: Task Scheduler /tr command has some limitations with redirections directly.
             # Usually, it's better to wrap it in a cmd /c
-            task_command = f'cmd /c "{wugong_bat} sync all >> \\"{log_file}\\" 2>&1"'
+            
+            # Add WUGONG_PASSWORD to the command if provided
+            env_prefix = ""
+            if encryption_password:
+                env_prefix = f'set WUGONG_PASSWORD={encryption_password} && '
+            
+            task_command = f'cmd /c "{env_prefix}{wugong_bat} sync all >> \\"{log_file}\\" 2>&1"'
             
             cmd = [
                 "schtasks", "/create", "/sc", "minute", "/mo", str(interval_minutes),
@@ -249,6 +255,8 @@ def setup_scheduling(interval_minutes):
             ]
             subprocess.run(cmd, check=True, capture_output=True)
             print(f"✅ Scheduled sync every {interval_minutes} minutes via Task Scheduler.")
+            if encryption_password:
+                print("ℹ️  WUGONG_PASSWORD environment variable included in the scheduled task.")
             print(f"ℹ️  Logs will be saved to: {log_file}")
         else:
             # Unix-like (macOS/Linux) Cron
@@ -258,18 +266,23 @@ def setup_scheduling(interval_minutes):
             except subprocess.CalledProcessError:
                 current_cron = ""
             
-            # Remove old Wugong sync jobs
-            lines = [line for line in current_cron.splitlines() if "wugong sync all" in line]
-            
             # Remove existing lines to replace with new ones
             lines = [line for line in current_cron.splitlines() if "wugong sync all" not in line]
             
             if interval_minutes > 0:
                 # Add new job with log redirection
                 # Periodic sync will use the default limit in config
-                cron_job = f"*/{interval_minutes} * * * * {wugong_exe} sync all >> {log_file} 2>&1"
+                
+                # Add WUGONG_PASSWORD to the cron job if provided
+                env_prefix = ""
+                if encryption_password:
+                    env_prefix = f"WUGONG_PASSWORD={encryption_password} "
+                
+                cron_job = f"*/{interval_minutes} * * * * {env_prefix}{wugong_exe} sync all >> {log_file} 2>&1"
                 lines.append(cron_job)
                 print(f"✅ Scheduled sync every {interval_minutes} minutes via Crontab.")
+                if encryption_password:
+                    print("ℹ️  WUGONG_PASSWORD environment variable included in the crontab job.")
                 print(f"ℹ️  Logs will be saved to: {log_file}")
             else:
                 print("✅ Auto-sync disabled (Crontab entry removed).")
@@ -319,7 +332,13 @@ def configure_wizard():
             interval = current_interval
 
         if interval != current_interval:
-            setup_scheduling(interval)
+            # Need password if encryption is enabled to update the scheduled task with environment variable
+            encryption_password = None
+            if current_config.get("general", {}).get("encryption_enabled") or current_config.get("general", {}).get("encrypt_emails"):
+                encryption_password = questionary.password("Enter your encryption password to update the scheduled task:").ask()
+                if encryption_password is None: raise KeyboardInterrupt
+
+            setup_scheduling(interval, encryption_password)
             current_config["general"]["sync_interval"] = interval
             config.save_config(current_config, config_path)
             print(f"\n✅ Configuration updated: interval={interval}m.")
@@ -406,7 +425,7 @@ def init_wizard():
             interval = 10
             
         if interval > 0:
-            setup_scheduling(interval)
+            setup_scheduling(interval, encryption_password)
 
         # 3. Save initial config
         if "general" not in current_config:

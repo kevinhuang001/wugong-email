@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.10] - 2026-03-13
+
+### Added
+- **Automated Password for Scheduled Sync**: When setting up or updating the sync interval in `init` or `configure`, the master password is now automatically embedded as a `WUGONG_PASSWORD` environment variable within the scheduled task (Crontab for Unix/macOS, Task Scheduler for Windows). This ensures that background synchronization works seamlessly even when encryption is enabled, without requiring manual password entry.
+
 ## [1.9.9] - 2026-03-13
 
 ### Added
