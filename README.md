@@ -1,4 +1,8 @@
-# Wugong Email 🚀
+<p align="center">
+  <img src="wugong.png" alt="Wugong Email Logo" width="200">
+</p>
+
+# Wugong Email
 
 Wugong Email is a **minimalist, efficient, and AI-friendly** command-line email manager designed for the AI era. It is optimized for autonomous AI agents (like OpenClaw), making email handling as simple as executing CLI commands.
 
