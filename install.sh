@@ -47,8 +47,8 @@ mkdir -p "$CONFIG_DIR"
 # 4. Copy Files
 echo -e "${BLUE}📦 Copying files...${NC}"
 if command -v rsync &> /dev/null; then
-    # Use --delete but EXCLUDE config, database, and the wrapper script itself
-    rsync -av --delete --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='wugong' --exclude='*.db' --exclude='config.toml' "$SOURCE_DIR/" "$INSTALL_DIR/" &>/dev/null
+    # Use --delete but EXCLUDE config, database, and venv/cache
+    rsync -av --delete --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='*.db' --exclude='config.toml' "$SOURCE_DIR/" "$INSTALL_DIR/" &>/dev/null
 else
     # Fallback to cp -R
     echo -e "${BLUE}⚠️  rsync not found, using cp -R (files will be overwritten)...${NC}"
@@ -59,7 +59,7 @@ else
         [ -e "$item" ] || continue
         name=$(basename "$item")
         case "$name" in
-            .git|.venv|__pycache__|wugong|*.db|config.toml) continue ;;
+            .git|.venv|__pycache__|*.db|config.toml) continue ;;
         esac
         cp -R "$item" "$INSTALL_DIR/" &>/dev/null
     done
@@ -81,18 +81,10 @@ else
 fi
 
 # 6. Create Wrapper Scripts
-echo -e "${BLUE}🔨 Creating executable wrappers...${NC}"
+echo -e "${BLUE}🔨 Setting up executable wrappers...${NC}"
 
-# Main 'wugong' CLI wrapper
-cat > wugong <<EOF
-#!/bin/bash
-source "$INSTALL_DIR/.venv/bin/activate"
-export WUGONG_CONFIG="$CONFIG_FILE"
-export PYTHONPATH="$INSTALL_DIR:\$PYTHONPATH"
-python3 "$INSTALL_DIR/cli.py" "\$@"
-EOF
-
-chmod +x wugong
+# Ensure 'wugong' CLI wrapper is executable
+chmod +x "$INSTALL_DIR/wugong"
 
 # 7. Cleanup temp dir if created
 if [ -n "$TEMP_DIR" ]; then

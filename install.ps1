@@ -67,15 +67,9 @@ python -m venv .venv
 & "$InstallDir\.venv\Scripts\python.exe" -m pip install --upgrade pip
 & "$InstallDir\.venv\Scripts\pip.exe" install -r requirements.txt
 
-# 6. Create Wrapper Batch Script
-Write-Host "🔨 Creating executable wrapper..." -ForegroundColor Blue
-$BatchContent = @"
-@echo off
-set "WUGONG_CONFIG=$ConfigFile"
-set "PYTHONPATH=$InstallDir;%PYTHONPATH%"
-"$InstallDir\.venv\Scripts\python.exe" "$InstallDir\cli.py" %*
-"@
-$BatchContent | Out-File -FilePath (Join-Path $InstallDir "wugong.bat") -Encoding ascii
+# 6. Setup Wrapper Scripts
+Write-Host "🔨 Setting up executable wrapper..." -ForegroundColor Blue
+# wugong.bat is already copied in Step 4
 
 # 7. Cleanup
 if ($TempDir) {

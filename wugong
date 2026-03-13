@@ -1,0 +1,25 @@
+#!/bin/bash
+# Wugong Email Wrapper Script
+# This script determines its own location and runs the CLI using the local venv
+
+# Get the directory where this script is located
+INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Configuration paths (consistent with install.sh/update.sh)
+CONFIG_DIR="${HOME}/.config/wugong"
+CONFIG_FILE="${CONFIG_DIR}/config.toml"
+
+# Activate virtual environment
+if [ -f "$INSTALL_DIR/.venv/bin/activate" ]; then
+    source "$INSTALL_DIR/.venv/bin/activate"
+else
+    echo "Error: Virtual environment not found at $INSTALL_DIR/.venv"
+    exit 1
+fi
+
+# Set environment variables
+export WUGONG_CONFIG="$CONFIG_FILE"
+export PYTHONPATH="$INSTALL_DIR:$PYTHONPATH"
+
+# Run the CLI
+python3 "$INSTALL_DIR/cli.py" "$@"
