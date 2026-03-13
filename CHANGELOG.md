@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [1.0.0] - 2026-03-13
 
 ### Features
-- **AI 时代的原生支持**：极简的 CLI 设计与结构化输出，专为 AI 助手（Cursor, Trae）优化。
+- **AI 时代的原生支持**：极简的 CLI 设计与结构化输出，专为 OpenClaw 等自主 AI 智能体优化。
 - **全自动 OAuth2**：支持 Gmail, Outlook 等主流邮箱的自动授权与静默刷新。
 - **端到端加密存储**：使用 PBKDF2 + Fernet 加密配置文件，保障多账号信息安全。
 - **多账号管理**：支持无限账号添加，内置主流服务商配置，支持默认账号一键操作。
