@@ -235,42 +235,52 @@ class EmailReader:
                     view_uids = list(reversed(view_uids)) # Newest first
                     
                     results = []
-                    for i, uid in enumerate(view_uids):
-                        uid_str = uid.decode()
-                        if progress_callback:
-                            progress_callback(i + 1, len(view_uids), f"Fetching metadata {i+1}/{len(view_uids)}...")
-                        
-                        # Fetch metadata from server ONLY, no cache check here
-                        res_m, msg_data = mail.uid('fetch', uid, '(RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)])')
-                        if res_m == "OK":
-                            header_data = msg_data[0][1]
-                            msg = email.message_from_bytes(header_data)
-                            
-                            # Parse basic metadata
-                            try:
-                                subject_header = msg.get("Subject")
-                                subject = str(make_header(decode_header(subject_header))) if subject_header else "No Subject"
-                            except: subject = "No Subject"
-                            
-                            try:
-                                from_header = str(make_header(decode_header(msg.get("From", "Unknown"))))
-                            except: from_header = "Unknown"
-                            
-                            name, email_addr = parseaddr(from_header)
-                            sender_name = name or (from_header.split("<")[0].strip() if "<" in from_header else from_header)
-                            
-                            results.append({
-                                "id": uid_str,
-                                "from": sender_name,
-                                "from_email": email_addr,
-                                "subject": subject,
-                                "date": msg.get("Date"),
-                                "seen": '\\Seen' in str(msg_data[0][0])
-                            })
+                    # Optimized: Fetch metadata in bulk to avoid multiple server roundtrips
+                    uids_str = ",".join([uid.decode() for uid in view_uids])
+                    res_m, msg_data = mail.uid('fetch', uids_str, '(FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)])')
                     
-                    mail.close()
-                    mail.logout()
-                    return results, {"last_sync": sync_info.get("time"), "is_offline": False}
+                    if res_m == "OK":
+                        # msg_data will contain a list of (response_info, header_bytes) and ')' separator
+                        for item in msg_data:
+                            if isinstance(item, tuple):
+                                resp_text = item[0].decode()
+                                header_bytes = item[1]
+                                
+                                uid_match = re.search(r'UID (\d+)', resp_text)
+                                if not uid_match: continue
+                                uid_str = uid_match.group(1)
+                                
+                                msg = email.message_from_bytes(header_bytes)
+                                
+                                # Parse basic metadata
+                                try:
+                                    subject_header = msg.get("Subject")
+                                    subject = str(make_header(decode_header(subject_header))) if subject_header else "No Subject"
+                                except: subject = "No Subject"
+                                
+                                try:
+                                    from_header = str(make_header(decode_header(msg.get("From", "Unknown"))))
+                                except: from_header = "Unknown"
+                                
+                                name, email_addr = parseaddr(from_header)
+                                sender_name = name or (from_header.split("<")[0].strip() if "<" in from_header else from_header)
+                                
+                                results.append({
+                                    "id": uid_str,
+                                    "from": sender_name,
+                                    "from_email": email_addr,
+                                    "subject": subject,
+                                    "date": msg.get("Date"),
+                                    "seen": '\\Seen' in resp_text
+                                })
+                        
+                        # Sort results to match view_uids order (newest first)
+                        uid_to_result = {r["id"]: r for r in results}
+                        sorted_results = [uid_to_result[uid.decode()] for uid in view_uids if uid.decode() in uid_to_result]
+                        
+                        mail.close()
+                        mail.logout()
+                        return sorted_results, {"last_sync": sync_info.get("time"), "is_offline": False}
                 
             except Exception as e:
                 is_offline = True

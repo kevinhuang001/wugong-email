@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.18] - 2026-03-13
+
+### Changed
+- **List Command Optimization**: The `list` command now uses bulk `FETCH` to retrieve metadata from IMAP, significantly improving speed and removing the progress bar for better UX.
+- **Sync Decoupling**: Fixed a bug where the `list` command was unintentionally performing sync operations. It now strictly performs IMAP-first queries or offline local-only lookups.
+
 ## [1.9.17] - 2026-03-13
 
 ### Changed
