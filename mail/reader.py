@@ -54,22 +54,47 @@ class EmailReader:
                 # 2. Sync Logic (Incremental, Full, or Recent Limit)
                 search_query_parts = []
                 
-                # Logic for search query
-                if is_initial_sync or limit == -1 or (limit > 0 and not search_criteria):
-                    # If it's a forced limit of recent emails, or full sync, or initial sync
-                    # we need ALL UIDs to pick the recent ones
-                    search_query_parts.append("ALL")
-                else:
-                    last_sync_time = sync_info.get("time")
-                    if last_sync_time and last_sync_time != "Never":
+                # Use current search criteria if provided, otherwise default to incremental/full
+                if search_criteria:
+                    if search_criteria.get("keyword"):
+                        search_query_parts.append(f'OR SUBJECT "{search_criteria["keyword"]}" BODY "{search_criteria["keyword"]}"')
+                    if search_criteria.get("from"):
+                        search_query_parts.append(f'FROM "{search_criteria["from"]}"')
+                    if search_criteria.get("since"):
                         try:
-                            # IMAP SINCE is inclusive, fetch from last sync date
-                            last_date = datetime.strptime(last_sync_time, "%Y-%m-%d %H:%M:%S").strftime("%d-%b-%Y")
-                            search_query_parts.append(f'SINCE "{last_date}"')
-                        except:
-                            search_query_parts.append("ALL")
-                    else:
+                            since_val = search_criteria["since"]
+                            if re.match(r'\d{1,2}-[A-Za-z]{3}-\d{4}', since_val):
+                                since_date = since_val
+                            else:
+                                since_date = datetime.strptime(since_val, "%Y-%m-%d").strftime("%d-%b-%Y")
+                            search_query_parts.append(f'SINCE "{since_date}"')
+                        except: pass
+                    if search_criteria.get("before"):
+                        try:
+                            before_val = search_criteria["before"]
+                            if re.match(r'\d{1,2}-[A-Za-z]{3}-\d{4}', before_val):
+                                before_date = before_val
+                            else:
+                                before_date = datetime.strptime(before_val, "%Y-%m-%d").strftime("%d-%b-%Y")
+                            search_query_parts.append(f'BEFORE "{before_date}"')
+                        except: pass
+                
+                if not search_query_parts:
+                    if is_initial_sync or limit == -1 or limit > 0:
+                        # If it's a forced limit of recent emails, or full sync, or initial sync
+                        # we need ALL UIDs to pick the recent ones
                         search_query_parts.append("ALL")
+                    else:
+                        last_sync_time = sync_info.get("time")
+                        if last_sync_time and last_sync_time != "Never":
+                            try:
+                                # IMAP SINCE is inclusive, fetch from last sync date
+                                last_date = datetime.strptime(last_sync_time, "%Y-%m-%d %H:%M:%S").strftime("%d-%b-%Y")
+                                search_query_parts.append(f'SINCE "{last_date}"')
+                            except:
+                                search_query_parts.append("ALL")
+                        else:
+                            search_query_parts.append("ALL")
 
                 search_query = " ".join(search_query_parts) if search_query_parts else "ALL"
                 res, data = mail.uid('search', None, search_query)
@@ -211,17 +236,27 @@ class EmailReader:
                 search_query_parts = []
                 if search_criteria:
                     if search_criteria.get("keyword"):
-                        search_query_parts.append(f'TEXT "{search_criteria["keyword"]}"')
+                        search_query_parts.append(f'OR SUBJECT "{search_criteria["keyword"]}" BODY "{search_criteria["keyword"]}"')
                     if search_criteria.get("from"):
                         search_query_parts.append(f'FROM "{search_criteria["from"]}"')
                     if search_criteria.get("since"):
                         try:
-                            since_date = datetime.strptime(search_criteria["since"], "%Y-%m-%d").strftime("%d-%b-%Y")
+                            # Support both DD-Mon-YYYY (README) and YYYY-MM-DD
+                            since_val = search_criteria["since"]
+                            if re.match(r'\d{1,2}-[A-Za-z]{3}-\d{4}', since_val):
+                                since_date = since_val
+                            else:
+                                since_date = datetime.strptime(since_val, "%Y-%m-%d").strftime("%d-%b-%Y")
                             search_query_parts.append(f'SINCE "{since_date}"')
                         except: pass
                     if search_criteria.get("before"):
                         try:
-                            before_date = datetime.strptime(search_criteria["before"], "%Y-%m-%d").strftime("%d-%b-%Y")
+                            # Support both DD-Mon-YYYY (README) and YYYY-MM-DD
+                            before_val = search_criteria["before"]
+                            if re.match(r'\d{1,2}-[A-Za-z]{3}-\d{4}', before_val):
+                                before_date = before_val
+                            else:
+                                before_date = datetime.strptime(before_val, "%Y-%m-%d").strftime("%d-%b-%Y")
                             search_query_parts.append(f'BEFORE "{before_date}"')
                         except: pass
                 

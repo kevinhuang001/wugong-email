@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.19] - 2026-03-13
+
+### Changed
+- **Search Logic Update**: Enhanced `list` and `sync` commands to support more robust IMAP search. Keywords now search both `SUBJECT` and `BODY` (using `OR` logic).
+- **Date Format Support**: Added support for both `DD-Mon-YYYY` (e.g., `01-Jan-2026`) and `YYYY-MM-DD` date formats in `--since` and `--before` parameters.
+- **IMAP Search Compliance**: Updated IMAP search query construction to better align with RFC3501 standards.
+
 ## [1.9.18] - 2026-03-13
 
 ### Changed
