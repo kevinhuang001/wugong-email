@@ -64,7 +64,7 @@ def handle_list(args, manager):
             "before": args.before
         }
         
-        list_limit = 20
+        list_limit = 10
         if args.all:
             list_limit = -1
         elif args.limit is not None:

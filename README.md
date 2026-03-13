@@ -99,6 +99,16 @@ Wugong uses a full metadata sync strategy. This means it fetches all email heade
   ```bash
   wugong sync work
   ```
+- **Sync with limit**:
+  Synchronize the latest N emails from the server. This is useful for checking recent changes on many emails at once.
+  ```bash
+  wugong sync --limit 100
+  ```
+- **Full sync**:
+  Synchronize all emails from the server (can be slow for large mailboxes).
+  ```bash
+  wugong sync --all
+  ```
 
 ### 4. Read Email (Read)
 After getting an email ID from the `list` or `sync` command, use the `read` command to view its content. Once read, the content is cached locally and encrypted.

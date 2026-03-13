@@ -112,7 +112,7 @@ class MailReader:
                     
                     # 4. Identify UIDs to process (sync)
                     if is_initial_sync:
-                        init_limit = limit if limit != 20 else account.get("initial_sync_limit", 20)
+                        init_limit = limit
                         if init_limit == -1:
                             uids_to_process = uids_raw
                         else:

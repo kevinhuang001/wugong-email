@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.24] - 2026-03-13
+
+### Changed
+- **Updated `list` Command**: Changed the default display limit to 10 for better CLI readability.
+- **Improved Initial Sync Logic**: Simplified limit handling in `fetch_emails` to directly respect explicit user-provided limits from the wizard.
+- **Verified Maintenance Scripts**: Audited and confirmed correctness of all install, update, and uninstall scripts for Bash and PowerShell.
+
+### Added
+- **Documentation Update**: Added `--limit` and `--all` options to the `sync` command documentation in `README.md`.
+
 ## [1.9.23] - 2026-03-13
 
 ### Fixed
