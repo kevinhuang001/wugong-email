@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.2] - 2026-03-13
+
+### Changed
+- **Decoupled Setup**: `wugong init` now only handles configuration and encryption setup. It no longer triggers account addition. Users are prompted to run `wugong account add` manually after initialization.
+
 ## [1.9.1] - 2026-03-13
 
 ### Changed

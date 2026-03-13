@@ -279,9 +279,7 @@ def handle_init(args, manager):
         # On Unix, crontab doesn't need root, but it's good to mention if they want system-wide (though we don't do that)
         pass
 
-    should_add_account = init_wizard()
-    if should_add_account:
-        account_add_wizard()
+    init_wizard()
 
 def handle_account(args, manager, account_parser):
     match args.account_command:

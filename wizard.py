@@ -296,7 +296,7 @@ def init_wizard():
             if encryption_password is None: raise KeyboardInterrupt
             if not encryption_password:
                 print("❌ Master password cannot be empty when encryption is enabled. Initialization aborted.")
-                return False
+                return False, None
             salt_val = base64.b64encode(generate_salt()).decode()
         else:
             print("\n[Warning] Encryption is disabled. Your credentials and data will be stored in plain text.")
@@ -332,7 +332,7 @@ def init_wizard():
         if not current_config.get("accounts"):
             print("\n💡 Tip: No accounts found. Use 'wugong account add' to add your first email account.")
         
-        return False, encryption_password
+        return True, encryption_password
     except KeyboardInterrupt:
         print("\nInitialization cancelled.")
         return False, None
