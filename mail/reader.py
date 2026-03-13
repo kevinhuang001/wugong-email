@@ -1,6 +1,7 @@
 import imaplib
 import email
-from email.header import decode_header
+from email.header import decode_header, make_header
+from email.utils import parseaddr
 from datetime import datetime
 
 class MailReader:
@@ -56,13 +57,25 @@ class MailReader:
                         raw_msg = msg_data[0][1]
                         msg = email.message_from_bytes(raw_msg)
                         
-                        subject, encoding = decode_header(msg.get("Subject", "No Subject"))[0]
-                        if isinstance(subject, bytes):
-                            subject = subject.decode(encoding or "utf-8")
+                        # Improved header decoding for Subject
+                        try:
+                            subject = str(make_header(decode_header(msg.get("Subject", "No Subject"))))
+                        except Exception:
+                            subject = msg.get("Subject", "No Subject")
                         
-                        sender, encoding = decode_header(msg.get("From", "Unknown"))[0]
-                        if isinstance(sender, bytes):
-                            sender = sender.decode(encoding or "utf-8")
+                        # Improved header decoding and address parsing for From
+                        try:
+                            from_header = str(make_header(decode_header(msg.get("From", "Unknown"))))
+                        except Exception:
+                            from_header = msg.get("From", "Unknown")
+                        
+                        name, email_addr = parseaddr(from_header)
+                        if name and email_addr:
+                            sender = f"{name} <{email_addr}>"
+                        elif email_addr:
+                            sender = email_addr
+                        else:
+                            sender = from_header
                             
                         new_emails.append({
                             "id": uid.decode(),
