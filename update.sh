@@ -16,6 +16,14 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+# --- Arguments ---
+FORCE_YES=false
+for arg in "$@"; do
+    if [ "$arg" = "--yes" ] || [ "$arg" = "-y" ]; then
+        FORCE_YES=true
+    fi
+done
+
 echo -e "${BLUE}🔄 Checking for updates for Wugong Email...${NC}"
 
 # 1. Check if it's a git repository or needs to be cloned
@@ -63,7 +71,7 @@ else
 fi
 
 # 2. Ask for confirmation
-if [ "$UPDATE_NEEDED" = true ]; then
+if [ "$UPDATE_NEEDED" = true ] && [ "$FORCE_YES" = false ]; then
     echo -e "${YELLOW}🔔 A new version of Wugong Email is available! (v$LOCAL_VERSION -> v$NEW_VERSION)${NC}"
     read -p "Do you want to update to the latest version? (y/N) " confirm
 

@@ -1,3 +1,7 @@
+param (
+    [switch]$yes
+)
+
 # --- Configuration ---
 $InstallDir = Join-Path $Home ".wugong"
 $RepoUrl = "https://github.com/kevinhuang001/wugong-email.git"
@@ -58,7 +62,7 @@ if (-not (Test-Path (Join-Path $ScriptDir ".git"))) {
 }
 
 # 2. Ask for confirmation
-if ($UpdateNeeded) {
+if ($UpdateNeeded -and -not $yes) {
     Write-Host "🔔 A new version of Wugong Email is available! (v$LocalVersion -> v$RemoteVersion)" -ForegroundColor Yellow
     $Confirm = Read-Host "Do you want to update to the latest version? (y/N)"
     if ($Confirm -notmatch '^[Yy]$') {

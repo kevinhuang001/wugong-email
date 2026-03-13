@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.2] - 2026-03-13
+
+### Added
+- **Enhanced Update Experience**: The `upgrade` command now fetches and displays the latest changelog using Markdown rendering *before* asking for confirmation.
+- **Silent Update Flag**: Added `--yes` (Bash) and `-yes` (PowerShell) flags to update scripts to allow bypassing interactive confirmation when called from the CLI.
+
 ## [1.8.1] - 2026-03-13
 
 ### Changed

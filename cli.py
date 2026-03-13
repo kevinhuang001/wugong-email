@@ -8,7 +8,8 @@ from datetime import datetime
 from email.utils import parsedate_to_datetime
 from rich.console import Console
 from rich.table import Table
-from rich.panel import Panel
+from rich.console import Console
+from rich.markdown import Markdown
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 from mail import MailManager
 from wizard import account_add_wizard, init_wizard
@@ -402,13 +403,73 @@ def handle_sync(args, manager):
                 console.print(f"[red]❌ Error syncing {account_name}: {e}[/red]")
 
 def handle_upgrade():
+    """Handles the 'upgrade' command to update Wugong Email code."""
+    import urllib.request
+    import sys
+    
     install_dir = os.path.expanduser("~/.wugong")
+    version_file = os.path.join(install_dir, ".version")
+    repo_url = "https://github.com/kevinhuang001/wugong-email.git"
+    raw_url_base = "https://raw.githubusercontent.com/kevinhuang001/wugong-email/main"
+    
+    # Get current version
+    current_version = "Unknown"
+    if os.path.exists(version_file):
+        with open(version_file, "r") as f:
+            current_version = f.read().strip()
+    
+    console.print(f"[blue]🔄 Checking for updates... (Current version: {current_version})[/blue]")
+    
+    try:
+        # Get latest version from GitHub
+        with urllib.request.urlopen(f"{raw_url_base}/.version") as response:
+            latest_version = response.read().decode("utf-8").strip()
+        
+        if current_version == latest_version and current_version != "Unknown":
+            console.print(f"[green]✅ Wugong Email is already up to date (v{current_version}).[/green]")
+            return
+            
+        console.print(f"[yellow]🔔 A new version is available: [bold]{latest_version}[/bold][/yellow]")
+        
+        # Fetch and show changelog
+        console.print("[blue]📄 Fetching what's new...[/blue]")
+        with urllib.request.urlopen(f"{raw_url_base}/CHANGELOG.md") as response:
+            changelog_content = response.read().decode("utf-8")
+            
+        # Extract the latest version block
+        lines = changelog_content.splitlines()
+        latest_block = []
+        found_first = False
+        for line in lines:
+            if line.startswith("## ["):
+                if found_first:
+                    break
+                found_first = True
+            if found_first:
+                latest_block.append(line)
+        
+        if latest_block:
+            console.print("\n" + "=" * 40)
+            console.print(Markdown("\n".join(latest_block)))
+            console.print("=" * 40 + "\n")
+        
+        if not questionary.confirm(f"Do you want to update to v{latest_version}?").ask():
+            console.print("[blue]Update cancelled.[/blue]")
+            return
+            
+    except Exception as e:
+        console.print(f"[yellow]⚠️  Could not check for updates online: {e}[/yellow]")
+        console.print("[blue]Attempting to update via local script...[/blue]")
+
+    # Run the update script
     script_path = os.path.join(install_dir, "update.sh")
     if os.name == 'nt':
         script_path = os.path.join(install_dir, "update.ps1")
-        subprocess.run(["powershell", "-ExecutionPolicy", "Bypass", "-File", script_path])
+        # Pass -yes to skip the confirmation in the script
+        subprocess.run(["powershell", "-ExecutionPolicy", "Bypass", "-File", script_path, "-yes"])
     else:
-        subprocess.run(["bash", script_path])
+        # Pass --yes to skip the confirmation in the script
+        subprocess.run(["bash", script_path, "--yes"])
 
 def handle_uninstall():
     install_dir = os.path.expanduser("~/.wugong")
