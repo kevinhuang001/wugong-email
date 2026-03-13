@@ -5,10 +5,13 @@ A minimalist, secure, TUI-based command-line email manager. Supports multi-accou
 ## ✨ Features
 
 - **Minimalist TUI**: Beautiful terminal interface powered by `Rich` and `Questionary`.
+- **Progressive Sync**: Real-time progress bars for email synchronization and metadata fetching.
+- **Offline-First Deletion**: Delete emails instantly with background synchronization and offline queuing.
 - **Multi-Account Support**: Pre-configured for major providers like Gmail, Outlook, QQ, 163, with support for a "default account".
 - **Security First**: End-to-end encryption for configuration files using PBKDF2 + Fernet.
 - **OAuth2 Automation**: Built-in local server for automatic Access/Refresh Token exchange and silent background refresh.
 - **Smart Search**: Multi-criteria filtering by keywords, sender, and date ranges.
+- **Automatic Sync**: Cross-client deletion synchronization to keep your local cache clean.
 
 ---
 
@@ -73,17 +76,35 @@ wugong account add
   wugong list work
   ```
 
-### 3. Read Email (Read)
-After getting an email ID from the `list` command, use the `read` command to view its content:
+### 3. Sync Emails (Sync)
+Wugong uses a full metadata sync strategy. This means it fetches all email headers (Subject, From, Date) but does not download the body until you read the email.
+- **Sync all accounts**:
+  ```bash
+  wugong sync
+  ```
+- **Sync specific account**:
+  ```bash
+  wugong sync work
+  ```
+
+### 4. Read Email (Read)
+After getting an email ID from the `list` or `sync` command, use the `read` command to view its content. Once read, the content is cached locally and encrypted.
 - **Read email from specific account**:
   ```bash
   wugong read -a outlook -i 1234
   ```
 - **Arguments**:
-  - `-a, --account`: Required. Friendly name of the account.
+  - `-a, --account`: Optional. Friendly name of the account.
   - `-i, --id`: Required. Unique ID of the email on the IMAP server.
 
-### 4. Send Email (Send)
+### 5. Delete Email (Delete)
+Delete an email from the server and local cache. If offline, the deletion will be queued and synced when you next run `sync` or `list`.
+- **Delete email from specific account**:
+  ```bash
+  wugong delete -a outlook -i 1234
+  ```
+
+### 6. Send Email (Send)
 Send an email with optional attachments:
 - **Send simple email**:
   ```bash
@@ -94,9 +115,9 @@ Send an email with optional attachments:
   wugong send -t recipient@example.com -s "Files" -b "See attached" --attach file1.pdf file2.jpg
   ```
 
-### 5. Account Management
+### 7. Account Management
 - **List all accounts**: `wugong account list`
-- **Add/Update account**: `wugong account add`
+- **Add new account**: `wugong account add`
 - **Delete account**: `wugong account delete <name>`
 
 ---
@@ -132,10 +153,10 @@ All search parameters follow **AND** logic, meaning all conditions must be met s
 
 Maintenance is now integrated directly into the `wugong` command:
 
-1. **Update**:
-   Checks for new commits in the remote repository and syncs changes to your installation upon confirmation.
+1. **Upgrade**:
+   Checks for new commits in the remote repository and syncs changes to your installation upon confirmation. Displays current and latest version during the process.
    ```bash
-   wugong update
+   wugong upgrade
    ```
 
 2. **Uninstall**:
