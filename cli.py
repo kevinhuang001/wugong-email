@@ -66,7 +66,11 @@ def main():
         parser.print_help()
         return
 
-    manager = MailManager()
+    try:
+        manager = MailManager()
+    except Exception as e:
+        console.print(f"[red]Error initializing MailManager: {e}[/red]")
+        return
 
     if args.command == "list":
         if not args.account:
@@ -116,7 +120,7 @@ def main():
                     "since": args.since,
                     "before": args.before
                 }
-                emails, metadata = manager.fetch_emails(account, password, limit=args.limit, search_criteria=search_criteria)
+                emails, metadata = manager.reader.fetch_emails(account, password, limit=args.limit, search_criteria=search_criteria)
                 
                 title = f"Latest {len(emails)} Emails for {args.account}"
                 if any(search_criteria.values()):
@@ -224,7 +228,7 @@ def main():
 
         with console.status(f"[bold green]Fetching content for email {args.id} via {account_name}...") as status:
             try:
-                content = manager.read_email(account, password, args.id)
+                content = manager.reader.read_email(account, password, args.id)
                 if content:
                     if isinstance(content, dict) and content.get("type") == "html_only":
                         html_content = content.get("html", "")
@@ -286,7 +290,7 @@ def main():
 
         with console.status(f"[bold green]Sending email via {account_name}...") as status:
             try:
-                manager.send_email(
+                manager.sender.send_email(
                     account, 
                     password, 
                     to=args.to, 

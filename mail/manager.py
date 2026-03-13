@@ -6,7 +6,14 @@ from .sender import MailSender
 from .reader import MailReader
 
 class MailManager:
-    def __init__(self, config_path):
+    def __init__(self, config_path=None):
+        if config_path is None:
+            # Default to ~/.wugong/config.toml if not provided
+            config_path = os.path.join(os.path.expanduser("~"), ".wugong", "config.toml")
+            # Fallback to local config.toml for development/testing if installation doesn't exist
+            if not os.path.exists(config_path) and os.path.exists("config.toml"):
+                config_path = "config.toml"
+                
         self.config_path = config_path
         self.config = self._load_config()
         self.accounts = self.config.get("accounts", [])
@@ -21,8 +28,8 @@ class MailManager:
         db_path = os.path.join(os.path.dirname(config_path), "cache.db")
         self.storage_manager = StorageManager(db_path, self.encrypt_emails, self.encryption_enabled, self.salt)
         
-        self.sender = MailSender(self.auth_manager)
-        self.reader = MailReader(self.auth_manager, self.storage_manager)
+        self.sender = MailSender(self.auth_manager, self.config, self._save_config)
+        self.reader = MailReader(self.auth_manager, self.storage_manager, self.config, self._save_config)
 
     def _load_config(self):
         if os.path.exists(self.config_path):
@@ -41,27 +48,3 @@ class MailManager:
                 return acc
         return None
 
-    def fetch_emails(self, account, auth_password, limit=10, search_criteria=None):
-        """Coordinate email fetching using MailReader"""
-        return self.reader.fetch_emails(
-            account, 
-            auth_password, 
-            self.config, 
-            self._save_config, 
-            limit, 
-            search_criteria
-        )
-
-    def read_email(self, account, auth_password, email_id):
-        """Coordinate email reading using MailReader"""
-        return self.reader.read_email(
-            account, 
-            auth_password, 
-            email_id, 
-            self.config, 
-            self._save_config
-        )
-
-    def send_email(self, account, password, to, subject, body, attachments=None):
-        """Coordinate email sending using MailSender"""
-        return self.sender.send_email(account, password, to, subject, body, attachments)

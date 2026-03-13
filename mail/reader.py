@@ -4,11 +4,13 @@ from email.header import decode_header
 from datetime import datetime
 
 class MailReader:
-    def __init__(self, auth_manager, storage_manager):
+    def __init__(self, auth_manager, storage_manager, config, save_config_callback):
         self.auth_manager = auth_manager
         self.storage_manager = storage_manager
+        self.config = config
+        self.save_config_callback = save_config_callback
 
-    def fetch_emails(self, account, auth_password, config, save_config_callback, limit=10, search_criteria=None):
+    def fetch_emails(self, account, auth_password, limit=10, search_criteria=None):
         account_name = account.get("friendly_name")
         sync_info = self.storage_manager.get_last_sync_info(account_name)
         is_offline = False
@@ -26,9 +28,9 @@ class MailReader:
                     auth_string = f"user={user}\x01auth=Bearer {token}\x01\x01"
                     mail.authenticate('XOAUTH2', lambda x: auth_string)
                 except imaplib.IMAP4.error:
-                    new_token = self.auth_manager.refresh_oauth2_token(account, auth, auth_password, config)
+                    new_token = self.auth_manager.refresh_oauth2_token(account, auth, auth_password, self.config)
                     if new_token:
-                        save_config_callback()
+                        self.save_config_callback()
                         mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
                         auth_string = f"user={user}\x01auth=Bearer {new_token}\x01\x01"
                         mail.authenticate('XOAUTH2', lambda x: auth_string)
@@ -86,7 +88,7 @@ class MailReader:
         email_list = self.storage_manager.get_emails_from_cache(account_name, limit, search_criteria, auth_password)
         return email_list, {"last_sync": sync_info.get("time"), "is_offline": is_offline}
 
-    def read_email(self, account, auth_password, email_id, config, save_config_callback):
+    def read_email(self, account, auth_password, email_id):
         account_name = account.get("friendly_name")
         
         # 1. Check cache first
@@ -110,9 +112,9 @@ class MailReader:
                     auth_string = f"user={user}\x01auth=Bearer {token}\x01\x01"
                     mail.authenticate('XOAUTH2', lambda x: auth_string)
                 except imaplib.IMAP4.error:
-                    new_token = self.auth_manager.refresh_oauth2_token(account, auth, auth_password, config)
+                    new_token = self.auth_manager.refresh_oauth2_token(account, auth, auth_password, self.config)
                     if new_token:
-                        save_config_callback()
+                        self.save_config_callback()
                         mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
                         auth_string = f"user={user}\x01auth=Bearer {new_token}\x01\x01"
                         mail.authenticate('XOAUTH2', lambda x: auth_string)

@@ -5,8 +5,10 @@ from email.mime.application import MIMEApplication
 import os
 
 class MailSender:
-    def __init__(self, auth_manager):
+    def __init__(self, auth_manager, config, save_config_callback):
         self.auth_manager = auth_manager
+        self.config = config
+        self.save_config_callback = save_config_callback
 
     def send_email(self, account, password, to, subject, body, attachments=None):
         auth = self.auth_manager.decrypt_account_auth(account, password)
@@ -39,8 +41,9 @@ class MailSender:
                 server.authenticate('XOAUTH2', lambda x: auth_string)
             except smtplib.SMTPAuthenticationError:
                 # Try refresh
-                new_token = self.auth_manager.refresh_oauth2_token(account, auth, password, {}) # Note: we'd need config here or handle it in manager
+                new_token = self.auth_manager.refresh_oauth2_token(account, auth, password, self.config)
                 if new_token:
+                    self.save_config_callback()
                     auth_string = f"user={user}\x01auth=Bearer {new_token}\x01\x01"
                     server.authenticate('XOAUTH2', lambda x: auth_string)
                 else:
