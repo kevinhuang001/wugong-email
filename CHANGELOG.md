@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.0] - 2026-03-13
+
+### Added
+- **Seamless Setup**: If encryption is not configured when adding an account, the initialization wizard is now automatically triggered, and the newly set master password is reused for the current account setup.
+
+### Changed
+- **Changelog Display**: Update scripts and `upgrade` command now strictly show only the changes between the current and latest versions, filtering out older history.
+
 ## [1.8.9] - 2026-03-13
 
 ### Changed

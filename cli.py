@@ -449,18 +449,24 @@ def handle_upgrade():
         found_any = False
         
         # We want to show everything from latest down to (but not including) current_version
-        # If current_version is Unknown, show the last 3 versions
+        # If current_version is Unknown, show only the latest version
         version_count = 0
         for line in lines:
             if line.startswith("## ["):
                 version_match = line.split("[")[1].split("]")[0]
+                
+                # Stop if we reached the current version
                 if version_match == current_version:
                     break
-                version_count += 1
-                if current_version == "Unknown" and version_count > 3:
+                
+                # If current_version is Unknown, we only show the first (latest) version block
+                if current_version == "Unknown" and version_count >= 1:
                     break
+                    
+                version_count += 1
                 found_any = True
             
+            # Only start adding lines once we've found the first version header
             if found_any:
                 display_block.append(line)
         

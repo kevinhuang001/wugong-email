@@ -73,6 +73,37 @@ fi
 # 2. Ask for confirmation
 if [ "$UPDATE_NEEDED" = true ] && [ "$FORCE_YES" = false ]; then
     echo -e "${YELLOW}🔔 A new version of Wugong Email is available! (v$LOCAL_VERSION -> v$NEW_VERSION)${NC}"
+    
+    # 2a. Show changelog between versions
+    if [ -f "$SOURCE_DIR/CHANGELOG.md" ]; then
+        echo -e "${BLUE}📄 What's new:${NC}"
+        echo -e "${BLUE}----------------------------------------${NC}"
+        # Extract lines from first ## [ version until current version line (not including it)
+        # Skip everything before the first ## [ and stop at the line containing the current version
+        if [ -n "$LOCAL_VERSION" ]; then
+            awk -v ver="$LOCAL_VERSION" '
+                BEGIN { found=0; }
+                /^## \[/ { 
+                    if ($0 ~ "\\[" ver "\\]") exit; 
+                    found=1; 
+                }
+                found { print $0 }
+            ' "$SOURCE_DIR/CHANGELOG.md"
+        else
+            # If no local version, just show the latest version block
+            awk '
+                BEGIN { found=0; count=0; }
+                /^## \[/ { 
+                    count++;
+                    if (count > 1) exit;
+                    found=1; 
+                }
+                found { print $0 }
+            ' "$SOURCE_DIR/CHANGELOG.md"
+        fi
+        echo -e "${BLUE}----------------------------------------${NC}"
+    fi
+
     read -p "Do you want to update to the latest version? (y/N) " confirm
 
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then

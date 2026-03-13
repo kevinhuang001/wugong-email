@@ -64,6 +64,33 @@ if (-not (Test-Path (Join-Path $ScriptDir ".git"))) {
 # 2. Ask for confirmation
 if ($UpdateNeeded -and -not $yes) {
     Write-Host "🔔 A new version of Wugong Email is available! (v$LocalVersion -> v$RemoteVersion)" -ForegroundColor Yellow
+    
+    # 2a. Show changelog between versions
+    $ChangelogPath = Join-Path $SourceDir "CHANGELOG.md"
+    if (Test-Path $ChangelogPath) {
+        Write-Host "📄 What's new:" -ForegroundColor Blue
+        Write-Host "----------------------------------------" -ForegroundColor Blue
+        $Lines = Get-Content $ChangelogPath
+        $Found = $false
+        $Count = 0
+        foreach ($Line in $Lines) {
+            if ($Line -match "^## \[") {
+                if ($LocalVersion -ne "" -and $Line -match "\[$([regex]::Escape($LocalVersion))\]") {
+                    break
+                }
+                if ($LocalVersion -eq "" -and $Count -ge 1) {
+                    break
+                }
+                $Count++
+                $Found = $true
+            }
+            if ($Found) {
+                Write-Host $Line
+            }
+        }
+        Write-Host "----------------------------------------" -ForegroundColor Blue
+    }
+
     $Confirm = Read-Host "Do you want to update to the latest version? (y/N)"
     if ($Confirm -notmatch '^[Yy]$') {
         Write-Host "❌ Update cancelled." -ForegroundColor Blue

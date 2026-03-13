@@ -334,15 +334,15 @@ def init_wizard():
                 # We need the password we just set for account addition
                 # run_wizard will handle it if we pass it or if it prompts
                 print("\nLaunching Account Configuration Wizard...")
-                return True # Signal that we should run the full wizard next
+                return True, encryption_password # Signal that we should run the full wizard next, and pass password
         
-        return False
+        return False, encryption_password
     except KeyboardInterrupt:
         print("\nInitialization cancelled.")
-        return False
+        return False, None
     except Exception as e:
         print(f"\n❌ Error during initialization: {e}")
-        return False
+        return False, None
 
 def account_add_wizard():
     try:
@@ -365,18 +365,20 @@ def account_add_wizard():
             print(f"Loaded existing config with {original_accounts_count} account(s).")
 
         # 2. Setup/Verify encryption
+        encryption_password = None
         if first_use or "encryption_enabled" not in current_config.get("general", {}):
             print("\nInitialization required.")
-            should_continue = init_wizard()
+            should_continue, encryption_password = init_wizard()
             if not should_continue:
                 return # User cancelled or just wanted to init
             
             # Reload config after init
             current_config = config.load_config(config_path)
             
-        # Re-verify encryption password for the current session
-        encryption_password = questionary.password("Enter your encryption password to proceed:").ask()
-        if encryption_password is None: raise KeyboardInterrupt
+        # Re-verify encryption password for the current session if not just set
+        if encryption_password is None and (current_config.get("general", {}).get("encryption_enabled") or current_config.get("general", {}).get("encrypt_emails")):
+            encryption_password = questionary.password("Enter your encryption password to proceed:").ask()
+            if encryption_password is None: raise KeyboardInterrupt
         
         # Simple validation: Try to decrypt one piece of sensitive data if it exists
         if current_config.get("accounts"):
