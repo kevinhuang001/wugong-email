@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.7] - 2026-03-13
+
+### Added
+- **Configure Command**: Added `wugong configure` to allow users to modify synchronization intervals after initialization.
+- **Smart Uninstallation**: `uninstall.sh` and `uninstall.ps1` now automatically detect and remove scheduled background sync tasks from Crontab (Unix/macOS) or Task Scheduler (Windows).
+
+### Changed
+- **Installation Feedback**: Updated installation scripts and README to display the latest command set and provide a clearer quick-start guide.
+- **Uninstallation Flow**: Improved the uninstallation confirmation and configuration cleanup process.
+
 ## [1.9.6] - 2026-03-13
 
 ### Added

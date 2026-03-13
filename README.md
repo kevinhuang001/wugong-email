@@ -66,7 +66,13 @@ wugong init
 ```
 *Note: This command will set up a Cron job (Linux/macOS) or Scheduled Task (Windows) for automatic background syncing.*
 
-### 1. Configure Account
+### 1. Configuration
+Modify the synchronization interval or check configuration status.
+```bash
+wugong configure
+```
+
+### 2. Configure Account
 Run the configuration wizard to add your first email account.
 ```bash
 wugong account add
@@ -167,7 +173,7 @@ Maintenance is now integrated directly into the `wugong` command:
    ```
 
 2. **Uninstall**:
-   Removes the installation directory `~/.wugong` and configuration directory `~/.config/wugong` (with a prompt to keep configuration).
+   Removes the installation directory `~/.wugong`, configuration directory `~/.config/wugong` (optional), and automatically removes any background sync tasks from Crontab or Task Scheduler.
    ```bash
    wugong uninstall
    ```
