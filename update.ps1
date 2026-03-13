@@ -121,7 +121,10 @@ if (Test-Path $InstallDir) {
     }
     
     # Finally, update the update script itself
-    Copy-Item -Path (Join-Path $SourceDir "update.ps1") -Destination (Join-Path $InstallDir "update.ps1") -Force
+    # Use Remove-Item + Copy-Item to avoid script file corruption during self-update
+    $DestUpdateScript = Join-Path $InstallDir "update.ps1"
+    if (Test-Path $DestUpdateScript) { Remove-Item $DestUpdateScript -Force }
+    Copy-Item -Path (Join-Path $SourceDir "update.ps1") -Destination $DestUpdateScript -Force
     
     # Save the current version if we cloned it
     if ($NewVersion -ne "") {

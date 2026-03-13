@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.3] - 2026-03-13
+
+### Fixed
+- **Self-Update Stability (Take 2)**: Resolved persistent `bash` syntax errors during `wugong upgrade` by using `rm -f && cp` for self-updating scripts. This ensures the running shell maintains its file pointer to the original inode, preventing corruption when the file on disk is replaced.
+
 ## [1.8.2] - 2026-03-13
 
 ### Added

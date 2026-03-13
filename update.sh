@@ -129,6 +129,8 @@ if [ -d "$INSTALL_DIR" ]; then
     fi
     
     # Finally, update the update script itself
+    # Use rm + cp to avoid shell file corruption during self-update
+    rm -f "$INSTALL_DIR/update.sh"
     cp "$SOURCE_DIR/update.sh" "$INSTALL_DIR/update.sh"
     
     # Ensure wugong wrapper script is executable
@@ -159,4 +161,5 @@ echo -e "\n${GREEN}🎉 Wugong Email has been updated successfully!${NC}"
         sed -n '/^## \[/,/^## \[/ { /^## \[/ { h; d; }; p; }' "$INSTALL_DIR/CHANGELOG.md" | sed '$d' | head -n 30
         echo -e "--------------------------------------------------"
     fi
+    exit 0
 }
