@@ -342,32 +342,8 @@ def configure_wizard():
             current_config["general"]["sync_interval"] = interval
             config.save_config(current_config, config_path)
             print(f"\n✅ Configuration updated: interval={interval}m.")
-        
-        # Default Initial Sync Limit (Global)
-        current_sync_limit = current_config.get("general", {}).get("initial_sync_limit", 20)
-        sync_limit_input = questionary.text(
-            f"Global default initial sync limit (current: {current_sync_limit}. Enter 'all' for everything):", 
-            default=str(current_sync_limit) if current_sync_limit != -1 else "all"
-        ).ask()
-        
-        if sync_limit_input is None: raise KeyboardInterrupt
-        
-        if sync_limit_input.lower() == "all":
-            limit = -1
         else:
-            try:
-                limit = int(sync_limit_input)
-            except ValueError:
-                print("Invalid limit. Keeping current setting.")
-                limit = current_sync_limit
-        
-        if limit != current_sync_limit:
-            current_config["general"]["initial_sync_limit"] = limit
-            config.save_config(current_config, config_path)
-            print(f"✅ Configuration updated: initial_sync_limit={sync_limit_input}.")
-        else:
-            if interval == current_interval:
-                print("\nNo changes made to configuration.")
+            print("\nNo changes made to configuration.")
             
         return True
     except KeyboardInterrupt:
@@ -435,14 +411,12 @@ def init_wizard():
         current_config["general"]["encrypt_emails"] = encrypt_emails
         current_config["general"]["salt"] = salt_val
         current_config["general"]["sync_interval"] = interval
-        current_config["general"]["initial_sync_limit"] = 20
         
         config.save_config(current_config, config_path)
         
         # 4. Success Message
         print(f"\n✅ Configuration initialized and saved to {config_path}")
         print(f"ℹ️  Sync interval: {interval} minutes.")
-        print("ℹ️  Initial sync limit: 20 (can be modified in 'wugong configure' or when adding accounts).")
         
         if not current_config.get("accounts"):
             print("\n💡 Tip: No accounts found. Use 'wugong account add' to add your first email account.")

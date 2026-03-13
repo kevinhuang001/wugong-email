@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.13] - 2026-03-13
+
+### Changed
+- **Wizard Cleanup**: Removed `sync_limit` prompts and configuration from `init` and `configure` wizards. The sync limit is now only prompted during the `account add` process as requested, simplifying the initial setup and general configuration.
+
 ## [1.9.12] - 2026-03-13
 
 ### Fixed
