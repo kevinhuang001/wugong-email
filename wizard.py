@@ -274,6 +274,52 @@ def setup_scheduling(interval_minutes):
         print(f"❌ Failed to setup scheduling: {e}")
         return False
 
+def configure_wizard():
+    """Allows modifying the sync interval and displays a message about password changes."""
+    try:
+        print("\n=== Wugong Email Configuration ===")
+        
+        config_path = config.get_config_path()
+        current_config = config.load_config(config_path)
+        
+        if not current_config.get("general", {}).get("salt"):
+            print("\n❌ Wugong is not initialized yet. Please run 'wugong init' first.")
+            return False
+
+        print("\nℹ️  Master password cannot be modified.")
+        print("⚠️  If you need to change your master password, please uninstall and reinstall Wugong.")
+        
+        # Sync Interval & Scheduling
+        current_interval = current_config.get("general", {}).get("sync_interval", 10)
+        sync_interval = questionary.text(
+            f"Sync interval in minutes (current: {current_interval}. Enter 0 to disable auto-sync):", 
+            default=str(current_interval)
+        ).ask()
+        
+        if sync_interval is None: raise KeyboardInterrupt
+        
+        try:
+            interval = int(sync_interval)
+        except ValueError:
+            print("Invalid interval. Keeping current setting.")
+            interval = current_interval
+            
+        if interval != current_interval:
+            setup_scheduling(interval)
+            current_config["general"]["sync_interval"] = interval
+            config.save_config(current_config, config_path)
+            print(f"\n✅ Sync interval updated to {interval} minutes.")
+        else:
+            print("\nNo changes made to sync interval.")
+            
+        return True
+    except KeyboardInterrupt:
+        print("\nConfiguration cancelled.")
+        return False
+    except Exception as e:
+        print(f"\n❌ Error during configuration: {e}")
+        return False
+
 def init_wizard():
     """Initializes the configuration, sets up encryption, and schedules periodic sync."""
     try:
@@ -284,12 +330,10 @@ def init_wizard():
         
         # Check if already initialized
         if current_config.get("general", {}).get("salt"):
-            print("\nℹ️  Wugong is already initialized.")
-            print("⚠️  Warning: If you need to change your master password, please uninstall and reinstall Wugong.")
-            print("💡 You can re-run this wizard to modify the sync interval.")
-            
-            if not questionary.confirm("Do you want to continue to modify settings (like sync interval)?").ask():
-                return False, None
+            print("\n❌ Wugong is already initialized.")
+            print("⚠️  If you need to change your master password, please uninstall and reinstall Wugong.")
+            print("💡 Use 'wugong configure' to modify settings like the sync interval.")
+            return False, None
         
         # 1. Encryption Setup
         encrypt_creds = questionary.confirm("Enable credential encryption? (Highly Recommended)", default=True).ask()
@@ -628,4 +672,4 @@ def account_add_wizard():
         return
 
 if __name__ == "__main__":
-    run_wizard()
+    init_wizard()

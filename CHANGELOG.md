@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.5] - 2026-03-13
+
+### Added
+- **New `configure` Command**: Added a dedicated `configure` command to allow users to modify settings like the sync interval without re-initializing the entire system.
+- **Improved Password Management Guidance**: The `configure` command now explicitly informs users that the master password cannot be changed once set, and a reinstallation is required for such changes.
+
+### Changed
+- **Strict Initialization**: Modified `wugong init` to strictly prevent re-initialization if the system is already set up. Users are now redirected to the `configure` command for common setting adjustments.
+- **Sync Interval Cancellation**: Enhanced the configuration process to ensure that setting the sync interval to `0` correctly cancels all scheduled tasks across both Windows (Task Scheduler) and Unix-like (Crontab) systems.
+
 ## [1.9.4] - 2026-03-13
 
 ### Changed

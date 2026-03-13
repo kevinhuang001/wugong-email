@@ -12,7 +12,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 from mail import MailManager
-from wizard import account_add_wizard, init_wizard
+from wizard import account_add_wizard, init_wizard, configure_wizard
 
 console = Console()
 
@@ -266,6 +266,10 @@ def handle_send(args, manager):
             console.print(f"[green]Successfully sent email to {args.to}![/green]")
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
+
+def handle_configure(args, manager):
+    """Handles the 'configure' command to modify sync settings."""
+    configure_wizard()
 
 def handle_init(args, manager):
     """Handles the 'init' command to setup encryption and sync schedule."""
@@ -560,6 +564,9 @@ def main():
     # Init command
     subparsers.add_parser("init", help="Initialize configuration, encryption, and sync schedule")
 
+    # Configure command
+    subparsers.add_parser("configure", help="Modify settings like sync interval")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -575,6 +582,8 @@ def main():
     match args.command:
         case "init":
             handle_init(args, manager)
+        case "configure":
+            handle_configure(args, manager)
         case "list":
             handle_list(args, manager)
         case "read":
