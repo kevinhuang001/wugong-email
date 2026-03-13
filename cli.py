@@ -1,6 +1,8 @@
 import argparse
 import sys
 import os
+import subprocess
+import re
 import questionary
 from datetime import datetime
 from email.utils import parsedate_to_datetime
@@ -201,22 +203,6 @@ def main():
             # Show help for account command if no subcommand provided
             account_parser.print_help()
 
-    elif args.command == "update":
-        install_dir = os.path.dirname(os.path.abspath(__file__))
-        update_script = os.path.join(install_dir, "update.sh")
-        if os.path.exists(update_script):
-            os.system(f"bash {update_script}")
-        else:
-            console.print(f"[red]Error: update.sh not found in {install_dir}[/red]")
-
-    elif args.command == "uninstall":
-        install_dir = os.path.dirname(os.path.abspath(__file__))
-        uninstall_script = os.path.join(install_dir, "uninstall.sh")
-        if os.path.exists(uninstall_script):
-            os.system(f"bash {uninstall_script}")
-        else:
-            console.print(f"[red]Error: uninstall.sh not found in {install_dir}[/red]")
-
     elif args.command == "read":
         account_name = args.account or "default"
         account = manager.get_account_by_name(account_name)
@@ -247,7 +233,6 @@ def main():
                         ).ask()
                         
                         if choice == "Extract text (may be incomplete, sentences might run together)":
-                            import re
                             # Basic HTML stripping
                             text = re.sub(r'<[^<]+?>', '', html_content)
                             # Replace multiple newlines, using raw strings to avoid SyntaxWarning
@@ -306,8 +291,6 @@ def main():
                 console.print(f"[red]Error: {e}[/red]")
 
     elif args.command == "update":
-        import os
-        import subprocess
         install_dir = os.path.expanduser("~/.wugong")
         script_path = os.path.join(install_dir, "update.sh")
         if os.name == 'nt':
@@ -317,8 +300,6 @@ def main():
             subprocess.run(["bash", script_path])
 
     elif args.command == "uninstall":
-        import os
-        import subprocess
         install_dir = os.path.expanduser("~/.wugong")
         script_path = os.path.join(install_dir, "uninstall.sh")
         if os.name == 'nt':
