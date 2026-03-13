@@ -12,7 +12,7 @@ class MailReader:
         self.config = config
         self.save_config_callback = save_config_callback
 
-    def fetch_emails(self, account, auth_password, limit=10, search_criteria=None):
+    def fetch_emails(self, account, auth_password, limit=10, search_criteria=None, progress_callback=None):
         account_name = account.get("friendly_name")
         sync_info = self.storage_manager.get_last_sync_info(account_name)
         is_offline = False
@@ -60,16 +60,16 @@ class MailReader:
                         self.storage_manager.delete_email_from_cache(account_name, cached_uid)
                 
                 # 3. Identify truly NEW emails that are not in cache
-                # We fetch metadata for ALL new UIDs discovered on the server
                 new_uids_to_fetch = [uid for uid in uids_raw if uid.decode() not in cached_uids_set]
                 
-                # For safety, we still cap the batch at 10,000 for a single sync run,
-                # but this effectively means "all" for most users.
                 if len(new_uids_to_fetch) > 10000:
                     new_uids_to_fetch = new_uids_to_fetch[-10000:]
                 
+                total_to_fetch = len(new_uids_to_fetch)
+                if progress_callback:
+                    progress_callback(0, total_to_fetch, "Checking flags...")
+
                 # 4. Sync Flags (Seen/Unseen) for emails in the current view
-                # We check flags for the 'limit' requested emails to ensure seen status is fresh
                 view_uids = uids_raw[-limit:] if limit > 0 and len(uids_raw) > limit else uids_raw
                 view_uids_str = b",".join(view_uids)
                 if view_uids_str:
@@ -88,14 +88,16 @@ class MailReader:
                 fetched_emails = []
                 if new_uids_to_fetch:
                     # Fetch in reversed order (newest first)
-                    for uid in reversed(new_uids_to_fetch):
+                    for i, uid in enumerate(reversed(new_uids_to_fetch)):
+                        if progress_callback:
+                            progress_callback(i + 1, total_to_fetch, f"Fetching {i+1}/{total_to_fetch}...")
+                        
                         uid_str = uid.decode()
                         res, msg_data = mail.uid('fetch', uid, '(RFC822.SIZE BODY[HEADER.FIELDS (SUBJECT FROM DATE)])')
                         if res == "OK":
                             raw_msg = msg_data[0][1]
                             msg = email.message_from_bytes(raw_msg)
                             
-                            # (Header decoding logic...)
                             try:
                                 subject_header = msg.get("Subject")
                                 subject = str(make_header(decode_header(subject_header))) if subject_header else "No Subject"

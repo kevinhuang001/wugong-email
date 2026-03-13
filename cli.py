@@ -9,6 +9,7 @@ from email.utils import parsedate_to_datetime
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 from mail import MailManager
 from wizard import run_wizard
 
@@ -48,11 +49,27 @@ def handle_list(args, manager):
         
         # 1. Sync first (unless --no-sync is specified)
         if not args.no_sync:
-            with console.status(f"[bold green]Updating emails for {account_name}...") as status:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                TimeRemainingColumn(),
+                console=console,
+                transient=True
+            ) as progress:
+                task = progress.add_task(f"[green]Syncing {account_name}...", total=None)
+                
+                def update_progress(current, total, description=None):
+                    if total:
+                        progress.update(task, total=total, completed=current, description=f"[green]Syncing {account_name}: {description or ''}")
+                    else:
+                        progress.update(task, description=f"[green]Syncing {account_name}: {description or ''}")
+
                 try:
-                    manager.reader.fetch_emails(account, password, limit=args.limit)
+                    manager.reader.fetch_emails(account, password, limit=args.limit, progress_callback=update_progress)
                 except Exception as e:
-                    console.print(f"[yellow]Warning: Could not sync {account_name}: {e}[/yellow]")
+                    console.print(f"[red]❌ Error syncing {account_name}: {e}[/red]")
 
         # 2. List from cache
         with console.status(f"[bold green]Fetching emails for {account_name}...") as status:
@@ -318,15 +335,32 @@ def handle_sync(args, manager):
 
     for account in target_accounts:
         account_name = account.get("friendly_name") or "default"
-        with console.status(f"[bold green]Syncing emails for {account_name}...") as status:
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeRemainingColumn(),
+            console=console,
+            transient=True # Remove the progress bar after completion
+        ) as progress:
+            task = progress.add_task(f"[green]Syncing {account_name}...", total=None)
+            
+            def update_progress(current, total, description=None):
+                if total:
+                    progress.update(task, total=total, completed=current, description=f"[green]Syncing {account_name}: {description or ''}")
+                else:
+                    progress.update(task, description=f"[green]Syncing {account_name}: {description or ''}")
+
             try:
-                _, metadata = manager.reader.fetch_emails(account, password, limit=args.limit)
+                _, metadata = manager.reader.fetch_emails(account, password, limit=args.limit, progress_callback=update_progress)
                 new_emails = metadata.get("new_emails", [])
                 if new_emails:
-                    console.print(f"[green]Successfully synced {account_name}. Found {len(new_emails)} new emails:[/green]")
+                    console.print(f"[green]✅ {account_name}: {len(new_emails)} new emails[/green]")
                     # Display a small table for new emails
-                    new_table = Table(box=None, show_header=False)
-                    new_table.add_column("From", style="magenta", width=20)
+                    new_table = Table(box=None, show_header=False, padding=(0, 2))
+                    new_table.add_column("From", style="magenta", width=25)
                     new_table.add_column("Subject", style="white")
                     for ne in new_emails[:5]: # Show up to 5 new emails
                         new_table.add_row(ne["from"], ne["subject"])
@@ -334,9 +368,9 @@ def handle_sync(args, manager):
                         new_table.add_row("...", f"and {len(new_emails)-5} more")
                     console.print(new_table)
                 else:
-                    console.print(f"[green]Successfully synced {account_name}. No new emails.[/green]")
+                    console.print(f"[green]✅ {account_name}: No new emails.[/green]")
             except Exception as e:
-                console.print(f"[red]Error syncing {account_name}: {e}[/red]")
+                console.print(f"[red]❌ Error syncing {account_name}: {e}[/red]")
 
 def handle_upgrade():
     install_dir = os.path.expanduser("~/.wugong")
