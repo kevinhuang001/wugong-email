@@ -70,53 +70,23 @@ def handle_list(args, manager):
         elif args.limit is not None:
             list_limit = args.limit
 
-        # 2. Sync and Fetch
+        # 2. Fetch Results (Pure Query, No Sync)
         emails = []
         metadata = {}
         
-        # Determine if we should sync based on --no-sync flag
-        should_sync = not args.no_sync
+        is_local = getattr(args, "local", False)
+        status_msg = f"[bold green]Fetching cached emails for {account_name}..." if is_local else f"[bold green]Querying {account_name}..."
         
-        if should_sync:
-            # Real-time Query via IMAP
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TaskProgressColumn(),
-                TimeRemainingColumn(),
-                console=console,
-                transient=True,
-                disable=not sys.stdin.isatty()
-            ) as progress:
-                query_task = progress.add_task(f"[green]Querying {account_name}...", total=None)
-                
-                def update_progress(current, total, description=None):
-                    if total:
-                        progress.update(query_task, total=total, completed=current, description=f"[green]Querying {account_name}: {description or ''}")
-                    else:
-                        progress.update(query_task, description=f"[green]Querying {account_name}: {description or ''}")
-
-                try:
-                    # Use query_emails for listing (IMAP search first, no sync side effects)
-                    emails, metadata = manager.reader.query_emails(
-                        account, password, 
-                        limit=list_limit, 
-                        search_criteria=search_criteria, 
-                        progress_callback=update_progress,
-                        local_only=getattr(args, "local", False)
-                    )
-                except Exception as e:
-                    console.print(f"[red]❌ Query failed for {account_name}: {e}. Showing cached emails.[/red]")
-                    # Fallback to cache (query_emails already handles this, but let's be explicit if needed)
-                    emails, metadata = manager.reader.query_emails(
-                        account, password, 
-                        limit=list_limit, 
-                        search_criteria=search_criteria
-                    )
-        else:
-            # List from cache only
-            with console.status(f"[bold green]Fetching cached emails for {account_name}...") as status:
+        with console.status(status_msg) as status:
+            try:
+                emails, metadata = manager.reader.query_emails(
+                    account, password, 
+                    limit=list_limit, 
+                    search_criteria=search_criteria,
+                    local_only=is_local
+                )
+            except Exception as e:
+                console.print(f"[red]❌ Query failed for {account_name}: {e}. Showing cached emails.[/red]")
                 emails, metadata = manager.reader.query_emails(
                     account, password, 
                     limit=list_limit, 
@@ -140,7 +110,7 @@ def handle_list(args, manager):
             
             if is_offline:
                 status_str = f"[red](OFFLINE: {sync_error or 'Connection failed'})[/red]"
-            elif not should_sync:
+            elif is_local:
                 status_str = "[yellow](CACHED)[/yellow]"
             else:
                 status_str = "[green](ONLINE)[/green]"
@@ -590,7 +560,6 @@ def main():
     list_parser.add_argument("--from-user", "-f", help="Search by sender's email or name")
     list_parser.add_argument("--since", help="Search emails since date (e.g., 01-Jan-2024)")
     list_parser.add_argument("--before", help="Search emails before date (e.g., 31-Dec-2024)")
-    list_parser.add_argument("--no-sync", action="store_true", help="Do not sync with server before listing")
     list_parser.add_argument("--local", action="store_true", help="Only query from local cache, do not use IMAP")
 
     # Read command

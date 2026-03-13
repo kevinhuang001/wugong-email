@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.21] - 2026-03-13
+
+### Removed
+- **Sync Logic from List**: Completely removed all synchronization-related logic from the `list` command. It is now a pure query command with no side effects on the local database.
+- **--no-sync Flag**: Removed the redundant `--no-sync` flag as the `list` command never performs a sync by default.
+
+### Changed
+- **Simplified List Flow**: Streamlined the `list` execution flow to use a simple status indicator instead of a heavy progress bar, making it faster and cleaner.
+- **Logic Refinement**: Improved offline fallback and local cache query consistency.
+
 ## [1.9.20] - 2026-03-13
 
 ### Changed
