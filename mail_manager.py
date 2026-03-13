@@ -286,7 +286,9 @@ class MailManager:
             server = smtplib.SMTP_SSL(account['smtp_server'], account['smtp_port'])
         else:
             server = smtplib.SMTP(account['smtp_server'], account['smtp_port'])
+            server.ehlo()
             server.starttls()
+            server.ehlo()
             
         if account['login_method'] == "Account/Password":
             server.login(auth['username'], auth['password'])
@@ -295,17 +297,20 @@ class MailManager:
             user = auth.get("username")
             token = auth.get("access_token")
             
-            try:
-                auth_string = f"user={user}\x01auth=Bearer {token}\x01\x01"
-                server.docmd("AUTH", "XOAUTH2 " + base64.b64encode(auth_string.encode()).decode())
-            except smtplib.SMTPException:
-                # Try refreshing token
+            auth_string = f"user={user}\x01auth=Bearer {token}\x01\x01"
+            code, resp = server.docmd("AUTH", "XOAUTH2 " + base64.b64encode(auth_string.encode()).decode())
+            
+            if code >= 400: # Authentication failed, try refresh
                 new_token = self._refresh_oauth2_token(account, auth, auth_password)
                 if new_token:
+                    # After a failed AUTH, some servers might require a reset or new connection
+                    # But often we can just try AUTH again
                     auth_string = f"user={user}\x01auth=Bearer {new_token}\x01\x01"
-                    server.docmd("AUTH", "XOAUTH2 " + base64.b64encode(auth_string.encode()).decode())
+                    code, resp = server.docmd("AUTH", "XOAUTH2 " + base64.b64encode(auth_string.encode()).decode())
+                    if code >= 400:
+                        raise Exception(f"SMTP OAuth2 Authentication failed after refresh: {code} {resp}")
                 else:
-                    raise Exception("SMTP Authentication failed and token refresh failed.")
+                    raise Exception(f"SMTP OAuth2 Authentication failed and token refresh failed: {code} {resp}")
         
         server.send_message(msg)
         server.quit()
