@@ -59,7 +59,7 @@ if (-not (Test-Path (Join-Path $ScriptDir ".git"))) {
 
 # 2. Ask for confirmation
 if ($UpdateNeeded) {
-    Write-Host "🔔 A new version of Wugong Email is available!" -ForegroundColor Yellow
+    Write-Host "🔔 A new version of Wugong Email is available! (v$LocalVersion -> v$RemoteVersion)" -ForegroundColor Yellow
     $Confirm = Read-Host "Do you want to update to the latest version? (y/N)"
     if ($Confirm -notmatch '^[Yy]$') {
         Write-Host "❌ Update cancelled." -ForegroundColor Blue

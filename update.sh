@@ -62,7 +62,7 @@ fi
 
 # 2. Ask for confirmation
 if [ "$UPDATE_NEEDED" = true ]; then
-    echo -e "${YELLOW}🔔 A new version of Wugong Email is available!${NC}"
+    echo -e "${YELLOW}🔔 A new version of Wugong Email is available! (v$LOCAL_VERSION -> v$NEW_VERSION)${NC}"
     read -p "Do you want to update to the latest version? (y/N) " confirm
 
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
