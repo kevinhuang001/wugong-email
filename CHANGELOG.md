@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.8] - 2026-03-13
+
+### Changed
+- **Mandatory Encryption**: `init` command now requires a master password to be set. Credential encryption is now enabled by default to ensure security.
+
 ## [1.8.7] - 2026-03-13
 
 ### Changed
