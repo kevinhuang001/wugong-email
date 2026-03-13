@@ -22,11 +22,11 @@ if [ ! -d "$REPO_DIR/.git" ]; then
     # Check if we have a local version to compare with
     LOCAL_VERSION=""
     if [ -f "$INSTALL_DIR/.version" ]; then
-        LOCAL_VERSION=$(cat "$INSTALL_DIR/.version")
+        LOCAL_VERSION=$(cat "$INSTALL_DIR/.version" | xargs)
     fi
 
     # Get remote head version from .version file
-    REMOTE_VERSION=$(curl -sSL "https://raw.githubusercontent.com/kevinhuang001/wugong-email/main/.version" | tr -d '\n\r')
+    REMOTE_VERSION=$(curl -sSL "https://raw.githubusercontent.com/kevinhuang001/wugong-email/main/.version" | tr -d '\n\r' | xargs)
     
     if [ "$LOCAL_VERSION" = "$REMOTE_VERSION" ] && [ -n "$LOCAL_VERSION" ]; then
         echo -e "${GREEN}✅ Wugong Email is already up to date (v$LOCAL_VERSION).${NC}"
