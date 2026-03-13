@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# --- Wrapper to avoid script corruption during self-update ---
+{
 # --- Configuration ---
 INSTALL_DIR="$HOME/.wugong"
 CONFIG_DIR="$HOME/.config/wugong"
@@ -141,3 +143,4 @@ fi
 
 echo -e "\n${GREEN}🎉 Wugong Email has been updated successfully!${NC}"
 echo -e "--------------------------------------------------"
+}
