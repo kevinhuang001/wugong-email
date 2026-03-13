@@ -7,7 +7,9 @@ $InstallDir = Join-Path $Home ".wugong"
 $RepoUrl = "https://github.com/kevinhuang001/wugong-email.git"
 $ScriptDir = Split-Path $MyInvocation.MyCommand.Path -Parent
 
-Write-Host "🔄 Checking for updates for Wugong Email..." -ForegroundColor Blue
+if (-not $yes) {
+    Write-Host "🔄 Checking for updates for Wugong Email..." -ForegroundColor Blue
+}
 
 # 1. Check if running from a git repository or needs to be cloned
 $UpdateNeeded = $false

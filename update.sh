@@ -24,7 +24,9 @@ for arg in "$@"; do
     fi
 done
 
-echo -e "${BLUE}🔄 Checking for updates for Wugong Email...${NC}"
+if [ "$FORCE_YES" = false ]; then
+    echo -e "${BLUE}🔄 Checking for updates for Wugong Email...${NC}"
+fi
 
 # 1. Check if it's a git repository or needs to be cloned
 if [ ! -d "$REPO_DIR/.git" ]; then

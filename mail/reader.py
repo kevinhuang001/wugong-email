@@ -5,7 +5,7 @@ from email.utils import parseaddr
 from datetime import datetime
 import re
 
-class EmailReader:
+class MailReader:
     def __init__(self, auth_manager, storage_manager, config, save_config_callback):
         self.auth_manager = auth_manager
         self.storage_manager = storage_manager
