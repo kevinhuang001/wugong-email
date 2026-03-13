@@ -88,10 +88,11 @@ if [ -d "$INSTALL_DIR" ]; then
     # Use rsync if available for cleaner directory syncing, otherwise fallback to cp -R
     if command -v rsync &> /dev/null; then
         # Use --delete but EXCLUDE config, database, and venv/cache
-        rsync -av --delete --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='update.sh' --exclude='*.db' --exclude='config.toml' "$SOURCE_DIR/" "$INSTALL_DIR/" &>/dev/null
+        # Ensure it overwrites by using -a (archive, which includes -r and -p etc)
+        rsync -av --delete --ignore-errors --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='update.sh' --exclude='*.db' --exclude='config.toml' "$SOURCE_DIR/" "$INSTALL_DIR/" &>/dev/null
     else
         # Fallback to cp -R, but we need to be careful with exclusions
-        echo -e "${BLUE}⚠️  rsync not found, using cp -R (files will be overwritten)...${NC}"
+        echo -e "${BLUE}⚠️  rsync not found, using cp -Rf (files will be forced to overwrite)...${NC}"
         # Manually remove old core files to simulate --delete for critical files
         rm -f "$INSTALL_DIR/read_config.py"
         # Using a simple loop for top-level items to avoid copying excluded dirs
@@ -101,7 +102,8 @@ if [ -d "$INSTALL_DIR" ]; then
             case "$name" in
                 .git|.venv|__pycache__|update.sh|*.db|config.toml) continue ;;
             esac
-            cp -R "$item" "$INSTALL_DIR/" &>/dev/null
+            # Use -f to force overwrite
+            cp -Rf "$item" "$INSTALL_DIR/" &>/dev/null
         done
     fi
 

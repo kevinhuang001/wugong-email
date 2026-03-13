@@ -16,6 +16,16 @@ class MailReader:
         sync_info = self.storage_manager.get_last_sync_info(account_name)
         is_offline = False
         
+        # Check if we need to sync all emails
+        sync_all = account.get("sync_all_on_next_run", False)
+        if sync_all:
+            # If sync_all is requested, we'll fetch all UIDs and sync them
+            # For performance, we might still want a reasonable upper limit or just do it in batches
+            # but for now, let's just use a very large limit.
+            fetch_limit = 1000 # Reasonable "all" for first sync
+        else:
+            fetch_limit = limit
+
         try:
             auth = self.auth_manager.decrypt_account_auth(account, auth_password)
             mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
@@ -40,12 +50,12 @@ class MailReader:
 
             mail.select("INBOX")
             
-            # Fetch the latest 'limit' UIDs to ensure metadata is up-to-date in cache
+            # Fetch the latest UIDs to ensure metadata is up-to-date in cache
             res, data = mail.uid('search', None, "ALL")
             if res == "OK":
                 uids = data[0].split()
-                # Get the last 'limit' UIDs
-                latest_uids = uids[-limit:] if len(uids) > limit else uids
+                # Get the last 'fetch_limit' UIDs
+                latest_uids = uids[-fetch_limit:] if len(uids) > fetch_limit else uids
                 
                 new_emails = []
                 for uid in reversed(latest_uids):
@@ -106,6 +116,11 @@ class MailReader:
                 new_last_uid = uids[-1].decode() if uids else sync_info.get("uid", "0")
                 self.storage_manager.update_sync_info(account_name, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), new_last_uid)
                 sync_info = self.storage_manager.get_last_sync_info(account_name)
+
+                # Clear sync_all flag if it was set
+                if sync_all:
+                    account["sync_all_on_next_run"] = False
+                    self.save_config_callback()
 
             mail.close()
             mail.logout()

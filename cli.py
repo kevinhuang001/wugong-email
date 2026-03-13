@@ -20,12 +20,13 @@ def main():
 
     # List command
     list_parser = subparsers.add_parser("list", help="List accounts or emails")
-    list_parser.add_argument("account", nargs="?", help="Friendly name of the account to list emails from")
-    list_parser.add_argument("--limit", "-l", type=int, default=10, help="Number of emails to list")
+    list_parser.add_argument("account", nargs="?", help="Friendly name of the account to list emails from (use 'all' for all accounts)")
+    list_parser.add_argument("--limit", "-l", type=int, default=10, help="Number of emails to list per account")
     list_parser.add_argument("--keyword", "-k", help="Search by keyword in subject or body")
     list_parser.add_argument("--from-user", "-f", help="Search by sender's email or name")
     list_parser.add_argument("--since", help="Search emails since date (e.g., 01-Jan-2024)")
     list_parser.add_argument("--before", help="Search emails before date (e.g., 31-Dec-2024)")
+    list_parser.add_argument("--no-sync", action="store_true", help="Do not sync with server before listing")
 
     # Read command
     read_parser = subparsers.add_parser("read", help="Read a specific email")
@@ -54,8 +55,13 @@ def main():
     delete_parser = account_subparsers.add_parser("delete", help="Delete a configured account")
     delete_parser.add_argument("name", help="Friendly name of the account to delete")
 
-    # Update command
-    subparsers.add_parser("update", help="Update Wugong Email to the latest version")
+    # Email Update command
+    update_parser = subparsers.add_parser("update", help="Sync latest emails from server")
+    update_parser.add_argument("account", nargs="?", help="Friendly name of the account to update (use 'all' for all accounts)")
+    update_parser.add_argument("--limit", "-l", type=int, default=10, help="Number of emails to sync per account")
+
+    # Upgrade command (code update)
+    subparsers.add_parser("upgrade", help="Update Wugong Email code to the latest version")
 
     # Uninstall command
     subparsers.add_parser("uninstall", help="Uninstall Wugong Email")
@@ -77,79 +83,128 @@ def main():
             console.print("[yellow]No accounts configured yet. Run 'wugong account add' to get started.[/yellow]")
             return
 
-        # Try to get the account: either specified, or "default", or the first account
-        account = manager.get_account_by_name(args.account) if args.account else manager.get_account_by_name("default")
-        
-        if not account:
-            console.print(f"[red]Error: Account '{args.account or 'default'}' not found.[/red]")
-            return
-            
-        # Use the actual friendly name for display
-        account_name = account.get("friendly_name") or "default"
+        # Handle "all" accounts
+        target_accounts = []
+        if args.account == "all":
+            target_accounts = manager.accounts
+        else:
+            acc = manager.get_account_by_name(args.account) if args.account else manager.get_account_by_name("default")
+            if not acc:
+                console.print(f"[red]Error: Account '{args.account or 'default'}' not found.[/red]")
+                return
+            target_accounts = [acc]
+
+        # Get password once if encryption is enabled (assume same password for all for simplicity in CLI)
         password = ""
         if manager.encryption_enabled:
-            password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
+            acc_names = ", ".join([a.get("friendly_name") or "default" for a in target_accounts])
+            password = questionary.password(f"Enter encryption password for {acc_names}:").ask()
             if not password:
                 return
 
-        with console.status(f"[bold green]Fetching emails for {account_name}...") as status:
-            try:
-                search_criteria = {
-                    "keyword": args.keyword,
-                    "from": args.from_user,
-                    "since": args.since,
-                    "before": args.before
-                }
-                emails, metadata = manager.reader.fetch_emails(account, password, limit=args.limit, search_criteria=search_criteria)
-                
-                title = f"Latest {len(emails)} Emails for {account_name}"
-                if any(search_criteria.values()):
-                    active_filters = [f"{k}={v}" for k, v in search_criteria.items() if v]
-                    title += f" (Filters: {', '.join(active_filters)})"
-
-                # Add sync info to title
-                last_sync = metadata.get("last_sync", "Never")
-                is_offline = metadata.get("is_offline", False)
-                sync_error = metadata.get("error")
-                status_str = f"[red](OFFLINE: {sync_error})[/red]" if is_offline and sync_error else ("[red](OFFLINE)[/red]" if is_offline else "[green](ONLINE)[/green]")
-                title += f"\n[dim]Last Sync: {last_sync} {status_str}[/dim]"
-
-                table = Table(title=title, show_lines=False, box=None)
-                table.add_column("", justify="center", width=1) # Status column
-                table.add_column("ID", style="cyan", justify="right", width=6)
-                table.add_column("From", style="magenta", width=20)
-                table.add_column("Email", style="blue", width=25)
-                table.add_column("Subject", style="white", ratio=1) # Use ratio to fill space
-                table.add_column("Time", style="green", width=19)
-
-                for em in emails:
-                    # Mark unread with *
-                    status_mark = "" if em.get("seen") else "*"
-                    
-                    # Clean subject and from for single-line display
-                    subject = (em.get("subject") or "").replace("\n", " ").replace("\r", "")
-                    from_user = (em.get("from") or "").replace("\n", " ").replace("\r", "")
-                    from_email = (em.get("from_email") or "").replace("\n", " ").replace("\r", "")
-                    
-                    # Format time: YYYY-MM-DD HH:MM:SS
-                    display_time = em["date"]
+        for account in target_accounts:
+            account_name = account.get("friendly_name") or "default"
+            
+            # 1. Sync first (unless --no-sync is specified)
+            if not args.no_sync:
+                with console.status(f"[bold green]Updating emails for {account_name}...") as status:
                     try:
-                        dt = parsedate_to_datetime(em["date"])
-                        display_time = dt.strftime("%Y-%m-%d %H:%M:%S")
-                    except:
-                        pass
+                        manager.reader.fetch_emails(account, password, limit=args.limit)
+                    except Exception as e:
+                        console.print(f"[yellow]Warning: Could not sync {account_name}: {e}[/yellow]")
+
+            # 2. List from cache
+            with console.status(f"[bold green]Fetching emails for {account_name}...") as status:
+                try:
+                    search_criteria = {
+                        "keyword": args.keyword,
+                        "from": args.from_user,
+                        "since": args.since,
+                        "before": args.before
+                    }
+                    # fetch_emails with search_criteria will automatically use cache if offline or limit reached
+                    emails, metadata = manager.reader.fetch_emails(account, password, limit=args.limit, search_criteria=search_criteria)
                     
-                    table.add_row(
-                        status_mark,
-                        em["id"],
-                        from_user,
-                        from_email,
-                        subject,
-                        display_time
-                    )
-                console.print(table)
-            except Exception as e:
-                console.print(f"[red]Error: {e}[/red]")
+                    title = f"Latest {len(emails)} Emails for {account_name}"
+                    if any(search_criteria.values()):
+                        active_filters = [f"{k}={v}" for k, v in search_criteria.items() if v]
+                        title += f" (Filters: {', '.join(active_filters)})"
+
+                    # Add sync info to title
+                    last_sync = metadata.get("last_sync", "Never")
+                    is_offline = metadata.get("is_offline", False)
+                    sync_error = metadata.get("error")
+                    status_str = f"[red](OFFLINE: {sync_error})[/red]" if is_offline and sync_error else ("[red](OFFLINE)[/red]" if is_offline else "[green](ONLINE)[/green]")
+                    title += f"\n[dim]Last Sync: {last_sync} {status_str}[/dim]"
+
+                    table = Table(title=title, show_lines=False, box=None)
+                    table.add_column("", justify="center", width=1) # Status column
+                    table.add_column("ID", style="cyan", justify="right", width=6)
+                    table.add_column("From", style="magenta", width=20)
+                    table.add_column("Email", style="blue", width=25)
+                    table.add_column("Subject", style="white", ratio=1) # Use ratio to fill space
+                    table.add_column("Time", style="green", width=19)
+
+                    for em in emails:
+                        # Mark unread with *
+                        status_mark = "" if em.get("seen") else "*"
+                        
+                        # Clean subject and from for single-line display
+                        subject = (em.get("subject") or "").replace("\n", " ").replace("\r", "")
+                        from_user = (em.get("from") or "").replace("\n", " ").replace("\r", "")
+                        from_email = (em.get("from_email") or "").replace("\n", " ").replace("\r", "")
+                        
+                        # Format time: YYYY-MM-DD HH:MM:SS
+                        display_time = em["date"]
+                        try:
+                            dt = parsedate_to_datetime(em["date"])
+                            display_time = dt.strftime("%Y-%m-%d %H:%M:%S")
+                        except:
+                            pass
+                        
+                        table.add_row(
+                            status_mark,
+                            em["id"],
+                            from_user,
+                            from_email,
+                            subject,
+                            display_time
+                        )
+                    console.print(table)
+                    console.print("-" * console.width) # Separator between accounts
+                except Exception as e:
+                    console.print(f"[red]Error listing {account_name}: {e}[/red]")
+
+    elif args.command == "update":
+        if not manager.accounts:
+            console.print("[yellow]No accounts configured yet.[/yellow]")
+            return
+
+        target_accounts = []
+        if args.account == "all":
+            target_accounts = manager.accounts
+        else:
+            acc = manager.get_account_by_name(args.account) if args.account else manager.get_account_by_name("default")
+            if not acc:
+                console.print(f"[red]Error: Account '{args.account or 'default'}' not found.[/red]")
+                return
+            target_accounts = [acc]
+
+        password = ""
+        if manager.encryption_enabled:
+            acc_names = ", ".join([a.get("friendly_name") or "default" for a in target_accounts])
+            password = questionary.password(f"Enter encryption password for {acc_names}:").ask()
+            if not password:
+                return
+
+        for account in target_accounts:
+            account_name = account.get("friendly_name") or "default"
+            with console.status(f"[bold green]Updating emails for {account_name}...") as status:
+                try:
+                    manager.reader.fetch_emails(account, password, limit=args.limit)
+                    console.print(f"[green]Successfully updated {account_name}.[/green]")
+                except Exception as e:
+                    console.print(f"[red]Error updating {account_name}: {e}[/red]")
 
     elif args.command == "account":
         if args.account_command == "list":
@@ -286,7 +341,7 @@ def main():
             except Exception as e:
                 console.print(f"[red]Error: {e}[/red]")
 
-    elif args.command == "update":
+    elif args.command == "upgrade":
         install_dir = os.path.expanduser("~/.wugong")
         script_path = os.path.join(install_dir, "update.sh")
         if os.name == 'nt':

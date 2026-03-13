@@ -6,9 +6,10 @@ import threading
 import webbrowser
 import logging
 import config
+import imaplib
 from flask import Flask, request
 from requests_oauthlib import OAuth2Session
-from crypto_utils import generate_salt, encrypt_data
+from crypto_utils import generate_salt, encrypt_data, decrypt_data
 
 # Disable Flask/Werkzeug default logs to keep terminal clean
 log = logging.getLogger('werkzeug')
@@ -179,6 +180,25 @@ def start_oauth_flow(client_id, client_secret, auth_url, token_url, scopes, redi
     stop_event.wait(timeout=120) # 2 minute timeout
 
     return token_data
+
+def test_imap_connection(imap_server, imap_port, username, password=None, access_token=None):
+    """Tests if we can connect and login to the IMAP server."""
+    try:
+        print(f"Testing connection to {imap_server}:{imap_port}...")
+        mail = imaplib.IMAP4_SSL(imap_server, imap_port)
+        
+        if access_token:
+            # OAuth2 authentication
+            auth_string = f"user={username}\1auth=Bearer {access_token}\1\1"
+            mail.authenticate('XOAUTH2', lambda x: auth_string)
+        else:
+            # Password authentication
+            mail.login(username, password)
+            
+        mail.logout()
+        return True, "Success"
+    except Exception as e:
+        return False, str(e)
 
 def run_wizard():
     try:
@@ -404,7 +424,7 @@ def run_wizard():
                         "access_token": access_token
                     }
 
-            # Create account object
+            # 4. Create account object and test connection
             account = {
                 "friendly_name": friendly_name,
                 "login_method": login_method,
@@ -415,8 +435,43 @@ def run_wizard():
                 "auth": auth_details
             }
             
-            current_config["accounts"].append(account)
-            
+            # Test connection before adding
+            if login_method == "Account/Password":
+                pwd = password
+                success, msg = test_imap_connection(imap_server, imap_port, username, password=pwd)
+            else:
+                # For OAuth2, if we have an access_token, we can test it. 
+                # Otherwise, we might only have a refresh_token, which requires fetching a new access_token.
+                # Since we just got it from start_oauth_flow, we might have it.
+                if access_token:
+                    success, msg = test_imap_connection(imap_server, imap_port, username, access_token=access_token)
+                else:
+                    print("Skipping connection test for manual OAuth2 (no access token provided yet).")
+                    success, msg = True, ""
+
+            if not success:
+                from rich import print as rprint
+                rprint(f"[red]❌ Connection test failed: {msg}[/red]")
+                retry = questionary.confirm("Do you want to re-enter credentials?").ask()
+                if retry is None: raise KeyboardInterrupt
+                if retry:
+                    continue
+                else:
+                    print("Account not added.")
+                    # Don't add to config, but ask if they want to add another
+            else:
+                print("✅ Connection test successful!")
+                current_config["accounts"].append(account)
+                
+                # Ask about full sync
+                sync_now = questionary.confirm("Do you want to sync ALL emails from this account now? (Recommended for first use)").ask()
+                if sync_now is None: raise KeyboardInterrupt
+                if sync_now:
+                    account["sync_all_on_next_run"] = True
+                    print("Marked for full sync on next run.")
+                else:
+                    print("Full sync deferred to later.")
+
             add_another = questionary.confirm("Add another account?").ask()
             if add_another is None: raise KeyboardInterrupt
             if not add_another:

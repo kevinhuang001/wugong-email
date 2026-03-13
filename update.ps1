@@ -95,6 +95,10 @@ if (Test-Path $InstallDir) {
     
     foreach ($Item in $ItemsToSync) {
         $Dest = Join-Path $InstallDir $Item.Name
+        # Ensure overwrite by forcing Copy-Item and removing the destination first if it's a directory
+        if (Test-Path $Dest) {
+            Remove-Item $Dest -Recurse -Force
+        }
         if ($Item.PSIsContainer) {
             Copy-Item -Path $Item.FullName -Destination $Dest -Recurse -Force
         } else {
