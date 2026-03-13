@@ -80,13 +80,21 @@ if ($TempDir) {
 if (Test-Path $InstallDir) {
     Write-Host "📦 Updating files..." -ForegroundColor Blue
     
-    # Custom sync logic: copy ALL files except hidden/venv/pycache and the update script itself
-    $FilesToSync = Get-ChildItem -Path $SourceDir -File | Where-Object { 
+    # Custom sync logic: copy ALL files and directories except hidden/venv/pycache/db and the update script itself
+    $ItemsToSync = Get-ChildItem -Path $SourceDir | Where-Object { 
         $_.Name -ne "update.ps1" -and 
-        $_.FullName -notmatch "\\(\.git|\.venv|__pycache__)\\" 
+        $_.Name -notmatch "^\." -and # No hidden files/dirs
+        $_.Name -ne "venv" -and 
+        $_.Name -ne "__pycache__" -and
+        $_.Extension -ne ".db" # Don't overwrite local cache
     }
-    foreach ($File in $FilesToSync) {
-        Copy-Item -Path $File.FullName -Destination (Join-Path $InstallDir $File.Name) -Force
+    foreach ($Item in $ItemsToSync) {
+        $Dest = Join-Path $InstallDir $Item.Name
+        if ($Item.PSIsContainer) {
+            Copy-Item -Path $Item.FullName -Destination $Dest -Recurse -Force
+        } else {
+            Copy-Item -Path $Item.FullName -Destination $Dest -Force
+        }
     }
 
     # Update dependencies

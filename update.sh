@@ -82,9 +82,22 @@ fi
 if [ -d "$INSTALL_DIR" ]; then
     echo -e "${BLUE}📦 Updating files...${NC}"
     
-    # Custom sync logic: copy ALL files except hidden directories and the update script itself
-    # We use find to get all files in the source directory, excluding .git, .venv, and __pycache__
-    find "$SOURCE_DIR" -maxdepth 1 -not -path '*/.*' -not -path '*/__pycache__*' -not -name "update.sh" -type f -exec cp {} "$INSTALL_DIR/" \;
+    # Custom sync logic: copy ALL files and directories except hidden ones, venv, pycache, and the update script itself
+    # Use rsync if available for cleaner directory syncing, otherwise fallback to cp -R
+    if command -v rsync &> /dev/null; then
+        rsync -av --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='update.sh' --exclude='*.db' "$SOURCE_DIR/" "$INSTALL_DIR/" &>/dev/null
+    else
+        # Fallback to cp -R, but we need to be careful with exclusions
+        # Using a simple loop for top-level items to avoid copying excluded dirs
+        for item in "$SOURCE_DIR"/*; do
+            [ -e "$item" ] || continue
+            name=$(basename "$item")
+            case "$name" in
+                .git|.venv|__pycache__|update.sh|*.db) continue ;;
+            esac
+            cp -R "$item" "$INSTALL_DIR/" &>/dev/null
+        done
+    fi
 
     # Update dependencies
     cd "$INSTALL_DIR" || exit

@@ -216,16 +216,24 @@ def run_wizard():
         # 2. Setup/Verify encryption
         if first_use:
             print("First use detected. Please set up global encryption settings.")
-            encryption_password = questionary.password("Set an encryption password:").ask()
+            
+            # Ask about email encryption first as requested
+            encrypt_emails = questionary.confirm("Encrypt locally stored emails?").ask()
+            if encrypt_emails is None: raise KeyboardInterrupt
+            
+            encryption_password = questionary.password("Set an encryption password for sensitive data (accounts, tokens):").ask()
             if encryption_password is None: raise KeyboardInterrupt
             if not encryption_password:
                 print("Password cannot be empty.")
                 return
-            encrypt_enabled = questionary.confirm("Enable encryption for sensitive data?").ask()
+                
+            encrypt_enabled = questionary.confirm("Enable encryption for account credentials?").ask()
             if encrypt_enabled is None: raise KeyboardInterrupt
-            salt = generate_salt()
+            
+            salt_val = generate_salt()
             config["general"]["encryption_enabled"] = encrypt_enabled
-            config["general"]["salt"] = base64.b64encode(salt).decode() if encrypt_enabled else ""
+            config["general"]["encrypt_emails"] = encrypt_emails
+            config["general"]["salt"] = base64.b64encode(salt_val).decode() if encrypt_enabled else ""
         else:
             encryption_password = questionary.password("Enter your encryption password to proceed:").ask()
             if encryption_password is None: raise KeyboardInterrupt
@@ -252,7 +260,8 @@ def run_wizard():
                         return
             
             encrypt_enabled = config["general"]["encryption_enabled"]
-            salt = base64.b64decode(config["general"]["salt"]) if encrypt_enabled else None
+            encrypt_emails = config["general"].get("encrypt_emails", False)
+            salt_val = base64.b64decode(config["general"]["salt"]) if encrypt_enabled else None
 
         # 3. Add Account(s) Loop
         while True:

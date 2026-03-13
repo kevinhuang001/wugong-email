@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-03-13
+
+### Added
+- **Modular Architecture**: Refactored `MailManager` into specialized modules: `auth`, `storage`, `sender`, and `manager` for better maintainability.
+- **Local Email Cache**: Introduced SQLite-based caching for faster email listing and offline support.
+- **Offline Mode**: View previously synced emails even without an internet connection.
+- **Incremental Sync**: Only fetch new emails from the server using IMAP UIDs, significantly reducing network usage.
+- **Local Fuzzy Search**: Fast, local keyword and sender filtering on cached emails.
+- **Email Encryption Option**: Users can now choose to encrypt locally stored emails for enhanced privacy during the configuration wizard.
+- **Sync Metadata**: The `list` command now displays the "Last Sync" time and online/offline status.
+
+### Fixed
+- Fixed an issue where reading an email could sometimes fail due to incorrect IMAP search/fetch logic (switched to UID-based fetching).
+
 ## [1.0.2] - 2026-03-13
 
 ### Fixed

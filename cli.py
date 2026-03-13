@@ -9,7 +9,7 @@ from email.utils import parsedate_to_datetime
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
-from mail_manager import MailManager
+from mail import MailManager
 from wizard import run_wizard
 
 console = Console()
@@ -116,12 +116,18 @@ def main():
                     "since": args.since,
                     "before": args.before
                 }
-                emails = manager.fetch_emails(account, password, limit=args.limit, search_criteria=search_criteria)
+                emails, metadata = manager.fetch_emails(account, password, limit=args.limit, search_criteria=search_criteria)
                 
                 title = f"Latest {len(emails)} Emails for {args.account}"
                 if any(search_criteria.values()):
                     active_filters = [f"{k}={v}" for k, v in search_criteria.items() if v]
                     title += f" (Filters: {', '.join(active_filters)})"
+
+                # Add sync info to title
+                last_sync = metadata.get("last_sync", "Never")
+                is_offline = metadata.get("is_offline", False)
+                status_str = "[red](OFFLINE)[/red]" if is_offline else "[green](ONLINE)[/green]"
+                title += f"\n[dim]Last Sync: {last_sync} {status_str}[/dim]"
 
                 table = Table(title=title, show_lines=False)
                 table.add_column("", justify="center", width=1) # Status column (no header)
@@ -218,7 +224,7 @@ def main():
 
         with console.status(f"[bold green]Fetching content for email {args.id} via {account_name}...") as status:
             try:
-                content = manager.get_email_content(account, password, args.id)
+                content = manager.read_email(account, password, args.id)
                 if content:
                     if isinstance(content, dict) and content.get("type") == "html_only":
                         html_content = content.get("html", "")
