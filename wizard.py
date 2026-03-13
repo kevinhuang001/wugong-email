@@ -324,17 +324,13 @@ def init_wizard():
         current_config["general"]["sync_interval"] = interval
         
         config.save_config(current_config, config_path)
-        print(f"✅ Configuration initialized and saved to {config_path}")
-        print(f"ℹ️  You can manually change the sync interval in the config file.")
-
-        # 4. First Account
+        
+        # 4. Success Message
+        print(f"\n✅ Configuration initialized and saved to {config_path}")
+        print(f"ℹ️  Sync interval: {interval} minutes (modifiable in config file).")
+        
         if not current_config.get("accounts"):
-            add_first = questionary.confirm("No accounts found. Would you like to add your first account now?", default=True).ask()
-            if add_first:
-                # We need the password we just set for account addition
-                # run_wizard will handle it if we pass it or if it prompts
-                print("\nLaunching Account Configuration Wizard...")
-                return True, encryption_password # Signal that we should run the full wizard next, and pass password
+            print("\n💡 Tip: No accounts found. Use 'wugong account add' to add your first email account.")
         
         return False, encryption_password
     except KeyboardInterrupt:

@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.1] - 2026-03-13
+
+### Changed
+- **Init Wizard**: Simplified `init` command by removing the immediate account addition prompt. It now focuses purely on core configuration and provides a clear tip to use `wugong account add`.
+
 ## [1.9.0] - 2026-03-13
 
 ### Added
