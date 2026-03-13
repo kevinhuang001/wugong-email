@@ -46,8 +46,14 @@ mkdir -p "$CONFIG_DIR"
 
 # 4. Copy Files
 echo -e "${BLUE}📦 Copying files...${NC}"
-# Copy ALL files from source, excluding git and venv directories
-find "$SOURCE_DIR" -maxdepth 1 -not -path '*/.*' -not -path '*/__pycache__*' -type f -exec cp {} "$INSTALL_DIR/" \;
+if command -v rsync &> /dev/null; then
+    rsync -av --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='*.db' "$SOURCE_DIR/" "$INSTALL_DIR/" &>/dev/null
+else
+    # Fallback to cp -R
+    cp -R "$SOURCE_DIR"/. "$INSTALL_DIR/"
+    # Cleanup unwanted bits if we used cp -R
+    rm -rf "$INSTALL_DIR/.git" "$INSTALL_DIR/.venv" "$INSTALL_DIR/__pycache__"
+fi
 
 # 5. Setup Virtual Environment and Install Dependencies
 cd "$INSTALL_DIR" || exit
