@@ -111,13 +111,15 @@ class StorageManager:
 
             # Basic fuzzy search/filtering in memory if search_criteria provided
             if search_criteria:
-                keyword = (search_criteria.get("keyword") or "").lower()
-                from_filter = (search_criteria.get("from") or "").lower()
+                # Use str() to ensure we don't call lower() on None, 
+                # or use (val or "") pattern which is safer.
+                keyword = str(search_criteria.get("keyword") or "").lower()
+                from_filter = str(search_criteria.get("from") or "").lower()
                 
-                subject_lower = (subject or "").lower()
-                sender_lower = (sender or "").lower()
+                subject_lower = str(subject or "").lower()
+                sender_lower = str(sender or "").lower()
                 
-                if keyword and keyword not in subject_lower and keyword not in sender_lower:
+                if keyword and (keyword not in subject_lower and keyword not in sender_lower):
                     continue
                 if from_filter and from_filter not in sender_lower:
                     continue
