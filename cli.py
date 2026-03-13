@@ -238,22 +238,22 @@ def main():
                         html_content = content.get("html", "")
                         status.stop()
                         choice = questionary.select(
-                            "此邮件仅包含 HTML 内容，请选择查看方式：",
+                            "This email only contains HTML content. Please choose how to view it:",
                             choices=[
-                                "提取文本 (可能不完整，句子可能连在一起)",
-                                "查看原始 HTML 代码",
-                                "取消"
+                                "Extract text (may be incomplete, sentences might run together)",
+                                "View raw HTML code",
+                                "Cancel"
                             ]
                         ).ask()
                         
-                        if choice == "提取文本 (可能不完整，句子可能连在一起)":
+                        if choice == "Extract text (may be incomplete, sentences might run together)":
                             import re
                             # Basic HTML stripping
                             text = re.sub(r'<[^<]+?>', '', html_content)
                             # Replace multiple newlines, using raw strings to avoid SyntaxWarning
                             text = re.sub(r'\n\s*\n', '\n\n', text)
-                            content = f"[Note: 此内容是从 HTML 提取的文本]\n\n{text}"
-                        elif choice == "查看原始 HTML 代码":
+                            content = f"[Note: This content is text extracted from HTML]\n\n{text}"
+                        elif choice == "View raw HTML code":
                             content = html_content
                         else:
                             return
