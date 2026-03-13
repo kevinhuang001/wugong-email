@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.9] - 2026-03-13
+
+### Added
+- **`list --local`**: Added support for querying only from the local cache, bypassing IMAP for faster access and offline use.
+- **`sync --limit`**: Users can now specify a limit (e.g., `wugong sync --limit 50`) to synchronize only the most recent emails, overriding the default incremental sync.
+- **`WUGONG_PASSWORD` Environment Variable**: Added support for non-interactive synchronization by reading the master password from an environment variable, perfect for automated scripts and cron jobs.
+
+### Changed
+- **IMAP/Cache Logic Decoupling**: 
+    - `list` command now prioritizes real-time IMAP queries without side effects (no sync state updates).
+    - `read` command now strictly follows "Local First" logic: it opens from cache if available, and only fetches from remote if content is missing.
+- **Enhanced Incremental Sync**: Improved the `SINCE` date calculation for more reliable time-based synchronization.
+- **Code Refactoring**: Cleaned up IMAP connection handling and email parsing into reusable internal methods.
+
+## [1.9.8] - 2026-03-13
+
+### Changed
+- **Sync Behavior**: Sync now automatically downloads ALL new emails since the last sync, ensuring local cache is always up-to-date with full content.
+- **Metadata Management**: Metadata is now strictly stored only for emails that have been fully downloaded, adhering to the "metadata follows content" principle.
+- **Simplified Configuration**: Removed `sync_limit` from the initialization and configuration wizards, as the system now intelligently syncs all new content by default.
+- **CLI Enhancements**: Added `--all` flag to `sync` and `list` commands for complete synchronization and display of all cached emails.
+
 ## [1.9.7] - 2026-03-13
 
 ### Added

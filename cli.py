@@ -56,11 +56,29 @@ def handle_list(args, manager):
     for account in target_accounts:
         account_name = account.get("friendly_name") or "default"
         
-        # 1. Sync first (unless --no-sync is specified)
-        if not args.no_sync:
-            # Hide progress bar if not in a TTY (background sync)
-            is_tty = sys.stdin.isatty()
-            
+        # Determine limits and criteria
+        search_criteria = {
+            "keyword": args.keyword,
+            "from": args.from_user,
+            "since": args.since,
+            "before": args.before
+        }
+        
+        list_limit = 20
+        if args.all:
+            list_limit = -1
+        elif args.limit is not None:
+            list_limit = args.limit
+
+        # 2. Sync and Fetch
+        emails = []
+        metadata = {}
+        
+        # Determine if we should sync based on --no-sync flag
+        should_sync = not args.no_sync
+        
+        if should_sync:
+            # Sync and Fetch
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
@@ -69,84 +87,102 @@ def handle_list(args, manager):
                 TimeRemainingColumn(),
                 console=console,
                 transient=True,
-                disable=not is_tty
+                disable=not sys.stdin.isatty()
             ) as progress:
-                task = progress.add_task(f"[green]Syncing {account_name}...", total=None)
+                sync_task = progress.add_task(f"[green]Syncing {account_name}...", total=None)
                 
                 def update_progress(current, total, description=None):
                     if total:
-                        progress.update(task, total=total, completed=current, description=f"[green]Syncing {account_name}: {description or ''}")
+                        progress.update(sync_task, total=total, completed=current, description=f"[green]Syncing {account_name}: {description or ''}")
                     else:
-                        progress.update(task, description=f"[green]Syncing {account_name}: {description or ''}")
+                        progress.update(sync_task, description=f"[green]Syncing {account_name}: {description or ''}")
 
                 try:
-                    # Sync up to 20 emails even if we only display 10
-                    sync_limit = max(20, args.limit)
-                    manager.reader.fetch_emails(account, password, limit=sync_limit, progress_callback=update_progress)
+                    # Use query_emails for listing (IMAP search first, no sync side effects)
+        emails, metadata = manager.reader.query_emails(
+            account, password, 
+            limit=list_limit, 
+            search_criteria=search_criteria, 
+            progress_callback=update_progress,
+            local_only=getattr(args, "local", False)
+        )
                 except Exception as e:
-                    console.print(f"[red]❌ Error syncing {account_name}: {e}[/red]")
-
-        # 2. List from cache
-        with console.status(f"[bold green]Fetching emails for {account_name}...") as status:
-            try:
-                search_criteria = {
-                    "keyword": args.keyword,
-                    "from": args.from_user,
-                    "since": args.since,
-                    "before": args.before
-                }
-                # fetch_emails with search_criteria will automatically use cache if offline or limit reached
-                emails, metadata = manager.reader.fetch_emails(account, password, limit=args.limit, search_criteria=search_criteria)
-                
-                title = f"Latest {len(emails)} Emails for {account_name}"
-                if any(search_criteria.values()):
-                    active_filters = [f"{k}={v}" for k, v in search_criteria.items() if v]
-                    title += f" (Filters: {', '.join(active_filters)})"
-
-                # Add sync info to title
-                last_sync = metadata.get("last_sync", "Never")
-                is_offline = metadata.get("is_offline", False)
-                sync_error = metadata.get("error")
-                status_str = f"[red](OFFLINE: {sync_error})[/red]" if is_offline and sync_error else ("[red](OFFLINE)[/red]" if is_offline else "[green](ONLINE)[/green]")
-                title += f"\n[dim]Last Sync: {last_sync} {status_str}[/dim]"
-
-                table = Table(title=title, show_lines=False, box=None)
-                table.add_column("", justify="center", width=1) # Status column
-                table.add_column("ID", style="cyan", justify="right", width=6)
-                table.add_column("From", style="magenta", width=20)
-                table.add_column("Email", style="blue", width=25)
-                table.add_column("Subject", style="white", ratio=1) # Use ratio to fill space
-                table.add_column("Time", style="green", width=19)
-
-                for em in emails:
-                    # Mark unread with *
-                    status_mark = "" if em.get("seen") else "*"
-                    
-                    # Clean subject and from for single-line display
-                    subject = (em.get("subject") or "").replace("\n", " ").replace("\r", "")
-                    from_user = (em.get("from") or "").replace("\n", " ").replace("\r", "")
-                    from_email = (em.get("from_email") or "").replace("\n", " ").replace("\r", "")
-                    
-                    # Format time: YYYY-MM-DD HH:MM:SS
-                    display_time = em["date"]
-                    try:
-                        dt = parsedate_to_datetime(em["date"])
-                        display_time = dt.strftime("%Y-%m-%d %H:%M:%S")
-                    except:
-                        pass
-                    
-                    table.add_row(
-                        status_mark,
-                        em["id"],
-                        from_user,
-                        from_email,
-                        subject,
-                        display_time
+                    console.print(f"[red]❌ Query failed for {account_name}: {e}. Showing cached emails.[/red]")
+                    # Fallback to cache (query_emails already handles this, but let's be explicit if needed)
+                    emails, metadata = manager.reader.query_emails(
+                        account, password, 
+                        limit=list_limit, 
+                        search_criteria=search_criteria
                     )
-                console.print(table)
-                console.print("-" * console.width) # Separator between accounts
-            except Exception as e:
-                console.print(f"[red]Error listing {account_name}: {e}[/red]")
+        else:
+            # List from cache only
+            with console.status(f"[bold green]Fetching cached emails for {account_name}...") as status:
+                emails, metadata = manager.reader.query_emails(
+                    account, password, 
+                    limit=list_limit, 
+                    search_criteria=search_criteria
+                )
+
+        # 3. Display Results
+        try:
+            if emails is None: emails = []
+            
+            title = f"Latest {len(emails)} Emails for {account_name}"
+            if any(search_criteria.values()):
+                active_filters = [f"{k}={v}" for k, v in search_criteria.items() if v]
+                title += f" (Filters: {', '.join(active_filters)})"
+
+            # Add sync info to title
+            last_sync = metadata.get("last_sync", "Never")
+            is_offline = metadata.get("is_offline", False)
+            sync_error = metadata.get("error")
+            
+            if is_offline:
+                status_str = f"[red](OFFLINE: {sync_error or 'Connection failed'})[/red]"
+            elif not should_sync:
+                status_str = "[yellow](CACHED)[/yellow]"
+            else:
+                status_str = "[green](ONLINE)[/green]"
+            
+            title += f"\n[dim]Last Sync: {last_sync} {status_str}[/dim]"
+
+            table = Table(title=title, show_lines=False, box=None)
+            table.add_column("", justify="center", width=1) # Status column
+            table.add_column("ID", style="cyan", justify="right", width=6)
+            table.add_column("From", style="magenta", width=20)
+            table.add_column("Email", style="blue", width=25)
+            table.add_column("Subject", style="white", ratio=1) # Use ratio to fill space
+            table.add_column("Time", style="green", width=19)
+
+            for em in emails:
+                # Mark unread with *
+                status_mark = "" if em.get("seen") else "*"
+                
+                # Clean subject and from for single-line display
+                subject = (em.get("subject") or "").replace("\n", " ").replace("\r", "")
+                from_user = (em.get("from") or "").replace("\n", " ").replace("\r", "")
+                from_email = (em.get("from_email") or "").replace("\n", " ").replace("\r", "")
+                
+                # Format time: YYYY-MM-DD HH:MM:SS
+                display_time = em["date"]
+                try:
+                    dt = parsedate_to_datetime(em["date"])
+                    display_time = dt.strftime("%Y-%m-%d %H:%M:%S")
+                except:
+                    pass
+                
+                table.add_row(
+                    status_mark,
+                    em["id"],
+                    from_user,
+                    from_email,
+                    subject,
+                    display_time
+                )
+            console.print(table)
+            console.print("-" * console.width) # Separator between accounts
+        except Exception as e:
+            console.print(f"[red]Error listing {account_name}: {e}[/red]")
 
 def handle_read(args, manager):
     account = manager.get_account_by_name(args.account) if args.account else manager.get_account_by_name("default")
@@ -155,9 +191,9 @@ def handle_read(args, manager):
         return
 
     account_name = account.get("friendly_name") or "default"
-    password = ""
+    password = os.environ.get("WUGONG_PASSWORD", "")
     # We need a password if either credentials or emails are encrypted
-    if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):
+    if not password and (manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False)):
         password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
         if not password:
             return
@@ -211,9 +247,9 @@ def handle_delete(args, manager):
         return
 
     account_name = account.get("friendly_name") or "default"
-    password = ""
+    password = os.environ.get("WUGONG_PASSWORD", "")
     # We need a password if either credentials or emails are encrypted
-    if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):
+    if not password and (manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False)):
         password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
         if not password:
             return
@@ -239,9 +275,9 @@ def handle_send(args, manager):
         return
 
     account_name = account.get("friendly_name") or "default"
-    password = ""
+    password = os.environ.get("WUGONG_PASSWORD", "")
     # We need a password if either credentials or emails are encrypted
-    if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):
+    if not password and (manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False)):
         password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
         if not password:
             return
@@ -314,11 +350,20 @@ def handle_account(args, manager, account_parser):
             if manager.accounts:
                 sync_now = questionary.confirm("Do you want to sync your emails now?").ask()
                 if sync_now:
-                    # Reuse handle_sync logic for all accounts
-                    class Args:
-                        account = "all"
-                        limit = 0 # Full metadata sync
-                    handle_sync(Args(), manager)
+                    # Sync all accounts with is_initial_sync=True
+                    password = ""
+                    if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):
+                        password = questionary.password("Enter encryption password to sync:").ask()
+                        if not password: return
+
+                    for acc in manager.accounts:
+                        account_name = acc.get("friendly_name")
+                        with console.status(f"[bold green]Initial sync for {account_name}...") as status:
+                            try:
+                                manager.reader.fetch_emails(acc, password, is_initial_sync=True)
+                                console.print(f"[green]✅ {account_name}: Initial sync complete.[/green]")
+                            except Exception as e:
+                                console.print(f"[red]❌ Error syncing {account_name}: {e}[/red]")
             
         case "delete":
             account_name = args.name
@@ -357,9 +402,9 @@ def handle_sync(args, manager):
             return
         target_accounts = [acc]
 
-    password = ""
+    password = os.environ.get("WUGONG_PASSWORD", "")
     # We need a password if either credentials or emails are encrypted
-    if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):
+    if not password and (manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False)):
         if args.account == "all":
             prompt_text = "Enter encryption password for all accounts:"
         else:
@@ -393,7 +438,14 @@ def handle_sync(args, manager):
                     progress.update(task, description=f"[green]Syncing {account_name}: {description or ''}")
 
             try:
-                _, metadata = manager.reader.fetch_emails(account, password, limit=args.limit, progress_callback=update_progress)
+                # For sync command, limit only affects flag sync
+                sync_limit = 100
+                if args.all:
+                    sync_limit = -1
+                elif args.limit is not None:
+                    sync_limit = args.limit
+                
+                _, metadata = manager.reader.fetch_emails(account, password, limit=sync_limit, progress_callback=update_progress)
                 new_emails = metadata.get("new_emails", [])
                 if new_emails:
                     console.print(f"[green]✅ {account_name}: {len(new_emails)} new emails[/green]")
@@ -511,12 +563,14 @@ def main():
     # List command
     list_parser = subparsers.add_parser("list", help="List accounts or emails")
     list_parser.add_argument("account", nargs="?", help="Friendly name of the account to list emails from (use 'all' for all accounts)")
-    list_parser.add_argument("--limit", "-l", type=int, default=10, help="Number of emails to list per account")
+    list_parser.add_argument("--limit", "-l", type=int, help="Number of emails to list per account (default from config)")
+    list_parser.add_argument("--all", action="store_true", help="List all available emails")
     list_parser.add_argument("--keyword", "-k", help="Search by keyword in subject or body")
     list_parser.add_argument("--from-user", "-f", help="Search by sender's email or name")
     list_parser.add_argument("--since", help="Search emails since date (e.g., 01-Jan-2024)")
     list_parser.add_argument("--before", help="Search emails before date (e.g., 31-Dec-2024)")
     list_parser.add_argument("--no-sync", action="store_true", help="Do not sync with server before listing")
+    list_parser.add_argument("--local", action="store_true", help="Only query from local cache, do not use IMAP")
 
     # Read command
     read_parser = subparsers.add_parser("read", help="Read a specific email")
@@ -553,7 +607,8 @@ def main():
     # Email Sync command
     sync_parser = subparsers.add_parser("sync", help="Sync latest emails from server")
     sync_parser.add_argument("account", nargs="?", help="Friendly name of the account to sync (use 'all' for all accounts)")
-    sync_parser.add_argument("--limit", "-l", type=int, default=20, help="Number of emails to sync per account (0 for unlimited)")
+    sync_parser.add_argument("--limit", "-l", type=int, help="Number of emails to sync per account (default from config)")
+    sync_parser.add_argument("--all", action="store_true", help="Sync all emails from server")
 
     # Upgrade command (code update)
     subparsers.add_parser("upgrade", help="Update Wugong Email code to the latest version")

@@ -241,7 +241,7 @@ def setup_scheduling(interval_minutes):
             # Windows redirection uses >> and 2>&1
             # Note: Task Scheduler /tr command has some limitations with redirections directly.
             # Usually, it's better to wrap it in a cmd /c
-            task_command = f'cmd /c "{wugong_bat} sync all --limit 20 >> \\"{log_file}\\" 2>&1"'
+            task_command = f'cmd /c "{wugong_bat} sync all >> \\"{log_file}\\" 2>&1"'
             
             cmd = [
                 "schtasks", "/create", "/sc", "minute", "/mo", str(interval_minutes),
@@ -259,11 +259,15 @@ def setup_scheduling(interval_minutes):
                 current_cron = ""
             
             # Remove old Wugong sync jobs
+            lines = [line for line in current_cron.splitlines() if "wugong sync all" in line]
+            
+            # Remove existing lines to replace with new ones
             lines = [line for line in current_cron.splitlines() if "wugong sync all" not in line]
             
             if interval_minutes > 0:
                 # Add new job with log redirection
-                cron_job = f"*/{interval_minutes} * * * * {wugong_exe} sync all --limit 20 >> {log_file} 2>&1"
+                # Periodic sync will use the default limit in config
+                cron_job = f"*/{interval_minutes} * * * * {wugong_exe} sync all >> {log_file} 2>&1"
                 lines.append(cron_job)
                 print(f"✅ Scheduled sync every {interval_minutes} minutes via Crontab.")
                 print(f"ℹ️  Logs will be saved to: {log_file}")
@@ -313,14 +317,38 @@ def configure_wizard():
         except ValueError:
             print("Invalid interval. Keeping current setting.")
             interval = current_interval
-            
+
         if interval != current_interval:
             setup_scheduling(interval)
             current_config["general"]["sync_interval"] = interval
             config.save_config(current_config, config_path)
-            print(f"\n✅ Sync interval updated to {interval} minutes.")
+            print(f"\n✅ Configuration updated: interval={interval}m.")
+        
+        # Default Initial Sync Limit (Global)
+        current_sync_limit = current_config.get("general", {}).get("initial_sync_limit", 20)
+        sync_limit_input = questionary.text(
+            f"Global default initial sync limit (current: {current_sync_limit}. Enter 'all' for everything):", 
+            default=str(current_sync_limit) if current_sync_limit != -1 else "all"
+        ).ask()
+        
+        if sync_limit_input is None: raise KeyboardInterrupt
+        
+        if sync_limit_input.lower() == "all":
+            limit = -1
         else:
-            print("\nNo changes made to sync interval.")
+            try:
+                limit = int(sync_limit_input)
+            except ValueError:
+                print("Invalid limit. Keeping current setting.")
+                limit = current_sync_limit
+        
+        if limit != current_sync_limit:
+            current_config["general"]["initial_sync_limit"] = limit
+            config.save_config(current_config, config_path)
+            print(f"✅ Configuration updated: initial_sync_limit={sync_limit_input}.")
+        else:
+            if interval == current_interval:
+                print("\nNo changes made to configuration.")
             
         return True
     except KeyboardInterrupt:
@@ -379,7 +407,7 @@ def init_wizard():
             
         if interval > 0:
             setup_scheduling(interval)
-        
+
         # 3. Save initial config
         if "general" not in current_config:
             current_config["general"] = {}
@@ -388,12 +416,14 @@ def init_wizard():
         current_config["general"]["encrypt_emails"] = encrypt_emails
         current_config["general"]["salt"] = salt_val
         current_config["general"]["sync_interval"] = interval
+        current_config["general"]["initial_sync_limit"] = 20
         
         config.save_config(current_config, config_path)
         
         # 4. Success Message
         print(f"\n✅ Configuration initialized and saved to {config_path}")
-        print(f"ℹ️  Sync interval: {interval} minutes (modifiable in config file).")
+        print(f"ℹ️  Sync interval: {interval} minutes.")
+        print("ℹ️  Initial sync limit: 20 (can be modified in 'wugong configure' or when adding accounts).")
         
         if not current_config.get("accounts"):
             print("\n💡 Tip: No accounts found. Use 'wugong account add' to add your first email account.")
@@ -659,6 +689,25 @@ def account_add_wizard():
                     # Don't add to config, but ask if they want to add another
             else:
                 print("✅ Connection test successful!")
+                
+                # Ask for Initial Sync Limit for this account
+                sync_limit_input = questionary.text(
+                    f"Number of latest emails to download during initial sync for '{friendly_name}' (e.g., 20, 50. Enter 'all' for everything):", 
+                    default="20"
+                ).ask()
+                if sync_limit_input is None: raise KeyboardInterrupt
+                
+                if sync_limit_input.lower() == "all":
+                    limit = -1
+                else:
+                    try:
+                        limit = int(sync_limit_input)
+                    except ValueError:
+                        print("Invalid limit. Defaulting to 20.")
+                        limit = 20
+                
+                # Save the initial sync limit in the account object
+                account["initial_sync_limit"] = limit
                 current_config["accounts"].append(account)
                 
             add_another = questionary.confirm("Add another account?").ask()

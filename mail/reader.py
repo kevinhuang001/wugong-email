@@ -12,20 +12,151 @@ class MailReader:
         self.config = config
         self.save_config_callback = save_config_callback
 
-    def fetch_emails(self, account, auth_password, limit=10, search_criteria=None, progress_callback=None):
+    def fetch_emails(self, account, auth_password, limit=20, search_criteria=None, progress_callback=None, is_initial_sync=False, sync=True):
+        """
+        Original fetch_emails, now used primarily for 'sync' command.
+        It processes pending actions, syncs deletions, fetches NEW emails, and updates sync time.
+        """
         account_name = account.get("friendly_name")
         sync_info = self.storage_manager.get_last_sync_info(account_name)
         is_offline = False
         newly_fetched_emails = []
         
-        try:
-            # Before fetching new emails, process any pending actions (like deletions)
-            self.sync_pending_actions(account, auth_password)
-            
+        if sync:
+            try:
+                # 1. Process pending actions (like deletions)
+                self.sync_pending_actions(account, auth_password)
+                
+                auth = self.auth_manager.decrypt_account_auth(account, auth_password)
+                mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
+                
+                # Authentication logic
+                if account['login_method'] == "Account/Password":
+                    mail.login(auth['username'], auth['password'])
+                else:
+                    user = auth.get("username")
+                    token = auth.get("access_token")
+                    try:
+                        auth_string = f"user={user}\x01auth=Bearer {token}\x01\x01"
+                        mail.authenticate('XOAUTH2', lambda x: auth_string)
+                    except imaplib.IMAP4.error:
+                        new_token = self.auth_manager.refresh_oauth2_token(account, auth, auth_password, self.config)
+                        if new_token:
+                            self.save_config_callback()
+                            mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
+                            auth_string = f"user={user}\x01auth=Bearer {new_token}\x01\x01"
+                            mail.authenticate('XOAUTH2', lambda x: auth_string)
+                        else:
+                            raise Exception("Authentication failed.")
+
+                mail.select("INBOX")
+                
+                # 2. Sync Logic (Incremental, Full, or Recent Limit)
+                search_query_parts = []
+                
+                # Logic for search query
+                if is_initial_sync or limit == -1 or (limit > 0 and not search_criteria):
+                    # If it's a forced limit of recent emails, or full sync, or initial sync
+                    # we need ALL UIDs to pick the recent ones
+                    search_query_parts.append("ALL")
+                else:
+                    last_sync_time = sync_info.get("time")
+                    if last_sync_time and last_sync_time != "Never":
+                        try:
+                            # IMAP SINCE is inclusive, fetch from last sync date
+                            last_date = datetime.strptime(last_sync_time, "%Y-%m-%d %H:%M:%S").strftime("%d-%b-%Y")
+                            search_query_parts.append(f'SINCE "{last_date}"')
+                        except:
+                            search_query_parts.append("ALL")
+                    else:
+                        search_query_parts.append("ALL")
+
+                search_query = " ".join(search_query_parts) if search_query_parts else "ALL"
+                res, data = mail.uid('search', None, search_query)
+                
+                if res == "OK":
+                    uids_raw = data[0].split()
+                    server_uids = {uid.decode() for uid in uids_raw}
+                    
+                    # 3. Sync deletions (Remote -> Local) - only if we have full view (search ALL)
+                    if search_query == "ALL":
+                        cached_uids = self.storage_manager.get_all_cached_uids(account_name)
+                        for cached_uid in cached_uids:
+                            if cached_uid not in server_uids:
+                                self.storage_manager.delete_email_from_cache(account_name, cached_uid)
+                    
+                    # 4. Identify truly NEW emails that are not in cache
+                    cached_uids_set = set(self.storage_manager.get_all_cached_uids(account_name))
+                    
+                    if is_initial_sync:
+                        init_limit = account.get("initial_sync_limit")
+                        if init_limit is None:
+                            init_limit = self.config.get("general", {}).get("initial_sync_limit", 20)
+                        
+                        if init_limit == -1:
+                            new_uids_to_fetch = [uid for uid in uids_raw if uid.decode() not in cached_uids_set]
+                        else:
+                            potential_uids = uids_raw[-init_limit:] if len(uids_raw) > init_limit else uids_raw
+                            new_uids_to_fetch = [uid for uid in potential_uids if uid.decode() not in cached_uids_set]
+                    elif limit > 0 and not search_criteria:
+                        # User specified a specific limit of recent emails for sync
+                        potential_uids = uids_raw[-limit:] if len(uids_raw) > limit else uids_raw
+                        new_uids_to_fetch = [uid for uid in potential_uids if uid.decode() not in cached_uids_set]
+                    else:
+                        new_uids_to_fetch = [uid for uid in uids_raw if uid.decode() not in cached_uids_set]
+                    
+                    # 5. Fetch Full Emails for NEW emails
+                    if new_uids_to_fetch:
+                        total_to_fetch = len(new_uids_to_fetch)
+                        for i, uid in enumerate(reversed(new_uids_to_fetch)):
+                            if progress_callback:
+                                progress_callback(i + 1, total_to_fetch, f"Fetching {i+1}/{total_to_fetch}...")
+                            
+                            uid_str = uid.decode()
+                            res, msg_data = mail.uid('fetch', uid, '(RFC822)')
+                            if res == "OK":
+                                raw_msg = msg_data[0][1]
+                                msg = email.message_from_bytes(raw_msg)
+                                parsed = self._parse_email(uid_str, msg, msg_data[0][0])
+                                newly_fetched_emails.append(parsed)
+                    
+                    if newly_fetched_emails:
+                        self.storage_manager.save_emails_to_cache(account_name, newly_fetched_emails, auth_password)
+                    
+                    # 6. Update sync status
+                    new_last_uid = uids_raw[-1].decode() if uids_raw else sync_info.get("uid", "0")
+                    self.storage_manager.update_sync_info(account_name, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), new_last_uid)
+                    sync_info = self.storage_manager.get_last_sync_info(account_name)
+
+                mail.close()
+                mail.logout()
+                
+            except Exception as e:
+                is_offline = True
+                sync_error = str(e)
+                cached_emails = self.storage_manager.get_emails_from_cache(account_name, limit, search_criteria, auth_password)
+                return cached_emails, {"last_sync": sync_info.get("time"), "is_offline": is_offline, "error": sync_error, "new_emails": []}
+
+        # Final return from cache
+        email_list = self.storage_manager.get_emails_from_cache(account_name, limit, search_criteria, auth_password)
+        return email_list, {"last_sync": sync_info.get("time"), "is_offline": is_offline, "new_emails": newly_fetched_emails}
+
+    def query_emails(self, account, auth_password, limit=20, search_criteria=None, progress_callback=None, local_only=False):
+        """
+        Pure query method for 'list' command.
+        Prefers IMAP search, but doesn't do 'sync' (pending actions, deletion sync, last sync time update).
+        """
+        account_name = account.get("friendly_name")
+        sync_info = self.storage_manager.get_last_sync_info(account_name)
+        is_offline = local_only
+        sync_error = None
+        
+        if not local_only:
+            try:
             auth = self.auth_manager.decrypt_account_auth(account, auth_password)
             mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
             
-            # ... (authentication logic) ...
+            # Authentication
             if account['login_method'] == "Account/Password":
                 mail.login(auth['username'], auth['password'])
             else:
@@ -44,176 +175,181 @@ class MailReader:
                     else:
                         raise Exception("Authentication failed.")
 
-            mail.select("INBOX")
+            mail.select("INBOX", readonly=True)
             
-            # 1. Fetch ALL UIDs from server to detect deletions and find new ones
-            res, data = mail.uid('search', None, "ALL")
+            # 1. Construct Search Query
+            search_query_parts = []
+            if search_criteria:
+                if search_criteria.get("keyword"):
+                    search_query_parts.append(f'TEXT "{search_criteria["keyword"]}"')
+                if search_criteria.get("from"):
+                    search_query_parts.append(f'FROM "{search_criteria["from"]}"')
+                if search_criteria.get("since"):
+                    try:
+                        since_date = datetime.strptime(search_criteria["since"], "%Y-%m-%d").strftime("%d-%b-%Y")
+                        search_query_parts.append(f'SINCE "{since_date}"')
+                    except: pass
+                if search_criteria.get("before"):
+                    try:
+                        before_date = datetime.strptime(search_criteria["before"], "%Y-%m-%d").strftime("%d-%b-%Y")
+                        search_query_parts.append(f'BEFORE "{before_date}"')
+                    except: pass
+            
+            search_query = " ".join(search_query_parts) if search_query_parts else "ALL"
+            res, data = mail.uid('search', None, search_query)
+            
             if res == "OK":
                 uids_raw = data[0].split()
-                server_uids = {uid.decode() for uid in uids_raw}
-                
-                # 2. Sync deletions (Remote -> Local)
-                cached_uids = self.storage_manager.get_all_cached_uids(account_name)
-                cached_uids_set = set(cached_uids)
-                for cached_uid in cached_uids:
-                    if cached_uid not in server_uids:
-                        self.storage_manager.delete_email_from_cache(account_name, cached_uid)
-                
-                # 3. Identify truly NEW emails that are not in cache
-                new_uids_to_fetch = [uid for uid in uids_raw if uid.decode() not in cached_uids_set]
-                
-                if len(new_uids_to_fetch) > 10000:
-                    new_uids_to_fetch = new_uids_to_fetch[-10000:]
-                
-                total_to_fetch = len(new_uids_to_fetch)
-                if progress_callback:
-                    progress_callback(0, total_to_fetch, "Checking flags...")
-
-                # 4. Sync Flags (Seen/Unseen) for emails in the current view
+                # We only need the top 'limit' results (newest first)
                 view_uids = uids_raw[-limit:] if limit > 0 and len(uids_raw) > limit else uids_raw
-                view_uids_str = b",".join(view_uids)
-                if view_uids_str:
-                    res, flag_data = mail.uid('fetch', view_uids_str.decode(), '(FLAGS)')
-                    if res == "OK" and flag_data:
-                        for item in flag_data:
-                            if isinstance(item, tuple):
-                                content = item[0].decode()
-                                uid_match = re.search(r'UID (\d+)', content)
-                                if uid_match:
-                                    f_uid = uid_match.group(1)
-                                    is_seen = '\\Seen' in content
-                                    self.storage_manager.update_email_seen_status(account_name, f_uid, is_seen)
-
-                # 5. Fetch Metadata for ALL NEW emails
-                fetched_emails = []
-                if new_uids_to_fetch:
-                    # Fetch in reversed order (newest first)
-                    for i, uid in enumerate(reversed(new_uids_to_fetch)):
-                        if progress_callback:
-                            progress_callback(i + 1, total_to_fetch, f"Fetching {i+1}/{total_to_fetch}...")
+                view_uids = list(reversed(view_uids)) # Newest first
+                
+                results = []
+                for i, uid in enumerate(view_uids):
+                    uid_str = uid.decode()
+                    if progress_callback:
+                        progress_callback(i + 1, len(view_uids), f"Fetching metadata {i+1}/{len(view_uids)}...")
+                    
+                    # Fetch metadata from server ONLY, no cache check here
+                    res_m, msg_data = mail.uid('fetch', uid, '(RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)])')
+                    if res_m == "OK":
+                        header_data = msg_data[0][1]
+                        msg = email.message_from_bytes(header_data)
                         
-                        uid_str = uid.decode()
-                        res, msg_data = mail.uid('fetch', uid, '(RFC822.SIZE BODY[HEADER.FIELDS (SUBJECT FROM DATE)])')
-                        if res == "OK":
-                            raw_msg = msg_data[0][1]
-                            msg = email.message_from_bytes(raw_msg)
-                            
-                            try:
-                                subject_header = msg.get("Subject")
-                                subject = str(make_header(decode_header(subject_header))) if subject_header else "No Subject"
-                            except Exception:
-                                subject = msg.get("Subject", "No Subject")
-                            
-                            try:
-                                from_header_raw = msg.get("From", "Unknown")
-                                from_header = str(make_header(decode_header(from_header_raw)))
-                            except Exception:
-                                from_header = msg.get("From", "Unknown")
-                            
-                            name, email_addr = parseaddr(from_header)
-                            sender_name = name or (from_header.split("<")[0].strip() if "<" in from_header else from_header)
-                            sender_name = sender_name.replace('"', '').replace("'", "").strip()
-                            if not sender_name or sender_name == email_addr:
-                                sender_name = email_addr or from_header
-                            
-                            fetched_emails.append({
-                                "id": uid_str,
-                                "from": sender_name,
-                                "from_email": email_addr,
-                                "subject": subject,
-                                "date": msg.get("Date"),
-                                "seen": '\\Seen' in str(msg_data[0][0])
-                            })
+                        # Parse basic metadata
+                        try:
+                            subject_header = msg.get("Subject")
+                            subject = str(make_header(decode_header(subject_header))) if subject_header else "No Subject"
+                        except: subject = "No Subject"
+                        
+                        try:
+                            from_header = str(make_header(decode_header(msg.get("From", "Unknown"))))
+                        except: from_header = "Unknown"
+                        
+                        name, email_addr = parseaddr(from_header)
+                        sender_name = name or (from_header.split("<")[0].strip() if "<" in from_header else from_header)
+                        
+                        results.append({
+                            "id": uid_str,
+                            "from": sender_name,
+                            "from_email": email_addr,
+                            "subject": subject,
+                            "date": msg.get("Date"),
+                            "seen": '\\Seen' in str(msg_data[0][0])
+                        })
                 
-                if fetched_emails:
-                    newly_added_uids = self.storage_manager.save_emails_to_cache(account_name, fetched_emails, auth_password)
-                    newly_fetched_emails = [e for e in fetched_emails if e["id"] in newly_added_uids]
+                mail.close()
+                mail.logout()
+                return results, {"last_sync": sync_info.get("time"), "is_offline": False}
                 
-                # Update sync status
-                new_last_uid = uids_raw[-1].decode() if uids_raw else sync_info.get("uid", "0")
-                self.storage_manager.update_sync_info(account_name, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), new_last_uid)
-                sync_info = self.storage_manager.get_last_sync_info(account_name)
-
-            mail.close()
-            mail.logout()
+            except Exception as e:
+                is_offline = True
+                sync_error = str(e)
             
-        except Exception as e:
-            is_offline = True
-            sync_error = str(e)
-            return self.storage_manager.get_emails_from_cache(account_name, limit, search_criteria, auth_password), {"last_sync": sync_info.get("time"), "is_offline": is_offline, "error": sync_error, "new_emails": []}
+        # Offline, error, or local_only: return from cache
+        cached_emails = self.storage_manager.get_emails_from_cache(account_name, limit, search_criteria, auth_password)
+        return cached_emails, {"last_sync": sync_info.get("time"), "is_offline": is_offline, "error": sync_error if is_offline else None}
 
-        email_list = self.storage_manager.get_emails_from_cache(account_name, limit, search_criteria, auth_password)
-        return email_list, {"last_sync": sync_info.get("time"), "is_offline": is_offline, "new_emails": newly_fetched_emails}
+    def _parse_email(self, uid_str, msg, status_data):
+        """Helper to parse email message object into dict."""
+        try:
+            subject_header = msg.get("Subject")
+            subject = str(make_header(decode_header(subject_header))) if subject_header else "No Subject"
+        except: subject = "No Subject"
+        
+        try:
+            from_header = str(make_header(decode_header(msg.get("From", "Unknown"))))
+        except: from_header = "Unknown"
+        
+        name, email_addr = parseaddr(from_header)
+        sender_name = name or (from_header.split("<")[0].strip() if "<" in from_header else from_header)
+        sender_name = sender_name.replace('"', '').replace("'", "").strip()
+        if not sender_name or sender_name == email_addr:
+            sender_name = email_addr or from_header
+
+        content = ""
+        html_content = ""
+        if msg.is_multipart():
+            for part in msg.walk():
+                c_type = part.get_content_type()
+                if c_type == "text/plain":
+                    charset = part.get_content_charset() or "utf-8"
+                    try: content = part.get_payload(decode=True).decode(charset, errors="replace")
+                    except: content = part.get_payload(decode=True).decode("utf-8", errors="replace")
+                elif c_type == "text/html":
+                    charset = part.get_content_charset() or "utf-8"
+                    try: html_content = part.get_payload(decode=True).decode(charset, errors="replace")
+                    except: html_content = part.get_payload(decode=True).decode("utf-8", errors="replace")
+        else:
+            c_type = msg.get_content_type()
+            charset = msg.get_content_charset() or "utf-8"
+            if c_type == "text/plain":
+                try: content = msg.get_payload(decode=True).decode(charset, errors="replace")
+                except: content = msg.get_payload(decode=True).decode("utf-8", errors="replace")
+            elif c_type == "text/html":
+                try: html_content = msg.get_payload(decode=True).decode(charset, errors="replace")
+                except: html_content = msg.get_payload(decode=True).decode("utf-8", errors="replace")
+        
+        return {
+            "id": uid_str,
+            "from": sender_name,
+            "from_email": email_addr,
+            "subject": subject,
+            "date": msg.get("Date"),
+            "seen": '\\Seen' in str(status_data),
+            "content": content or html_content,
+            "content_type": "text/plain" if content else "html_only"
+        }
 
     def read_email(self, account, auth_password, email_id):
+        """
+        Read email content. Priority: Local Cache > Remote Server.
+        """
         account_name = account.get("friendly_name")
         
-        # 1. Check cache first
+        # 1. Priority: Local Cache
         content_type, content = self.storage_manager.get_email_content(account_name, email_id, auth_password)
         if content:
+            # Mark as seen locally
+            self.storage_manager.update_email_seen_status(account_name, email_id, True)
+            
+            # Optional: Try to mark as seen on server (best effort, don't block/fail if offline)
+            try:
+                mail = self._connect_imap(account, auth_password)
+                mail.select("INBOX")
+                mail.uid('store', email_id, '+FLAGS', '\\Seen')
+                mail.logout()
+            except:
+                # If offline, we could record a pending 'mark as seen' action here if we had one
+                pass
+                
             if content_type == "html_only":
                 return {"type": "html_only", "html": content}
             return content
 
-        # 2. If not in cache, fetch from server
+        # 2. Fallback: Remote Server
         try:
-            auth = self.auth_manager.decrypt_account_auth(account, auth_password)
-            mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
-            
-            if account['login_method'] == "Account/Password":
-                mail.login(auth['username'], auth['password'])
-            else:
-                user = auth.get("username")
-                token = auth.get("access_token")
-                try:
-                    auth_string = f"user={user}\x01auth=Bearer {token}\x01\x01"
-                    mail.authenticate('XOAUTH2', lambda x: auth_string)
-                except imaplib.IMAP4.error:
-                    new_token = self.auth_manager.refresh_oauth2_token(account, auth, auth_password, self.config)
-                    if new_token:
-                        self.save_config_callback()
-                        mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
-                        auth_string = f"user={user}\x01auth=Bearer {new_token}\x01\x01"
-                        mail.authenticate('XOAUTH2', lambda x: auth_string)
-                    else:
-                        raise Exception("Authentication failed.")
-
+            mail = self._connect_imap(account, auth_password)
             mail.select("INBOX")
             # Mark as seen on server
             mail.uid('store', email_id, '+FLAGS', '\\Seen')
             # Fetch content
             res, msg_data = mail.uid('fetch', email_id, "(RFC822)")
             
-            content = ""
-            html_content = ""
+            final_content = ""
+            final_type = "text/plain"
             if res == "OK":
                 for part in msg_data:
                     if isinstance(part, tuple):
                         msg = email.message_from_bytes(part[1])
-                        if msg.is_multipart():
-                            for subpart in msg.walk():
-                                c_type = subpart.get_content_type()
-                                if c_type == "text/plain":
-                                    charset = subpart.get_content_charset() or "utf-8"
-                                    content = subpart.get_payload(decode=True).decode(charset, errors="replace")
-                                elif c_type == "text/html":
-                                    charset = subpart.get_content_charset() or "utf-8"
-                                    html_content = subpart.get_payload(decode=True).decode(charset, errors="replace")
-                        else:
-                            c_type = msg.get_content_type()
-                            charset = msg.get_content_charset() or "utf-8"
-                            if c_type == "text/plain":
-                                content = msg.get_payload(decode=True).decode(charset, errors="replace")
-                            elif c_type == "text/html":
-                                html_content = msg.get_payload(decode=True).decode(charset, errors="replace")
+                        parsed = self._parse_email(email_id, msg, part[0])
+                        
+                        final_content = parsed["content"]
+                        final_type = parsed["content_type"]
+                        
+                        # Save to cache including metadata and full content
+                        self.storage_manager.save_emails_to_cache(account_name, [parsed], auth_password)
             
-            final_content = content or html_content
-            final_type = "text/plain" if content else "html_only"
-            
-            # 3. Save to cache
-            if final_content:
-                self.storage_manager.update_email_content(account_name, email_id, final_type, final_content, auth_password)
-
             mail.close()
             mail.logout()
             
@@ -222,7 +358,31 @@ class MailReader:
             return final_content
 
         except Exception as e:
-            return f"Error: {e}"
+            return f"Error fetching from server: {e}"
+
+    def _connect_imap(self, account, auth_password):
+        """Helper to connect and authenticate to IMAP server."""
+        auth = self.auth_manager.decrypt_account_auth(account, auth_password)
+        mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
+        
+        if account['login_method'] == "Account/Password":
+            mail.login(auth['username'], auth['password'])
+        else:
+            user = auth.get("username")
+            token = auth.get("access_token")
+            try:
+                auth_string = f"user={user}\x01auth=Bearer {token}\x01\x01"
+                mail.authenticate('XOAUTH2', lambda x: auth_string)
+            except imaplib.IMAP4.error:
+                new_token = self.auth_manager.refresh_oauth2_token(account, auth, auth_password, self.config)
+                if new_token:
+                    self.save_config_callback()
+                    mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
+                    auth_string = f"user={user}\x01auth=Bearer {new_token}\x01\x01"
+                    mail.authenticate('XOAUTH2', lambda x: auth_string)
+                else:
+                    raise Exception("Authentication failed.")
+        return mail
 
     def delete_email(self, account, auth_password, email_id):
         """

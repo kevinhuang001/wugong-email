@@ -86,11 +86,15 @@ class StorageManager:
             sender = em.get("from", "")
             sender_email = em.get("from_email", "")
             subject = em.get("subject", "")
+            content = em.get("content", "")
+            content_type = em.get("content_type", "")
             
             if self.encrypt_emails and self.encryption_enabled:
                 sender = encrypt_data(sender, password, self.salt)
                 sender_email = encrypt_data(sender_email, password, self.salt)
                 subject = encrypt_data(subject, password, self.salt)
+                if content:
+                    content = encrypt_data(content, password, self.salt)
             
             # Check if this UID already exists for this account
             cursor.execute("SELECT 1 FROM emails WHERE account_name = ? AND uid = ?", (account_name, uid))
@@ -98,15 +102,17 @@ class StorageManager:
                 new_uids.append(uid)
 
             cursor.execute('''
-                INSERT INTO emails (account_name, uid, sender, sender_email, subject, date, seen)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO emails (account_name, uid, sender, sender_email, subject, date, seen, content_type, content)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(account_name, uid) DO UPDATE SET
                     sender = excluded.sender,
                     sender_email = excluded.sender_email,
                     subject = excluded.subject,
                     date = excluded.date,
-                    seen = excluded.seen
-            ''', (account_name, uid, sender, sender_email, subject, em["date"], 1 if em.get("seen") else 0))
+                    seen = excluded.seen,
+                    content_type = CASE WHEN excluded.content_type != '' THEN excluded.content_type ELSE emails.content_type END,
+                    content = CASE WHEN excluded.content != '' THEN excluded.content ELSE emails.content END
+            ''', (account_name, uid, sender, sender_email, subject, em["date"], 1 if em.get("seen") else 0, content_type, content))
         conn.commit()
         conn.close()
         return new_uids
@@ -127,48 +133,72 @@ class StorageManager:
     def get_emails_from_cache(self, account_name, limit, search_criteria, password):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        cursor.execute('''
-            SELECT uid, sender, sender_email, subject, date, seen 
-            FROM emails WHERE account_name = ? 
-            ORDER BY id DESC LIMIT ?
-        ''', (account_name, limit))
-        rows = cursor.fetchall()
+        
+        # If no search criteria, we can use SQL LIMIT for efficiency
+        if not search_criteria or not any(search_criteria.values()):
+            cursor.execute('''
+                SELECT uid, sender, sender_email, subject, date, seen 
+                FROM emails WHERE account_name = ? 
+                ORDER BY id DESC LIMIT ?
+            ''', (account_name, limit))
+            rows = cursor.fetchall()
+        else:
+            # If searching, we fetch more and filter in memory (or we could use complex SQL)
+            # For simplicity with encryption, we fetch all for this account and filter.
+            # In a real app with 10k+ emails, this should be optimized.
+            cursor.execute('''
+                SELECT uid, sender, sender_email, subject, date, seen, content_type, content
+                FROM emails WHERE account_name = ? 
+                ORDER BY id DESC
+            ''', (account_name,))
+            rows = cursor.fetchall()
+            
         conn.close()
 
         email_list = []
         for row in rows:
-            uid, sender, sender_email, subject, date, seen = row
+            # Handle different row lengths based on which query was run
+            if len(row) == 6:
+                uid, sender, sender_email, subject, date, seen = row
+                content_type, content = None, None
+            else:
+                uid, sender, sender_email, subject, date, seen, content_type, content = row
+
             if self.encrypt_emails and self.encryption_enabled:
                 # Decrypt each field individually and safely
-                # Helper to decrypt and return original if fails
                 def safe_decrypt(val):
                     if not val: return val
-                    # Check if it looks like Fernet encrypted data (starts with gAAAAAB)
                     if isinstance(val, str) and val.startswith("gAAAAAB"):
                         try:
                             return decrypt_data(val, password, self.salt)
                         except Exception:
-                            return f"[Decryption Failed] {val[:10]}..."
+                            return f"[Decryption Failed]"
                     return val
 
                 sender = safe_decrypt(sender)
                 sender_email = safe_decrypt(sender_email)
                 subject = safe_decrypt(subject)
+                if content:
+                    content = safe_decrypt(content)
 
-            # Basic fuzzy search/filtering in memory if search_criteria provided
-            if search_criteria:
-                # Use str() to ensure we don't call lower() on None, 
-                # or use (val or "") pattern which is safer.
+            # Filtering
+            if search_criteria and any(search_criteria.values()):
                 keyword = str(search_criteria.get("keyword") or "").lower()
                 from_filter = str(search_criteria.get("from") or "").lower()
                 
                 subject_lower = str(subject or "").lower()
                 sender_lower = str(sender or "").lower()
+                content_lower = str(content or "").lower()
                 
-                if keyword and (keyword not in subject_lower and keyword not in sender_lower):
-                    continue
+                if keyword:
+                    if keyword not in subject_lower and keyword not in sender_lower and keyword not in content_lower:
+                        continue
                 if from_filter and from_filter not in sender_lower:
                     continue
+                
+                # Note: SINCE and BEFORE are usually handled by IMAP search, 
+                # but we can add basic date filtering here for the offline case if needed.
+                # For now, keyword and from are the most important.
 
             email_list.append({
                 "id": uid,
@@ -178,6 +208,11 @@ class StorageManager:
                 "date": date,
                 "seen": bool(seen)
             })
+            
+            # Apply limit after filtering
+            if limit != -1 and len(email_list) >= limit:
+                break
+                
         return email_list
 
     def get_email_content(self, account_name, uid, password):
