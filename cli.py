@@ -99,13 +99,13 @@ def handle_list(args, manager):
 
                 try:
                     # Use query_emails for listing (IMAP search first, no sync side effects)
-        emails, metadata = manager.reader.query_emails(
-            account, password, 
-            limit=list_limit, 
-            search_criteria=search_criteria, 
-            progress_callback=update_progress,
-            local_only=getattr(args, "local", False)
-        )
+                    emails, metadata = manager.reader.query_emails(
+                        account, password, 
+                        limit=list_limit, 
+                        search_criteria=search_criteria, 
+                        progress_callback=update_progress,
+                        local_only=getattr(args, "local", False)
+                    )
                 except Exception as e:
                     console.print(f"[red]❌ Query failed for {account_name}: {e}. Showing cached emails.[/red]")
                     # Fallback to cache (query_emails already handles this, but let's be explicit if needed)

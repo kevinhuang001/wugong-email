@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.11] - 2026-03-13
+
+### Fixed
+- **CLI Indentation Error**: Fixed a critical `IndentationError` in the `list` command logic that prevented `wugong init` and other commands from running.
+- **UI Cleanup**: Removed redundant separator lines in the installation script output for a cleaner final instructions display.
+
 ## [1.9.10] - 2026-03-13
 
 ### Added
