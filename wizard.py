@@ -713,7 +713,7 @@ def account_add_wizard():
         config.save_config(current_config, config_path)
 
         print(f"\nConfiguration saved to {config_path} with {len(current_config['accounts'])} account(s)!")
-        return newly_added
+        return newly_added, encryption_password
 
     except KeyboardInterrupt:
         new_accounts_count = len(current_config.get("accounts", [])) - original_accounts_count
@@ -721,10 +721,10 @@ def account_add_wizard():
             # If there are new accounts added, save them
             config.save_config(current_config, config_path)
             print(f"\n[!] Configuration interrupted. {new_accounts_count} new account(s) were saved to {config_path}.")
-            return newly_added
+            return newly_added, encryption_password
         else:
             print("\n[!] Configuration cancelled. No changes were made.")
-            return []
+            return [], None
 
 if __name__ == "__main__":
     init_wizard()

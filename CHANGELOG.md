@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.22] - 2026-03-13
+
+### Changed
+- **Wizard UX Improvement**: The encryption password entered at the start of the `account add` wizard is now kept in memory and reused for the initial sync, eliminating the redundant second password prompt.
+- **Improved Password Flow**: Streamlined the account setup process for better user experience.
+
 ## [1.9.21] - 2026-03-13
 
 ### Removed

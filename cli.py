@@ -315,13 +315,12 @@ def handle_account(args, manager, account_parser):
             console.print(table)
             
         case "add":
-            newly_added = account_add_wizard()
+            newly_added, password = account_add_wizard()
             # After adding accounts, auto-sync based on provided limits
             if newly_added:
-                # Need encryption password if enabled
+                # Need encryption password if enabled and not already provided
                 manager = MailManager()
-                password = ""
-                if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):
+                if (manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False)) and not password:
                     password = questionary.password("Enter encryption password to start initial sync:").ask()
                     if not password: return
 
