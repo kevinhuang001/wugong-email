@@ -131,9 +131,11 @@ class MailManager:
                     raise Exception("Authentication failed.")
 
         mail.select("INBOX")
-        res, msg_data = mail.fetch(email_id, "(RFC822)")
+        # Use BODY.PEEK to fetch content without marking it as seen
+        res, msg_data = mail.fetch(email_id, "(BODY.PEEK[])")
         
         content = ""
+        html_content = ""
         if res == "OK":
             for part in msg_data:
                 if isinstance(part, tuple):
@@ -144,14 +146,33 @@ class MailManager:
                         for subpart in msg.walk():
                             content_type = subpart.get_content_type()
                             content_disposition = str(subpart.get("Content-Disposition"))
-                            if content_type == "text/plain" and "attachment" not in content_disposition:
+                            
+                            if "attachment" in content_disposition:
+                                continue
+                                
+                            if content_type == "text/plain":
                                 charset = subpart.get_content_charset() or "utf-8"
                                 content = subpart.get_payload(decode=True).decode(charset, errors="replace")
-                                break
+                            elif content_type == "text/html":
+                                charset = subpart.get_content_charset() or "utf-8"
+                                html_content = subpart.get_payload(decode=True).decode(charset, errors="replace")
                     else:
+                        content_type = msg.get_content_type()
                         charset = msg.get_content_charset() or "utf-8"
-                        content = msg.get_payload(decode=True).decode(charset, errors="replace")
+                        if content_type == "text/plain":
+                            content = msg.get_payload(decode=True).decode(charset, errors="replace")
+                        elif content_type == "text/html":
+                            html_content = msg.get_payload(decode=True).decode(charset, errors="replace")
         
+        # If no plain text found, use HTML content and strip tags
+        if not content and html_content:
+            import re
+            # Very basic HTML stripping
+            content = re.sub('<[^<]+?>', '', html_content)
+            # Replace multiple newlines
+            content = re.sub('\n\s*\n', '\n\n', content)
+            content = f"[Note: This email only contains HTML content]\n\n{content}"
+            
         mail.close()
         mail.logout()
         return content
@@ -216,37 +237,50 @@ class MailManager:
                 if count >= limit:
                     break
                     
-                res, msg_data = mail.fetch(msg_ids[i], "(RFC822 FLAGS)")
+                # Use BODY.PEEK[HEADER] FLAGS to not mark as seen while fetching headers and flags
+                res, msg_data = mail.fetch(msg_ids[i], "(BODY.PEEK[HEADER] FLAGS)")
                 if res == "OK":
-                    raw_email = None
+                    raw_header = None
                     flags = []
                     for part in msg_data:
                         if isinstance(part, tuple):
-                            raw_email = part[1]
+                            raw_header = part[1]
                             # Extract flags from the response
-                            # The response looks like: b'1 (RFC822 {1234} FLAGS (\\Seen \\Recent) ...)'
                             resp_str = part[0].decode('utf-8', errors='ignore')
                             if 'FLAGS' in resp_str:
                                 import re
                                 flags_match = re.search(r'FLAGS \((.*?)\)', resp_str)
                                 if flags_match:
                                     flags = flags_match.group(1).split()
+                        elif isinstance(part, bytes):
+                            # Sometimes flags come in a separate bytes part
+                            resp_str = part.decode('utf-8', errors='ignore')
+                            if 'FLAGS' in resp_str:
+                                import re
+                                flags_match = re.search(r'FLAGS \((.*?)\)', resp_str)
+                                if flags_match:
+                                    flags = flags_match.group(1).split()
                     
-                    if raw_email:
-                        msg = email.message_from_bytes(raw_email)
+                    if raw_header:
+                        msg = email.message_from_bytes(raw_header)
                         subject, encoding = decode_header(msg.get("Subject", "No Subject"))[0]
                         if isinstance(subject, bytes):
-                            subject = subject.decode(encoding if encoding else "utf-8", errors="replace")
+                            subject = subject.decode(encoding or "utf-8", errors="replace")
                         
-                        from_, encoding = decode_header(msg.get("From", "Unknown"))[0]
-                        if isinstance(from_, bytes):
-                            from_ = from_.decode(encoding if encoding else "utf-8", errors="replace")
+                        from_header = msg.get("From", "Unknown")
+                        from_parts = decode_header(from_header)
+                        decoded_from = ""
+                        for part_content, part_encoding in from_parts:
+                            if isinstance(part_content, bytes):
+                                decoded_from += part_content.decode(part_encoding or "utf-8", errors="replace")
+                            else:
+                                decoded_from += part_content
                         
                         is_seen = "\\Seen" in flags
                         
                         email_list.append({
                             "id": msg_ids[i].decode(),
-                            "from": from_,
+                            "from": decoded_from,
                             "subject": subject,
                             "date": msg.get("Date", "N/A"),
                             "seen": is_seen
