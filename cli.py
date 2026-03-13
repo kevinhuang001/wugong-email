@@ -311,7 +311,7 @@ def handle_account(args, manager, account_parser):
                     # Reuse handle_sync logic for all accounts
                     class Args:
                         account = "all"
-                        limit = 20 # Sync latest 20 emails for initial sync
+                        limit = 0 # Full metadata sync
                     handle_sync(Args(), manager)
             
         case "delete":

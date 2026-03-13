@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.5] - 2026-03-13
+
+### Changed
+- **Initial Sync**: Restored full metadata sync (unlimited) when adding a new account, as requested.
+
 ## [1.8.4] - 2026-03-13
 
 ### Added
