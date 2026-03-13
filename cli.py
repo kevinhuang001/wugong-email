@@ -97,8 +97,13 @@ def main():
         # Get password once if encryption is enabled (assume same password for all for simplicity in CLI)
         password = ""
         if manager.encryption_enabled:
-            acc_names = ", ".join([a.get("friendly_name") or "default" for a in target_accounts])
-            password = questionary.password(f"Enter encryption password for {acc_names}:").ask()
+            if args.account == "all":
+                prompt_text = "Enter encryption password for all accounts:"
+            else:
+                acc_name = target_accounts[0].get("friendly_name") or "default"
+                prompt_text = f"Enter encryption password for '{acc_name}':"
+            
+            password = questionary.password(prompt_text).ask()
             if not password:
                 return
 
@@ -192,8 +197,13 @@ def main():
 
         password = ""
         if manager.encryption_enabled:
-            acc_names = ", ".join([a.get("friendly_name") or "default" for a in target_accounts])
-            password = questionary.password(f"Enter encryption password for {acc_names}:").ask()
+            if args.account == "all":
+                prompt_text = "Enter encryption password for all accounts:"
+            else:
+                acc_name = target_accounts[0].get("friendly_name") or "default"
+                prompt_text = f"Enter encryption password for '{acc_name}':"
+            
+            password = questionary.password(prompt_text).ask()
             if not password:
                 return
 
