@@ -121,7 +121,7 @@ if [ -d "$INSTALL_DIR" ]; then
     # Finally, update the update script itself
     cp "$SOURCE_DIR/update.sh" "$INSTALL_DIR/update.sh"
     
-    # Ensure 'wugong' wrapper script is executable
+    # Ensure wugong wrapper script is executable
     chmod +x "$INSTALL_DIR/wugong"
     
     # Save the current version if we cloned it
