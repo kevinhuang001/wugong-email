@@ -18,15 +18,15 @@ class MailReader:
         is_offline = False
         newly_fetched_emails = []
         
-        # Check if we need to sync all emails
+        # Determine sync range
+        # Default to a larger fetch_limit to ensure we capture most recent emails and detect deletions
+        # If limit is small (like 10), we still fetch more UIDs to detect remote deletions effectively.
+        fetch_limit = max(limit, 100) 
+        
+        # Check if we need to sync all emails (e.g. first run)
         sync_all = account.get("sync_all_on_next_run", False)
         if sync_all:
-            # If sync_all is requested, we'll fetch all UIDs and sync them
-            # For performance, we might still want a reasonable upper limit or just do it in batches
-            # but for now, let's just use a very large limit.
-            fetch_limit = 1000 # Reasonable "all" for first sync
-        else:
-            fetch_limit = limit
+            fetch_limit = 2000 # Larger limit for "all" sync
 
         try:
             # Before fetching new emails, process any pending actions (like deletions)
@@ -35,6 +35,7 @@ class MailReader:
             auth = self.auth_manager.decrypt_account_auth(account, auth_password)
             mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
             
+            # ... (authentication logic) ...
             if account['login_method'] == "Account/Password":
                 mail.login(auth['username'], auth['password'])
             else:
@@ -55,32 +56,37 @@ class MailReader:
 
             mail.select("INBOX")
             
-            # Fetch the latest UIDs to ensure metadata is up-to-date in cache
+            # 1. Fetch ALL UIDs from server to detect deletions
             res, data = mail.uid('search', None, "ALL")
             if res == "OK":
                 uids_raw = data[0].split()
                 server_uids = {uid.decode() for uid in uids_raw}
                 
-                # Handle deletions from other clients
+                # 2. Sync deletions (Remote -> Local)
                 cached_uids = self.storage_manager.get_all_cached_uids(account_name)
+                cached_uids_set = set(cached_uids)
                 for cached_uid in cached_uids:
                     if cached_uid not in server_uids:
-                        # Email was deleted on another client
                         self.storage_manager.delete_email_from_cache(account_name, cached_uid)
                 
-                # Get the last 'fetch_limit' UIDs
-                latest_uids = uids_raw[-fetch_limit:] if len(uids_raw) > fetch_limit else uids_raw
+                # 3. Identify truly NEW emails that are not in cache
+                # We only fetch metadata for these
+                new_uids_to_fetch = [uid for uid in uids_raw if uid.decode() not in cached_uids_set]
                 
-                # Performance optimization: Fetch flags for all cached UIDs in this range
-                # to sync seen/unseen status from other clients
-                latest_uids_str = b",".join(latest_uids)
-                if latest_uids_str:
-                    res, flag_data = mail.uid('fetch', latest_uids_str.decode(), '(FLAGS)')
+                # If we have too many new emails, we might still want to respect some limit
+                # but for now, let's fetch metadata for all new ones up to fetch_limit
+                if len(new_uids_to_fetch) > fetch_limit:
+                    new_uids_to_fetch = new_uids_to_fetch[-fetch_limit:]
+                
+                # 4. Performance optimization: Sync Flags (Seen/Unseen) for existing emails in the current view
+                # We check flags for the 'limit' most recent emails
+                view_uids = uids_raw[-limit:] if len(uids_raw) > limit else uids_raw
+                view_uids_str = b",".join(view_uids)
+                if view_uids_str:
+                    res, flag_data = mail.uid('fetch', view_uids_str.decode(), '(FLAGS)')
                     if res == "OK" and flag_data:
                         for item in flag_data:
                             if isinstance(item, tuple):
-                                # Extract UID and FLAGS from the response
-                                # format: b'UID 123 FLAGS (\\Seen)'
                                 content = item[0].decode()
                                 uid_match = re.search(r'UID (\d+)', content)
                                 if uid_match:
@@ -88,77 +94,54 @@ class MailReader:
                                     is_seen = '\\Seen' in content
                                     self.storage_manager.update_email_seen_status(account_name, f_uid, is_seen)
 
+                # 5. Fetch Metadata for NEW emails
                 fetched_emails = []
-                for uid in reversed(latest_uids):
-                    uid_str = uid.decode()
-                    
-                    # Check if we already have this email in cache
-                    # If we do, we only need to sync flags (already done above in batch)
-                    # and skip full header fetch unless it's a new email
-                    if uid_str in cached_uids:
-                        continue
-                        
-                    res, msg_data = mail.uid('fetch', uid, '(RFC822.SIZE BODY[HEADER.FIELDS (SUBJECT FROM DATE)])')
-                    if res == "OK":
-                        raw_msg = msg_data[0][1]
-                        msg = email.message_from_bytes(raw_msg)
-                        
-                        # Improved header decoding for Subject
-                        try:
-                            # Handle potential None or empty Subject
-                            subject_header = msg.get("Subject")
-                            if subject_header:
-                                subject = str(make_header(decode_header(subject_header)))
-                            else:
-                                subject = "No Subject"
-                        except Exception:
-                            subject = msg.get("Subject", "No Subject")
-                        
-                        # Improved header decoding and address parsing for From
-                        try:
-                            from_header_raw = msg.get("From", "Unknown")
-                            from_header = str(make_header(decode_header(from_header_raw)))
-                        except Exception:
-                            from_header = msg.get("From", "Unknown")
-                        
-                        name, email_addr = parseaddr(from_header)
-                        
-                        # Clean up the name and email
-                        # 1. If we have a name from parseaddr, use it. Otherwise use the part before < if present.
-                        sender_name = name
-                        if not sender_name:
-                            if "<" in from_header:
-                                sender_name = from_header.split("<")[0].strip()
-                            else:
-                                sender_name = from_header
-                        
-                        # 2. Final cleaning: remove quotes and extra spaces
-                        sender_name = sender_name.replace('"', '').replace("'", "").strip()
-                        
-                        # 3. If it's still just the email or empty, fallback
-                        if not sender_name or sender_name == email_addr:
-                            sender_name = email_addr or from_header
-                        
-                        fetched_emails.append({
-                            "id": uid_str,
-                            "from": sender_name,
-                            "from_email": email_addr,
-                            "subject": subject,
-                            "date": msg.get("Date"),
-                            "seen": '\\Seen' in str(msg_data[0][0]) # Check seen flag from fetch response
-                        })
+                if new_uids_to_fetch:
+                    # Fetch in reversed order (newest first)
+                    for uid in reversed(new_uids_to_fetch):
+                        uid_str = uid.decode()
+                        res, msg_data = mail.uid('fetch', uid, '(RFC822.SIZE BODY[HEADER.FIELDS (SUBJECT FROM DATE)])')
+                        if res == "OK":
+                            raw_msg = msg_data[0][1]
+                            msg = email.message_from_bytes(raw_msg)
+                            
+                            # (Header decoding logic remains same...)
+                            try:
+                                subject_header = msg.get("Subject")
+                                subject = str(make_header(decode_header(subject_header))) if subject_header else "No Subject"
+                            except Exception:
+                                subject = msg.get("Subject", "No Subject")
+                            
+                            try:
+                                from_header_raw = msg.get("From", "Unknown")
+                                from_header = str(make_header(decode_header(from_header_raw)))
+                            except Exception:
+                                from_header = msg.get("From", "Unknown")
+                            
+                            name, email_addr = parseaddr(from_header)
+                            sender_name = name or (from_header.split("<")[0].strip() if "<" in from_header else from_header)
+                            sender_name = sender_name.replace('"', '').replace("'", "").strip()
+                            if not sender_name or sender_name == email_addr:
+                                sender_name = email_addr or from_header
+                            
+                            fetched_emails.append({
+                                "id": uid_str,
+                                "from": sender_name,
+                                "from_email": email_addr,
+                                "subject": subject,
+                                "date": msg.get("Date"),
+                                "seen": '\\Seen' in str(msg_data[0][0])
+                            })
                 
                 if fetched_emails:
-                    new_uids = self.storage_manager.save_emails_to_cache(account_name, fetched_emails, auth_password)
-                    # Get the actual email objects for newly added UIDs
-                    newly_fetched_emails = [e for e in fetched_emails if e["id"] in new_uids]
+                    newly_added_uids = self.storage_manager.save_emails_to_cache(account_name, fetched_emails, auth_password)
+                    newly_fetched_emails = [e for e in fetched_emails if e["id"] in newly_added_uids]
                 
                 # Update sync status
                 new_last_uid = uids_raw[-1].decode() if uids_raw else sync_info.get("uid", "0")
                 self.storage_manager.update_sync_info(account_name, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), new_last_uid)
                 sync_info = self.storage_manager.get_last_sync_info(account_name)
 
-                # Clear sync_all flag if it was set
                 if sync_all:
                     account["sync_all_on_next_run"] = False
                     self.save_config_callback()
@@ -167,12 +150,10 @@ class MailReader:
             mail.logout()
             
         except Exception as e:
-            # print(f"DEBUG: Sync failed for {account_name}: {e}") # Debugging
             is_offline = True
             sync_error = str(e)
             return self.storage_manager.get_emails_from_cache(account_name, limit, search_criteria, auth_password), {"last_sync": sync_info.get("time"), "is_offline": is_offline, "error": sync_error, "new_emails": []}
 
-        # Always return from cache (which now includes newly fetched emails)
         email_list = self.storage_manager.get_emails_from_cache(account_name, limit, search_criteria, auth_password)
         return email_list, {"last_sync": sync_info.get("time"), "is_offline": is_offline, "new_emails": newly_fetched_emails}
 
