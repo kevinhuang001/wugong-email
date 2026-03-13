@@ -16,19 +16,37 @@ echo -e "${BLUE}🔄 Checking for updates for Wugong Email...${NC}"
 
 # 1. Check if it's a git repository or needs to be cloned
 if [ ! -d "$REPO_DIR/.git" ]; then
-    echo -e "${YELLOW}ℹ️  Not running from a git repository. Using $REPO_URL as source.${NC}"
+    echo -e "${YELLOW}ℹ️  Using $REPO_URL as source.${NC}"
     TEMP_DIR=$(mktemp -d)
-    git clone --depth 1 "$REPO_URL" "$TEMP_DIR" || { echo -e "${RED}❌ Error: Failed to clone repository.${NC}"; exit 1; }
+    
+    # Check if we have a local version to compare with
+    LOCAL_COMMIT=""
+    if [ -f "$INSTALL_DIR/.version" ]; then
+        LOCAL_COMMIT=$(cat "$INSTALL_DIR/.version")
+    fi
+
+    # Get remote head commit hash without full clone first
+    REMOTE_COMMIT=$(git ls-remote "$REPO_URL" HEAD | awk '{print $1}')
+    
+    if [ "$LOCAL_COMMIT" = "$REMOTE_COMMIT" ] && [ -n "$LOCAL_COMMIT" ]; then
+        echo -e "${GREEN}✅ Wugong Email is already up to date.${NC}"
+        [ -d "$TEMP_DIR" ] && rm -rf "$TEMP_DIR"
+        exit 0
+    fi
+
+    # Clone only if update needed, and hide git output
+    git clone --depth 1 "$REPO_URL" "$TEMP_DIR" &>/dev/null || { echo -e "${RED}❌ Error: Failed to clone repository.${NC}"; exit 1; }
     SOURCE_DIR="$TEMP_DIR"
     UPDATE_NEEDED=true
+    NEW_VERSION="$REMOTE_COMMIT"
 else
-    echo -e "${BLUE}📡 Fetching remote changes from $REPO_URL...${NC}"
+    echo -e "${BLUE}📡 Fetching remote changes...${NC}"
     cd "$REPO_DIR" || exit
     # Ensure remote URL is correct
     git remote set-url origin "$REPO_URL" 2>/dev/null || git remote add origin "$REPO_URL"
-    git fetch origin
+    git fetch origin &>/dev/null
 
-    LOCAL=$(git rev-parse @)
+    LOCAL=$(git rev-parse HEAD)
     REMOTE=$(git rev-parse @{u})
 
     if [ "$LOCAL" = "$REMOTE" ]; then
@@ -37,6 +55,7 @@ else
     fi
     SOURCE_DIR="$REPO_DIR"
     UPDATE_NEEDED=true
+    NEW_VERSION="$REMOTE"
 fi
 
 # 2. Ask for confirmation
@@ -80,6 +99,11 @@ if [ -d "$INSTALL_DIR" ]; then
     
     # Finally, update the update script itself
     cp "$SOURCE_DIR/update.sh" "$INSTALL_DIR/update.sh"
+    
+    # Save the current version if we cloned it
+    if [ -n "$NEW_VERSION" ]; then
+        echo "$NEW_VERSION" > "$INSTALL_DIR/.version"
+    fi
     
     echo -e "${GREEN}✅ Update completed.${NC}"
 else

@@ -7,19 +7,45 @@ Write-Host "🔄 Checking for updates for Wugong Email..." -ForegroundColor Blue
 
 # 1. Check if running from a git repository or needs to be cloned
 $UpdateNeeded = $false
+$NewVersion = ""
 if (-not (Test-Path (Join-Path $ScriptDir ".git"))) {
-    Write-Host "ℹ️  Not running from a git repository. Using GitHub as source." -ForegroundColor Yellow
+    Write-Host "ℹ️  Using GitHub as source." -ForegroundColor Yellow
+    
+    # Check local version
+    $LocalVersion = ""
+    $VersionFile = Join-Path $InstallDir ".version"
+    if (Test-Path $VersionFile) {
+        $LocalVersion = Get-Content $VersionFile
+    }
+
+    # Get remote head commit hash
+    $RemoteVersion = (git ls-remote $RepoUrl HEAD | ForEach-Object { $_.Split("`t")[0] })
+    
+    if ($LocalVersion -eq $RemoteVersion -and $LocalVersion -ne "") {
+        Write-Host "✅ Wugong Email is already up to date." -ForegroundColor Green
+        exit 0
+    }
+
     $TempDir = Join-Path $env:TEMP ([System.IO.Path]::GetRandomFileName())
     New-Item -ItemType Directory -Path $TempDir | Out-Null
-    git clone --depth 1 $RepoUrl $TempDir
+    
+    # Hide git output
+    git clone --depth 1 $RepoUrl $TempDir 2>$null | Out-Null
+    if (-not $?) {
+        Write-Host "❌ Error: Failed to clone repository." -ForegroundColor Red
+        exit 1
+    }
+    
     $SourceDir = $TempDir
     $UpdateNeeded = $true
+    $NewVersion = $RemoteVersion
 } else {
     Write-Host "📡 Fetching remote changes..." -ForegroundColor Blue
     Set-Location $ScriptDir
-    git fetch origin
+    # Hide git output
+    git fetch origin 2>$null | Out-Null
     
-    $Local = git rev-parse @
+    $Local = git rev-parse HEAD
     $Remote = git rev-parse @{u}
     
     if ($Local -eq $Remote) {
@@ -28,6 +54,7 @@ if (-not (Test-Path (Join-Path $ScriptDir ".git"))) {
     }
     $SourceDir = $ScriptDir
     $UpdateNeeded = $true
+    $NewVersion = $Remote
 }
 
 # 2. Ask for confirmation
@@ -74,6 +101,11 @@ if (Test-Path $InstallDir) {
     
     # Finally, update the update script itself
     Copy-Item -Path (Join-Path $SourceDir "update.ps1") -Destination (Join-Path $InstallDir "update.ps1") -Force
+    
+    # Save the current version if we cloned it
+    if ($NewVersion -ne "") {
+        $NewVersion | Out-File -FilePath (Join-Path $InstallDir ".version") -Encoding utf8
+    }
     
     Write-Host "✅ Update completed." -ForegroundColor Green
 } else {
