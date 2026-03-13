@@ -234,16 +234,40 @@ def main():
             try:
                 content = manager.get_email_content(account, password, args.id)
                 if content:
+                    if isinstance(content, dict) and content.get("type") == "html_only":
+                        html_content = content.get("html", "")
+                        status.stop()
+                        choice = questionary.select(
+                            "此邮件仅包含 HTML 内容，请选择查看方式：",
+                            choices=[
+                                "提取文本 (可能不完整，句子可能连在一起)",
+                                "查看原始 HTML 代码",
+                                "取消"
+                            ]
+                        ).ask()
+                        
+                        if choice == "提取文本 (可能不完整，句子可能连在一起)":
+                            import re
+                            # Basic HTML stripping
+                            text = re.sub(r'<[^<]+?>', '', html_content)
+                            # Replace multiple newlines, using raw strings to avoid SyntaxWarning
+                            text = re.sub(r'\n\s*\n', '\n\n', text)
+                            content = f"[Note: 此内容是从 HTML 提取的文本]\n\n{text}"
+                        elif choice == "查看原始 HTML 代码":
+                            content = html_content
+                        else:
+                            return
+                    
                     panel = Panel(
                         content,
                         title=f"Email Content (ID: {args.id})",
-                        subtitle=f"Account: {args.account}",
+                        subtitle=f"Account: {account_name}",
                         border_style="green",
                         padding=(1, 2)
                     )
                     console.print(panel)
                 else:
-                    console.print(f"[yellow]No text content found for email {args.id}.[/yellow]")
+                    console.print(f"[yellow]No content found for email {args.id}.[/yellow]")
             except Exception as e:
                 console.print(f"[red]Error: {e}[/red]")
 

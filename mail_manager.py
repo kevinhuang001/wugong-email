@@ -164,14 +164,12 @@ class MailManager:
                         elif content_type == "text/html":
                             html_content = msg.get_payload(decode=True).decode(charset, errors="replace")
         
-        # If no plain text found, use HTML content and strip tags
+        # If no plain text found, return a dict with HTML content for CLI to handle
         if not content and html_content:
-            import re
-            # Very basic HTML stripping
-            content = re.sub('<[^<]+?>', '', html_content)
-            # Replace multiple newlines
-            content = re.sub('\n\s*\n', '\n\n', content)
-            content = f"[Note: This email only contains HTML content]\n\n{content}"
+            return {
+                "type": "html_only",
+                "html": html_content
+            }
             
         mail.close()
         mail.logout()
