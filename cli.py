@@ -78,44 +78,27 @@ def handle_list(args, manager):
         status_msg = f"[bold green]Fetching cached emails for {account_name}..." if is_local else f"[bold green]Querying {account_name}..."
         
         with console.status(status_msg) as status:
-            try:
-                emails, metadata = manager.reader.query_emails(
-                    account, password, 
-                    limit=list_limit, 
-                    search_criteria=search_criteria,
-                    local_only=is_local
-                )
-            except Exception as e:
-                console.print(f"[red]❌ Query failed for {account_name}: {e}. Showing cached emails.[/red]")
-                emails, metadata = manager.reader.query_emails(
-                    account, password, 
-                    limit=list_limit, 
-                    search_criteria=search_criteria,
-                    local_only=True
-                )
+            emails, metadata = manager.reader.query_emails(
+                account, password, 
+                limit=list_limit, 
+                search_criteria=search_criteria,
+                local_only=is_local
+            )
 
         # 3. Display Results
         try:
             if emails is None: emails = []
             
-            title = f"Latest {len(emails)} Emails for {account_name}"
+            status_tag = "[yellow]Local[/yellow]" if metadata.get("is_offline") else "[green]Online[/green]"
+            title = f"Emails for {account_name} ({status_tag})"
+            
+            # Add character set warning if IMAP search failed due to UTF-8
+            if metadata.get("is_offline") and metadata.get("error") and "UTF-8 not supported" in metadata.get("error", ""):
+                title += " [bold red](Character set not supported by server, showing local results)[/bold red]"
+            
             if any(search_criteria.values()):
                 active_filters = [f"{k}={v}" for k, v in search_criteria.items() if v]
                 title += f" (Filters: {', '.join(active_filters)})"
-
-            # Add sync info to title
-            last_sync = metadata.get("last_sync", "Never")
-            is_offline = metadata.get("is_offline", False)
-            sync_error = metadata.get("error")
-            
-            if is_offline:
-                status_str = f"[red](OFFLINE: {sync_error or 'Connection failed'})[/red]"
-            elif is_local:
-                status_str = "[yellow](CACHED)[/yellow]"
-            else:
-                status_str = "[green](ONLINE)[/green]"
-            
-            title += f"\n[dim]Last Sync: {last_sync} {status_str}[/dim]"
 
             table = Table(title=title, show_lines=False, box=None)
             table.add_column("", justify="center", width=1) # Status column
@@ -378,28 +361,29 @@ def handle_account(args, manager, account_parser):
             account_parser.print_help()
 
 def handle_sync(args, manager):
-    if not manager.accounts:
-        console.print("[yellow]No accounts configured yet.[/yellow]")
-        return
-
+    # Determine which accounts to sync
     target_accounts = []
-    if args.account == "all":
+    if args.account == "all" or not args.account:
         target_accounts = manager.accounts
     else:
-        acc = manager.get_account_by_name(args.account) if args.account else manager.get_account_by_name("default")
-        if not acc:
-            console.print(f"[red]Error: Account '{args.account or 'default'}' not found.[/red]")
-            return
-        target_accounts = [acc]
-
-    password = os.environ.get("WUGONG_PASSWORD", "")
-    # We need a password if either credentials or emails are encrypted
-    if not password and (manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False)):
-        if args.account == "all":
-            prompt_text = "Enter encryption password for all accounts:"
+        acc = manager.get_account_by_name(args.account)
+        if acc:
+            target_accounts = [acc]
         else:
-            acc_name = target_accounts[0].get("friendly_name") or "default"
-            prompt_text = f"Enter encryption password for '{acc_name}':"
+            console.print(f"[red]Error: Account '{args.account}' not found.[/red]")
+            return
+
+    if not target_accounts:
+        console.print("[yellow]No accounts configured yet. Run 'wugong account add' to get started.[/yellow]")
+        return
+
+    # Use existing password from env or ask once
+    acc_name = target_accounts[0].get("friendly_name") or "default"
+    password = os.environ.get("WUGONG_PASSWORD", "")
+    if not password and (manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False)):
+        prompt_text = f"Enter encryption password for '{acc_name}':"
+        if len(target_accounts) > 1:
+            prompt_text = "Enter encryption password for all accounts:"
         
         password = questionary.password(prompt_text).ask()
         if not password:
@@ -407,7 +391,17 @@ def handle_sync(args, manager):
 
     for account in target_accounts:
         account_name = account.get("friendly_name") or "default"
-        is_tty = sys.stdin.isatty()
+        
+        # Determine limits and criteria
+        sync_limit = 0
+        if args.all:
+            sync_limit = -1
+        elif args.limit is not None:
+            sync_limit = args.limit
+        
+        # 2. Fetch Results (Sync)
+        emails = []
+        metadata = {}
         
         with Progress(
             SpinnerColumn(),
@@ -416,42 +410,34 @@ def handle_sync(args, manager):
             TaskProgressColumn(),
             TimeRemainingColumn(),
             console=console,
-            transient=True, # Remove the progress bar after completion
-            disable=not is_tty
+            transient=True,
+            disable=not sys.stdin.isatty()
         ) as progress:
-            task = progress.add_task(f"[green]Syncing {account_name}...", total=None)
+            sync_task = progress.add_task(f"[green]Syncing {account_name}...", total=None)
             
             def update_progress(current, total, description=None):
                 if total:
-                    progress.update(task, total=total, completed=current, description=f"[green]Syncing {account_name}: {description or ''}")
+                    progress.update(sync_task, total=total, completed=current, description=f"[green]Syncing {account_name}: {description or ''}")
                 else:
-                    progress.update(task, description=f"[green]Syncing {account_name}: {description or ''}")
+                    progress.update(sync_task, description=f"[green]Syncing {account_name}: {description or ''}")
 
-            try:
-                # For sync command, limit only affects flag sync
-                sync_limit = 100
-                if args.all:
-                    sync_limit = -1
-                elif args.limit is not None:
-                    sync_limit = args.limit
-                
-                _, metadata = manager.reader.fetch_emails(account, password, limit=sync_limit, progress_callback=update_progress)
-                new_emails = metadata.get("new_emails", [])
-                if new_emails:
-                    console.print(f"[green]✅ {account_name}: {len(new_emails)} new emails[/green]")
-                    # Display a small table for new emails
-                    new_table = Table(box=None, show_header=False, padding=(0, 2))
-                    new_table.add_column("From", style="magenta", width=25)
-                    new_table.add_column("Subject", style="white")
-                    for ne in new_emails[:5]: # Show up to 5 new emails
-                        new_table.add_row(ne["from"], ne["subject"])
-                    if len(new_emails) > 5:
-                        new_table.add_row("...", f"and {len(new_emails)-5} more")
-                    console.print(new_table)
-                else:
-                    console.print(f"[green]✅ {account_name}: No new emails.[/green]")
-            except Exception as e:
-                console.print(f"[red]❌ Error syncing {account_name}: {e}[/red]")
+            emails, metadata = manager.reader.fetch_emails(
+                account, password, 
+                limit=sync_limit, 
+                progress_callback=update_progress,
+                sync=True
+            )
+
+        # 3. Display Sync Summary
+        is_offline = metadata.get("is_offline", False)
+        sync_error = metadata.get("error")
+        new_emails_count = len(metadata.get("new_emails", []))
+        
+        if is_offline:
+            console.print(f"[red]❌ Sync failed for {account_name}: {sync_error or 'Connection failed'}.[/red]")
+        else:
+            console.print(f"[green]✅ {account_name}: Sync complete ({new_emails_count} new emails fetched).[/green]")
+        console.print("-" * console.width)
 
 def handle_upgrade():
     """Handles the 'upgrade' command to update Wugong Email code."""

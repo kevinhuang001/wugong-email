@@ -4,6 +4,8 @@ from email.header import decode_header, make_header
 from email.utils import parseaddr
 from datetime import datetime
 import re
+import socket
+import ssl
 
 class MailReader:
     def __init__(self, auth_manager, storage_manager, config, save_config_callback):
@@ -52,59 +54,89 @@ class MailReader:
                 mail.select("INBOX")
                 
                 # 2. Sync Logic (Incremental, Full, or Recent Limit)
-                search_query_parts = []
-                
-                # Use current search criteria if provided, otherwise default to incremental/full
-                if search_criteria:
-                    if search_criteria.get("keyword"):
-                        search_query_parts.append(f'OR SUBJECT "{search_criteria["keyword"]}" BODY "{search_criteria["keyword"]}"')
-                    if search_criteria.get("from"):
-                        search_query_parts.append(f'FROM "{search_criteria["from"]}"')
-                    if search_criteria.get("since"):
-                        try:
-                            since_val = search_criteria["since"]
-                            if re.match(r'\d{1,2}-[A-Za-z]{3}-\d{4}', since_val):
-                                since_date = since_val
-                            else:
-                                since_date = datetime.strptime(since_val, "%Y-%m-%d").strftime("%d-%b-%Y")
-                            search_query_parts.append(f'SINCE "{since_date}"')
-                        except: pass
-                    if search_criteria.get("before"):
-                        try:
-                            before_val = search_criteria["before"]
-                            if re.match(r'\d{1,2}-[A-Za-z]{3}-\d{4}', before_val):
-                                before_date = before_val
-                            else:
-                                before_date = datetime.strptime(before_val, "%Y-%m-%d").strftime("%d-%b-%Y")
-                            search_query_parts.append(f'BEFORE "{before_date}"')
-                        except: pass
-                
-                if not search_query_parts:
-                    if is_initial_sync or limit == -1 or limit > 0:
-                        # If it's a forced limit of recent emails, or full sync, or initial sync
-                        # we need ALL UIDs to pick the recent ones
-                        search_query_parts.append("ALL")
-                    else:
-                        last_sync_time = sync_info.get("time")
-                        if last_sync_time and last_sync_time != "Never":
+                search_query_args = []
+                if is_initial_sync:
+                    search_query_args.append("ALL")
+                else:
+                    if search_criteria:
+                        if search_criteria.get("keyword"):
+                            search_query_args.extend(["OR", "SUBJECT", search_criteria["keyword"], "BODY", search_criteria["keyword"]])
+                        if search_criteria.get("from"):
+                            search_query_args.extend(["FROM", search_criteria["from"]])
+                        if search_criteria.get("since"):
                             try:
-                                # IMAP SINCE is inclusive, fetch from last sync date
-                                last_date = datetime.strptime(last_sync_time, "%Y-%m-%d %H:%M:%S").strftime("%d-%b-%Y")
-                                search_query_parts.append(f'SINCE "{last_date}"')
-                            except:
-                                search_query_parts.append("ALL")
+                                since_val = search_criteria["since"]
+                                if re.match(r'\d{1,2}-[A-Za-z]{3}-\d{4}', since_val):
+                                    since_date = since_val
+                                else:
+                                    since_date = datetime.strptime(since_val, "%Y-%m-%d").strftime("%d-%b-%Y")
+                                search_query_args.extend(["SINCE", since_date])
+                            except: pass
+                        if search_criteria.get("before"):
+                            try:
+                                before_val = search_criteria["before"]
+                                if re.match(r'\d{1,2}-[A-Za-z]{3}-\d{4}', before_val):
+                                    before_date = before_val
+                                else:
+                                    before_date = datetime.strptime(before_val, "%Y-%m-%d").strftime("%d-%b-%Y")
+                                search_query_args.extend(["BEFORE", before_date])
+                            except: pass
+                    
+                    if not search_query_args:
+                        if limit == -1 or limit > 0:
+                            search_query_args.append("ALL")
                         else:
-                            search_query_parts.append("ALL")
+                            last_sync_time = sync_info.get("time")
+                            if last_sync_time and last_sync_time != "Never":
+                                try:
+                                    last_date = datetime.strptime(last_sync_time, "%Y-%m-%d %H:%M:%S").strftime("%d-%b-%Y")
+                                    search_query_args.extend(["SINCE", last_date])
+                                except:
+                                    search_query_args.append("ALL")
+                            else:
+                                search_query_args.append("ALL")
 
-                search_query = " ".join(search_query_parts) if search_query_parts else "ALL"
-                res, data = mail.uid('search', None, search_query)
+                # Helper to encode non-ASCII tokens to bytes (imaplib will send as literals)
+                # but keep ASCII as strings (imaplib will send as quoted strings or atoms)
+                def process_token(t):
+                    if not isinstance(t, str): return t
+                    try:
+                        t.encode('ascii')
+                        return t
+                    except UnicodeEncodeError:
+                        return t.encode('utf-8')
+
+                # Strategy: Try ASCII first, if fails or contains non-ASCII, try UTF-8
+                # If UTF-8 fails (BAD command), fallback to local and warn user
+                try:
+                    # 1. Try standard search (no charset specified, assumes ASCII)
+                    # This is most compatible with older servers
+                    res, data = mail.uid('search', None, *search_query_args)
+                except (imaplib.IMAP4.error, UnicodeEncodeError, TypeError):
+                    # If standard search fails due to non-ASCII or server error, try UTF-8
+                    try:
+                        final_args = [process_token(arg) for arg in search_query_args]
+                        # Use search_query_args for charset to see if it makes a difference, 
+                        # but some servers require the charset string.
+                        res, data = mail.uid('search', "UTF-8", *final_args)
+                    except (imaplib.IMAP4.error, TypeError) as e:
+                        # Server doesn't support UTF-8 search or command is BAD
+                        is_offline = True
+                        sync_error = f"IMAP search failed (UTF-8 not supported?): {str(e)}"
+                        # Close and fallback
+                        try:
+                            mail.logout()
+                        except: pass
+                        cached_emails = self.storage_manager.get_emails_from_cache(account_name, limit, search_criteria, auth_password)
+                        return cached_emails, {"last_sync": sync_info.get("time"), "is_offline": is_offline, "error": sync_error, "new_emails": []}
                 
                 if res == "OK":
+                    search_query_all = "ALL" in search_query_args and len(search_query_args) == 1
                     uids_raw = data[0].split()
                     server_uids = {uid.decode() for uid in uids_raw}
                     
                     # 3. Sync deletions (Remote -> Local) - only if we have full view (search ALL)
-                    if search_query == "ALL":
+                    if search_query_all:
                         cached_uids = self.storage_manager.get_all_cached_uids(account_name)
                         for cached_uid in cached_uids:
                             if cached_uid not in server_uids:
@@ -186,11 +218,14 @@ class MailReader:
                 mail.close()
                 mail.logout()
                 
-            except Exception as e:
+            except socket.timeout as e:
                 is_offline = True
-                sync_error = str(e)
+                sync_error = f"Connection timeout: {str(e)}"
                 cached_emails = self.storage_manager.get_emails_from_cache(account_name, limit, search_criteria, auth_password)
                 return cached_emails, {"last_sync": sync_info.get("time"), "is_offline": is_offline, "error": sync_error, "new_emails": []}
+            except Exception as e:
+                # SSL, Protocol errors, or other bugs: re-raise directly, don't fallback to cache
+                raise e
 
         # Final return from cache
         email_list = self.storage_manager.get_emails_from_cache(account_name, limit, search_criteria, auth_password)
@@ -230,98 +265,129 @@ class MailReader:
                         else:
                             raise Exception("Authentication failed.")
 
-                mail.select("INBOX", readonly=True)
+                res, data = mail.select("INBOX")
+                if res != "OK":
+                    raise Exception(f"Failed to select INBOX: {str(data)}")
                 
                 # 1. Construct Search Query
-                search_query_parts = []
+                search_query_args = []
                 if search_criteria:
                     if search_criteria.get("keyword"):
-                        search_query_parts.append(f'OR SUBJECT "{search_criteria["keyword"]}" BODY "{search_criteria["keyword"]}"')
+                        search_query_args.extend(["OR", "SUBJECT", search_criteria["keyword"], "BODY", search_criteria["keyword"]])
                     if search_criteria.get("from"):
-                        search_query_parts.append(f'FROM "{search_criteria["from"]}"')
+                        search_query_args.extend(["FROM", search_criteria["from"]])
                     if search_criteria.get("since"):
                         try:
-                            # Support both DD-Mon-YYYY (README) and YYYY-MM-DD
                             since_val = search_criteria["since"]
                             if re.match(r'\d{1,2}-[A-Za-z]{3}-\d{4}', since_val):
                                 since_date = since_val
                             else:
                                 since_date = datetime.strptime(since_val, "%Y-%m-%d").strftime("%d-%b-%Y")
-                            search_query_parts.append(f'SINCE "{since_date}"')
+                            search_query_args.extend(["SINCE", since_date])
                         except: pass
                     if search_criteria.get("before"):
                         try:
-                            # Support both DD-Mon-YYYY (README) and YYYY-MM-DD
                             before_val = search_criteria["before"]
                             if re.match(r'\d{1,2}-[A-Za-z]{3}-\d{4}', before_val):
                                 before_date = before_val
                             else:
                                 before_date = datetime.strptime(before_val, "%Y-%m-%d").strftime("%d-%b-%Y")
-                            search_query_parts.append(f'BEFORE "{before_date}"')
+                            search_query_args.extend(["BEFORE", before_date])
                         except: pass
                 
-                search_query = " ".join(search_query_parts) if search_query_parts else "ALL"
-                res, data = mail.uid('search', None, search_query)
-                
+                if not search_query_args:
+                    search_query_args.append("ALL")
+
+                # Helper to encode non-ASCII tokens to bytes (imaplib will send as literals)
+                # but keep ASCII as strings (imaplib will send as quoted strings or atoms)
+                def process_token(t):
+                    if not isinstance(t, str): return t
+                    try:
+                        t.encode('ascii')
+                        return t
+                    except UnicodeEncodeError:
+                        return t.encode('utf-8')
+
+                # Strategy: Try ASCII first, if fails or contains non-ASCII, try UTF-8
+                # If UTF-8 fails (BAD command), fallback to local and warn user
+                try:
+                    # 1. Try standard search (no charset specified, assumes ASCII)
+                    # This is most compatible with older servers
+                    res, data = mail.uid('search', None, *search_query_args)
+                except (imaplib.IMAP4.error, UnicodeEncodeError, TypeError):
+                    # If standard search fails due to non-ASCII or server error, try UTF-8
+                    try:
+                        final_args = [process_token(arg) for arg in search_query_args]
+                        res, data = mail.uid('search', "UTF-8", *final_args)
+                    except (imaplib.IMAP4.error, TypeError) as e:
+                        # Server doesn't support UTF-8 search or command is BAD
+                        is_offline = True
+                        sync_error = f"IMAP search failed (UTF-8 not supported?): {str(e)}"
+                        # We return results from cache if is_offline is True
+                        res = "FAILED"
+                        
                 if res == "OK":
                     uids_raw = data[0].split()
+                    
                     # We only need the top 'limit' results (newest first)
                     view_uids = uids_raw[-limit:] if limit > 0 and len(uids_raw) > limit else uids_raw
                     view_uids = list(reversed(view_uids)) # Newest first
                     
                     results = []
-                    # Optimized: Fetch metadata in bulk to avoid multiple server roundtrips
-                    uids_str = ",".join([uid.decode() for uid in view_uids])
-                    res_m, msg_data = mail.uid('fetch', uids_str, '(FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)])')
-                    
-                    if res_m == "OK":
-                        # msg_data will contain a list of (response_info, header_bytes) and ')' separator
-                        for item in msg_data:
-                            if isinstance(item, tuple):
-                                resp_text = item[0].decode()
-                                header_bytes = item[1]
-                                
-                                uid_match = re.search(r'UID (\d+)', resp_text)
-                                if not uid_match: continue
-                                uid_str = uid_match.group(1)
-                                
-                                msg = email.message_from_bytes(header_bytes)
-                                
-                                # Parse basic metadata
-                                try:
-                                    subject_header = msg.get("Subject")
-                                    subject = str(make_header(decode_header(subject_header))) if subject_header else "No Subject"
-                                except: subject = "No Subject"
-                                
-                                try:
-                                    from_header = str(make_header(decode_header(msg.get("From", "Unknown"))))
-                                except: from_header = "Unknown"
-                                
-                                name, email_addr = parseaddr(from_header)
-                                sender_name = name or (from_header.split("<")[0].strip() if "<" in from_header else from_header)
-                                
-                                results.append({
-                                    "id": uid_str,
-                                    "from": sender_name,
-                                    "from_email": email_addr,
-                                    "subject": subject,
-                                    "date": msg.get("Date"),
-                                    "seen": '\\Seen' in resp_text
-                                })
+                    # Fetch metadata for each UID to be more robust against buggy IMAP servers
+                    for uid_bin in view_uids:
+                        uid_str = uid_bin.decode()
+                        res_m, msg_data = mail.uid('fetch', uid_bin, '(FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)])')
                         
-                        # Sort results to match view_uids order (newest first)
-                        uid_to_result = {r["id"]: r for r in results}
-                        sorted_results = [uid_to_result[uid.decode()] for uid in view_uids if uid.decode() in uid_to_result]
+                        if res_m == "OK" and msg_data:
+                            for item in msg_data:
+                                if isinstance(item, tuple):
+                                    resp_text = item[0].decode()
+                                    header_bytes = item[1]
+                                    
+                                    msg = email.message_from_bytes(header_bytes)
+                                    
+                                    # Parse basic metadata
+                                    try:
+                                        subject_header = msg.get("Subject")
+                                        subject = str(make_header(decode_header(subject_header))) if subject_header else "No Subject"
+                                    except: subject = "No Subject"
+                                    
+                                    try:
+                                        from_header = str(make_header(decode_header(msg.get("From", "Unknown"))))
+                                    except: from_header = "Unknown"
+                                    
+                                    name, email_addr = parseaddr(from_header)
+                                    sender_name = name or (from_header.split("<")[0].strip() if "<" in from_header else from_header)
+                                    
+                                    results.append({
+                                        "id": uid_str,
+                                        "from": sender_name,
+                                        "from_email": email_addr,
+                                        "subject": subject,
+                                        "date": msg.get("Date"),
+                                        "seen": '\\Seen' in resp_text
+                                    })
+                                    break # Only one tuple per fetch
                         
-                        mail.close()
-                        mail.logout()
-                        return sorted_results, {"last_sync": sync_info.get("time"), "is_offline": False}
+                    mail.close()
+                    mail.logout()
+                    return results, {"last_sync": sync_info.get("time"), "is_offline": False}
                 
-            except Exception as e:
+                # If we reach here, search failed but wasn't caught by socket.timeout
+                # Close connection if still open
+                try:
+                    mail.logout()
+                except: pass
+                
+            except socket.timeout as e:
                 is_offline = True
-                sync_error = str(e)
+                sync_error = f"Connection timeout: {str(e)}"
+            except Exception as e:
+                # SSL, Protocol errors, or other bugs: re-raise directly, don't fallback to cache
+                raise e
             
-        # Offline, error, or local_only: return from cache
+        # Offline (timeout) or local_only: return from cache
         cached_emails = self.storage_manager.get_emails_from_cache(account_name, limit, search_criteria, auth_password)
         return cached_emails, {"last_sync": sync_info.get("time"), "is_offline": is_offline, "error": sync_error if is_offline else None}
 
