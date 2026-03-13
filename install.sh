@@ -51,6 +51,9 @@ if command -v rsync &> /dev/null; then
     rsync -av --delete --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='*.db' --exclude='config.toml' "$SOURCE_DIR/" "$INSTALL_DIR/" &>/dev/null
 else
     # Fallback to cp -R
+    echo -e "${BLUE}⚠️  rsync not found, using cp -R (files will be overwritten)...${NC}"
+    # Manually remove old core files to simulate --delete for critical files
+    rm -f "$INSTALL_DIR/read_config.py"
     cp -R "$SOURCE_DIR"/. "$INSTALL_DIR/"
     # Cleanup unwanted bits if we used cp -R (but keep config and db)
     rm -rf "$INSTALL_DIR/.git" "$INSTALL_DIR/.venv" "$INSTALL_DIR/__pycache__"

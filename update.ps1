@@ -86,8 +86,13 @@ if (Test-Path $InstallDir) {
         $_.Name -notmatch "^\." -and # No hidden files/dirs
         $_.Name -ne "venv" -and 
         $_.Name -ne "__pycache__" -and
+        $_.Name -ne "config.toml" -and # Don't overwrite local config
         $_.Extension -ne ".db" # Don't overwrite local cache
     }
+    # Manually remove old core files to simulate --delete
+    $OldFiles = Join-Path $InstallDir "read_config.py"
+    if (Test-Path $OldFiles) { Remove-Item $OldFiles -Force }
+    
     foreach ($Item in $ItemsToSync) {
         $Dest = Join-Path $InstallDir $Item.Name
         if ($Item.PSIsContainer) {

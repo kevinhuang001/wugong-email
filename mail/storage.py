@@ -111,12 +111,15 @@ class StorageManager:
 
             # Basic fuzzy search/filtering in memory if search_criteria provided
             if search_criteria:
-                keyword = search_criteria.get("keyword", "").lower()
-                from_filter = search_criteria.get("from", "").lower()
+                keyword = (search_criteria.get("keyword") or "").lower()
+                from_filter = (search_criteria.get("from") or "").lower()
                 
-                if keyword and keyword not in subject.lower() and keyword not in sender.lower():
+                subject_lower = (subject or "").lower()
+                sender_lower = (sender or "").lower()
+                
+                if keyword and keyword not in subject_lower and keyword not in sender_lower:
                     continue
-                if from_filter and from_filter not in sender.lower():
+                if from_filter and from_filter not in sender_lower:
                     continue
 
             email_list.append({

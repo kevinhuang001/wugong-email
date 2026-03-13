@@ -85,15 +85,19 @@ if [ -d "$INSTALL_DIR" ]; then
     # Custom sync logic: copy ALL files and directories except hidden ones, venv, pycache, and the update script itself
     # Use rsync if available for cleaner directory syncing, otherwise fallback to cp -R
     if command -v rsync &> /dev/null; then
-        rsync -av --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='update.sh' --exclude='*.db' "$SOURCE_DIR/" "$INSTALL_DIR/" &>/dev/null
+        # Use --delete but EXCLUDE config and database
+        rsync -av --delete --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='update.sh' --exclude='*.db' --exclude='config.toml' "$SOURCE_DIR/" "$INSTALL_DIR/" &>/dev/null
     else
         # Fallback to cp -R, but we need to be careful with exclusions
+        echo -e "${BLUE}⚠️  rsync not found, using cp -R (files will be overwritten)...${NC}"
+        # Manually remove old core files to simulate --delete for critical files
+        rm -f "$INSTALL_DIR/read_config.py"
         # Using a simple loop for top-level items to avoid copying excluded dirs
         for item in "$SOURCE_DIR"/*; do
             [ -e "$item" ] || continue
             name=$(basename "$item")
             case "$name" in
-                .git|.venv|__pycache__|update.sh|*.db) continue ;;
+                .git|.venv|__pycache__|update.sh|*.db|config.toml) continue ;;
             esac
             cp -R "$item" "$INSTALL_DIR/" &>/dev/null
         done

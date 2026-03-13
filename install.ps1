@@ -47,8 +47,18 @@ New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null
 
 # 4. Copy Files
 Write-Host "📦 Copying source files..." -ForegroundColor Blue
-Copy-Item "$SourceDir\*.py" "$InstallDir\" -Force
-Copy-Item "$SourceDir\requirements.txt" "$InstallDir\" -Force
+# Use recursive copy to ensure folders like 'mail' are included
+# Exclude git/venv/pycache/db/config if they exist in source
+$ItemsToCopy = Get-ChildItem -Path $SourceDir | Where-Object { 
+    $_.Name -ne ".git" -and 
+    $_.Name -ne ".venv" -and 
+    $_.Name -ne "__pycache__" -and 
+    $_.Extension -ne ".db" -and 
+    $_.Name -ne "config.toml" 
+}
+foreach ($Item in $ItemsToCopy) {
+    Copy-Item -Path $Item.FullName -Destination $InstallDir -Recurse -Force
+}
 
 # 5. Setup Virtual Environment
 Set-Location $InstallDir
@@ -62,6 +72,7 @@ Write-Host "🔨 Creating executable wrapper..." -ForegroundColor Blue
 $BatchContent = @"
 @echo off
 set "WUGONG_CONFIG=$ConfigFile"
+set "PYTHONPATH=$InstallDir;%PYTHONPATH%"
 "$InstallDir\.venv\Scripts\python.exe" "$InstallDir\cli.py" %*
 "@
 $BatchContent | Out-File -FilePath (Join-Path $InstallDir "wugong.bat") -Encoding ascii

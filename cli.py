@@ -82,8 +82,8 @@ def main():
             console.print(f"[red]Error: Account '{args.account}' not found.[/red]")
             return
 
-        # Always show "default" for the first account
-        account_name = "default" if account == manager.accounts[0] else account.get("friendly_name", "account")
+        # Use the actual friendly name
+        account_name = account.get("friendly_name") or "default"
         password = ""
         if manager.encryption_enabled:
             password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
