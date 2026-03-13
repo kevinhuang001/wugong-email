@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.4] - 2026-03-13
+
+### Changed
+- **Init Re-run Guidance**: Added informative messages when running `wugong init` on an already initialized system. It now advises users to reinstall if they need to change the master password, while allowing them to update the sync interval.
+- **Improved Scheduling**: Setting the sync interval to `0` now correctly removes the scheduled task from Crontab (macOS/Linux) or Task Scheduler (Windows), effectively disabling auto-sync.
+
 ## [1.9.3] - 2026-03-13
 
 ### Changed

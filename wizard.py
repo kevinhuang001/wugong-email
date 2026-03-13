@@ -204,15 +204,9 @@ def test_imap_connection(imap_server, imap_port, username, password=None, access
 
 def setup_scheduling(interval_minutes):
     """Sets up a periodic sync task using Cron (Unix) or Task Scheduler (Windows)."""
-    if interval_minutes <= 0:
-        print("Sync interval must be greater than 0. Skipping scheduling.")
-        return False
-
     system = platform.system()
     
     # Get absolute path to wugong executable
-    # If running from source, it's current dir/wugong
-    # If installed, it's ~/.wugong/wugong
     home = os.path.expanduser("~")
     wugong_installed = os.path.join(home, ".wugong", "wugong")
     wugong_local = os.path.join(os.getcwd(), "wugong")
@@ -222,18 +216,25 @@ def setup_scheduling(interval_minutes):
     elif os.path.exists(wugong_local):
         wugong_exe = wugong_local
     else:
-        # Fallback to just 'wugong' if it's in PATH
         wugong_exe = "wugong"
 
     try:
         if system == "Windows":
             # Windows Task Scheduler
-            # schtasks /create /sc minute /mo <interval> /tn "WugongSync" /tr "wugong sync all" /f
-            # Use wugong.bat for Windows
             wugong_bat = wugong_exe.replace("wugong", "wugong.bat")
             if not os.path.exists(wugong_bat):
                 wugong_bat = "wugong.bat"
             
+            if interval_minutes <= 0:
+                # Disable scheduling: delete the task
+                try:
+                    subprocess.run(["schtasks", "/delete", "/tn", "WugongSync", "/f"], check=True, capture_output=True)
+                    print("✅ Auto-sync disabled (Task Scheduler entry removed).")
+                except subprocess.CalledProcessError:
+                    # Task might not exist, that's fine
+                    pass
+                return True
+
             cmd = [
                 "schtasks", "/create", "/sc", "minute", "/mo", str(interval_minutes),
                 "/tn", "WugongSync", "/tr", f'"{wugong_bat}" sync all --limit 20', "/f"
@@ -242,9 +243,6 @@ def setup_scheduling(interval_minutes):
             print(f"✅ Scheduled sync every {interval_minutes} minutes via Task Scheduler.")
         else:
             # Unix-like (macOS/Linux) Cron
-            # Add line to crontab: */interval * * * * /path/to/wugong sync all --limit 20
-            cron_job = f"*/{interval_minutes} * * * * {wugong_exe} sync all --limit 20 > /dev/null 2>&1"
-            
             # Read existing crontab
             try:
                 current_cron = subprocess.check_output(["crontab", "-l"], stderr=subprocess.STDOUT).decode()
@@ -253,8 +251,14 @@ def setup_scheduling(interval_minutes):
             
             # Remove old Wugong sync jobs
             lines = [line for line in current_cron.splitlines() if "wugong sync all" not in line]
-            # Add new job
-            lines.append(cron_job)
+            
+            if interval_minutes > 0:
+                # Add new job
+                cron_job = f"*/{interval_minutes} * * * * {wugong_exe} sync all --limit 20 > /dev/null 2>&1"
+                lines.append(cron_job)
+                print(f"✅ Scheduled sync every {interval_minutes} minutes via Crontab.")
+            else:
+                print("✅ Auto-sync disabled (Crontab entry removed).")
             
             # Write back
             new_cron = "\n".join(lines) + "\n"
@@ -265,7 +269,6 @@ def setup_scheduling(interval_minutes):
                 print(f"❌ Error setting up crontab: {stderr.decode()}")
                 return False
             
-            print(f"✅ Scheduled sync every {interval_minutes} minutes via Crontab.")
         return True
     except Exception as e:
         print(f"❌ Failed to setup scheduling: {e}")
@@ -278,6 +281,15 @@ def init_wizard():
         
         config_path = config.get_config_path()
         current_config = config.load_config(config_path)
+        
+        # Check if already initialized
+        if current_config.get("general", {}).get("salt"):
+            print("\nℹ️  Wugong is already initialized.")
+            print("⚠️  Warning: If you need to change your master password, please uninstall and reinstall Wugong.")
+            print("💡 You can re-run this wizard to modify the sync interval.")
+            
+            if not questionary.confirm("Do you want to continue to modify settings (like sync interval)?").ask():
+                return False, None
         
         # 1. Encryption Setup
         encrypt_creds = questionary.confirm("Enable credential encryption? (Highly Recommended)", default=True).ask()
