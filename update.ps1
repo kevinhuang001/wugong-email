@@ -134,3 +134,26 @@ if ($TempDir) { Remove-Item -Recurse -Force $TempDir }
 
 Write-Host "`n🎉 Wugong Email has been updated successfully!" -ForegroundColor Green
 Write-Host "--------------------------------------------------"
+
+# Show the latest changelog
+$ChangelogPath = Join-Path $InstallDir "CHANGELOG.md"
+if (Test-Path $ChangelogPath) {
+    Write-Host "📄 What's new in this version:" -ForegroundColor Blue
+    $Content = Get-Content $ChangelogPath
+    $LatestBlock = @()
+    $Started = $false
+    $Count = 0
+    foreach ($Line in $Content) {
+        if ($Line -match "^## \[") {
+            if ($Started) { break }
+            $Started = $true
+        }
+        if ($Started) {
+            $LatestBlock += $Line
+            $Count++
+            if ($Count -ge 30) { break }
+        }
+    }
+    $LatestBlock | Out-Host
+    Write-Host "--------------------------------------------------"
+}

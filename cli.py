@@ -11,7 +11,7 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 from mail import MailManager
-from wizard import run_wizard, run_init
+from wizard import account_add_wizard, init_wizard
 
 console = Console()
 
@@ -272,9 +272,9 @@ def handle_init(args, manager):
         # On Unix, crontab doesn't need root, but it's good to mention if they want system-wide (though we don't do that)
         pass
 
-    should_add_account = run_init()
+    should_add_account = init_wizard()
     if should_add_account:
-        run_wizard()
+        account_add_wizard()
 
 def handle_account(args, manager, account_parser):
     match args.account_command:
@@ -299,7 +299,7 @@ def handle_account(args, manager, account_parser):
             console.print(table)
             
         case "add":
-            run_wizard()
+            account_add_wizard()
             # After adding accounts, reload manager and ask if user wants to sync now
             manager = MailManager()
             if manager.accounts:

@@ -271,7 +271,7 @@ def setup_scheduling(interval_minutes):
         print(f"❌ Failed to setup scheduling: {e}")
         return False
 
-def run_init():
+def init_wizard():
     """Initializes the configuration, sets up encryption, and schedules periodic sync."""
     try:
         print("\n=== Wugong Email Initialization ===")
@@ -339,7 +339,7 @@ def run_init():
         print(f"\n❌ Error during initialization: {e}")
         return False
 
-def run_wizard():
+def account_add_wizard():
     try:
         print("=== Email Configuration Wizard ===")
         
@@ -362,7 +362,7 @@ def run_wizard():
         # 2. Setup/Verify encryption
         if first_use or "encryption_enabled" not in current_config.get("general", {}):
             print("\nInitialization required.")
-            should_continue = run_init()
+            should_continue = init_wizard()
             if not should_continue:
                 return # User cancelled or just wanted to init
             

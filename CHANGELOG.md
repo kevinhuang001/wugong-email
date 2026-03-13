@@ -2,6 +2,49 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.1] - 2026-03-13
+
+### Changed
+- **Internal Refactoring**: Renamed internal wizard functions for better clarity: `run_wizard` -> `account_add_wizard`, `run_init` -> `init_wizard`.
+- **Improved Update Experience**: The `upgrade` command now displays the latest changelog after a successful update.
+
+## [1.8.0] - 2026-03-13
+
+### Added
+- **Initialization Command**: Introduced `wugong init` to set up master encryption and sync schedules.
+- **Cross-Platform Scheduling**: 
+    - **Linux/macOS**: Automatic `crontab` integration for background syncing.
+    - **Windows**: Automatic `Task Scheduler` (schtasks) integration.
+- **Background Sync Optimization**: Added TTY detection to hide progress bars and skip password prompts during non-interactive background syncs.
+- **Configurable Sync Interval**: Users can now set and modify the sync interval (in minutes) via `wugong init` or `config.toml`.
+
+### Changed
+- **Forced Initialization**: `account add` now requires a one-time initialization if not already performed.
+
+## [1.7.0] - 2026-03-13
+
+### Added
+- **Email Deletion**: New `wugong delete` command to remove emails from both server and local cache.
+- **Offline Deletion Queue**: Deletions made while offline are queued and automatically synced during the next `sync` or `list` operation.
+- **Full Metadata Sync**: The `sync` command now performs a full, unlimited metadata sync (UIDs, headers) by default.
+- **Cross-Client Sync**: Automatically detects and removes locally cached emails that were deleted on other clients.
+- **Progress Bar**: Integrated `rich.progress` for real-time, single-line refresh progress bars during sync operations.
+
+### Changed
+- **Optimized List/Sync Defaults**: `wugong list` now defaults to 10 emails, while `sync` defaults to unlimited metadata sync.
+- **Enhanced Read Caching**: Email content is now cached locally after the first read for instant subsequent access.
+
+## [1.6.1] - 2026-03-13
+
+### Fixed
+- **Self-Update Stability**: Fixed a critical Bash syntax error (`unexpected EOF`) during `wugong upgrade` by wrapping the update script in a block to prevent partial execution during file replacement.
+
+## [1.2.1] - 2026-03-13
+
+### Added
+- **Version Display**: `wugong upgrade` now shows current vs. latest version comparison.
+- **UID-Based Sync**: Improved sync reliability by switching to full UID set comparison for cache invalidation.
+
 ## [1.1.6] - 2026-03-13
 
 ### Fixed
