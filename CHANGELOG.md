@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.15] - 2026-03-13
+
+### Changed
+- **Progress Display**: Unified the progress bar display for all sync operations. Both initial sync (after adding an account) and regular sync commands now show a consistent progress bar with a spinner and task description.
+
 ## [1.9.14] - 2026-03-13
 
 ### Changed

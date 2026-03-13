@@ -358,9 +358,26 @@ def handle_account(args, manager, account_parser):
 
                     for acc in manager.accounts:
                         account_name = acc.get("friendly_name")
-                        with console.status(f"[bold green]Initial sync for {account_name}...") as status:
+                        with Progress(
+                            SpinnerColumn(),
+                            TextColumn("[progress.description]{task.description}"),
+                            BarColumn(),
+                            TaskProgressColumn(),
+                            TimeRemainingColumn(),
+                            console=console,
+                            transient=True,
+                            disable=not sys.stdin.isatty()
+                        ) as progress:
+                            sync_task = progress.add_task(f"[green]Initial sync for {account_name}...", total=None)
+                            
+                            def update_progress(current, total, description=None):
+                                if total:
+                                    progress.update(sync_task, total=total, completed=current, description=f"[green]Initial sync for {account_name}: {description or ''}")
+                                else:
+                                    progress.update(sync_task, description=f"[green]Initial sync for {account_name}: {description or ''}")
+
                             try:
-                                manager.reader.fetch_emails(acc, password, is_initial_sync=True)
+                                manager.reader.fetch_emails(acc, password, is_initial_sync=True, progress_callback=update_progress)
                                 console.print(f"[green]✅ {account_name}: Initial sync complete.[/green]")
                             except Exception as e:
                                 console.print(f"[red]❌ Error syncing {account_name}: {e}[/red]")
