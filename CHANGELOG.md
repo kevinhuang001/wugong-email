@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.23] - 2026-03-13
+
+### Fixed
+- **CLI Read Bug**: Fixed a `NameError: name 'Panel' is not defined` when reading HTML-only emails by adding the missing `Panel` import from `rich`.
+
 ## [1.9.22] - 2026-03-13
 
 ### Changed

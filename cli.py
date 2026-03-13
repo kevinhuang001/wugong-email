@@ -8,8 +8,8 @@ from datetime import datetime
 from email.utils import parsedate_to_datetime
 from rich.console import Console
 from rich.table import Table
-from rich.console import Console
 from rich.markdown import Markdown
+from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 from mail import MailManager
 from wizard import account_add_wizard, init_wizard, configure_wizard
