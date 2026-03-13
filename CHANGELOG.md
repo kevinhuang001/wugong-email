@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.25] - 2026-03-13
+
+### Fixed
+- **PowerShell Scripts**: Fixed an issue where `install.ps1` and `update.ps1` would fail with an empty path error when executed via `iex` (Invoke-Expression) because `$PSScriptRoot` is not available in that context.
+
 ## [1.9.24] - 2026-03-13
 
 ### Changed

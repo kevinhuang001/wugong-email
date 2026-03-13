@@ -30,6 +30,8 @@ try {
 
 # 2. Source Directory
 $SourceDir = $PSScriptRoot
+if (-not $SourceDir) { $SourceDir = Get-Location }
+
 if (-not (Test-Path (Join-Path $SourceDir "cli.py")) -or -not (Test-Path (Join-Path $SourceDir "wizard.py"))) {
     Write-Host "📡 Source files not found locally. Cloning from GitHub..." -ForegroundColor Blue
     $TempDir = Join-Path $env:TEMP "wugong_install_$(Get-Random)"

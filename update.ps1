@@ -5,7 +5,7 @@ param (
 # --- Configuration ---
 $InstallDir = Join-Path $Home ".wugong"
 $RepoUrl = "https://github.com/kevinhuang001/wugong-email.git"
-$ScriptDir = Split-Path $MyInvocation.MyCommand.Path -Parent
+$ScriptDir = if ($MyInvocation.MyCommand.Path) { Split-Path $MyInvocation.MyCommand.Path -Parent } else { Get-Location }
 
 if (-not $yes) {
     Write-Host "🔄 Checking for updates for Wugong Email..." -ForegroundColor Blue
