@@ -14,12 +14,6 @@ class StorageManager:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Check if sender_email column exists
-        cursor.execute("PRAGMA table_info(emails)")
-        columns = [column[1] for column in cursor.fetchall()]
-        if "sender_email" not in columns:
-            cursor.execute("ALTER TABLE emails ADD COLUMN sender_email TEXT")
-            
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS emails (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,6 +36,13 @@ class StorageManager:
                 last_uid TEXT
             )
         ''')
+
+        # Check if sender_email column exists (for older databases)
+        cursor.execute("PRAGMA table_info(emails)")
+        columns = [column[1] for column in cursor.fetchall()]
+        if "sender_email" not in columns:
+            cursor.execute("ALTER TABLE emails ADD COLUMN sender_email TEXT")
+            
         conn.commit()
         conn.close()
 
@@ -79,8 +80,14 @@ class StorageManager:
                 subject = encrypt_data(subject, password, self.salt)
             
             cursor.execute('''
-                INSERT OR IGNORE INTO emails (account_name, uid, sender, sender_email, subject, date, seen)
+                INSERT INTO emails (account_name, uid, sender, sender_email, subject, date, seen)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(account_name, uid) DO UPDATE SET
+                    sender = excluded.sender,
+                    sender_email = excluded.sender_email,
+                    subject = excluded.subject,
+                    date = excluded.date,
+                    seen = excluded.seen
             ''', (account_name, em["id"], sender, sender_email, subject, em["date"], 1 if em.get("seen") else 0))
         conn.commit()
         conn.close()
@@ -113,12 +120,21 @@ class StorageManager:
         for row in rows:
             uid, sender, sender_email, subject, date, seen = row
             if self.encrypt_emails and self.encryption_enabled:
-                try:
-                    sender = decrypt_data(sender, password, self.salt)
-                    sender_email = decrypt_data(sender_email, password, self.salt)
-                    subject = decrypt_data(subject, password, self.salt)
-                except:
-                    pass # Or handle error
+                # Decrypt each field individually and safely
+                # Helper to decrypt and return original if fails
+                def safe_decrypt(val):
+                    if not val: return val
+                    # Check if it looks like Fernet encrypted data (starts with gAAAAAB)
+                    if isinstance(val, str) and val.startswith("gAAAAAB"):
+                        try:
+                            return decrypt_data(val, password, self.salt)
+                        except Exception:
+                            return f"[Decryption Failed] {val[:10]}..."
+                    return val
+
+                sender = safe_decrypt(sender)
+                sender_email = safe_decrypt(sender_email)
+                subject = safe_decrypt(subject)
 
             # Basic fuzzy search/filtering in memory if search_criteria provided
             if search_criteria:

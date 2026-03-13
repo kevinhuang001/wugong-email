@@ -40,11 +40,8 @@ class MailReader:
 
             mail.select("INBOX")
             
-            # Incremental fetch based on UID
-            last_uid = sync_info.get("uid", "0")
-            search_query = f'UID {int(last_uid)+1}:*' if last_uid != "0" else "ALL"
-            res, data = mail.uid('search', None, search_query)
-            
+            # Fetch the latest 'limit' UIDs to ensure metadata is up-to-date in cache
+            res, data = mail.uid('search', None, "ALL")
             if res == "OK":
                 uids = data[0].split()
                 # Get the last 'limit' UIDs
@@ -59,27 +56,43 @@ class MailReader:
                         
                         # Improved header decoding for Subject
                         try:
-                            subject = str(make_header(decode_header(msg.get("Subject", "No Subject"))))
+                            # Handle potential None or empty Subject
+                            subject_header = msg.get("Subject")
+                            if subject_header:
+                                subject = str(make_header(decode_header(subject_header)))
+                            else:
+                                subject = "No Subject"
                         except Exception:
                             subject = msg.get("Subject", "No Subject")
                         
                         # Improved header decoding and address parsing for From
                         try:
-                            from_header = str(make_header(decode_header(msg.get("From", "Unknown"))))
+                            from_header_raw = msg.get("From", "Unknown")
+                            from_header = str(make_header(decode_header(from_header_raw)))
                         except Exception:
                             from_header = msg.get("From", "Unknown")
                         
                         name, email_addr = parseaddr(from_header)
-                        # 'from' stores the name or raw header (if no name), 'from_email' stores the actual address
-                        sender_name = name if name else from_header
-                        # If the name is the same as the address, or contains the address, 
-                        # we try to clean it to just the name.
-                        if name and email_addr and email_addr in name:
-                            sender_name = name.replace(f"<{email_addr}>", "").replace(email_addr, "").strip()
+                        
+                        # Clean up the name and email
+                        # 1. If we have a name from parseaddr, use it. Otherwise use the part before < if present.
+                        sender_name = name
+                        if not sender_name:
+                            if "<" in from_header:
+                                sender_name = from_header.split("<")[0].strip()
+                            else:
+                                sender_name = from_header
+                        
+                        # 2. Final cleaning: remove quotes and extra spaces
+                        sender_name = sender_name.replace('"', '').replace("'", "").strip()
+                        
+                        # 3. If it's still just the email or empty, fallback
+                        if not sender_name or sender_name == email_addr:
+                            sender_name = email_addr or from_header
                         
                         new_emails.append({
                             "id": uid.decode(),
-                            "from": sender_name or from_header,
+                            "from": sender_name,
                             "from_email": email_addr,
                             "subject": subject,
                             "date": msg.get("Date"),
@@ -89,10 +102,9 @@ class MailReader:
                 if new_emails:
                     self.storage_manager.save_emails_to_cache(account_name, new_emails, auth_password)
                 
-                # Update sync status (even if no new emails, we update the time)
-                new_last_uid = uids[-1].decode() if uids else last_uid
+                # Update sync status
+                new_last_uid = uids[-1].decode() if uids else sync_info.get("uid", "0")
                 self.storage_manager.update_sync_info(account_name, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), new_last_uid)
-                # Refresh sync_info to get the updated time for the return value
                 sync_info = self.storage_manager.get_last_sync_info(account_name)
 
             mail.close()

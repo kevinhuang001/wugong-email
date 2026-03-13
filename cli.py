@@ -114,13 +114,13 @@ def main():
                 status_str = f"[red](OFFLINE: {sync_error})[/red]" if is_offline and sync_error else ("[red](OFFLINE)[/red]" if is_offline else "[green](ONLINE)[/green]")
                 title += f"\n[dim]Last Sync: {last_sync} {status_str}[/dim]"
 
-                table = Table(title=title, show_lines=False)
-                table.add_column("", justify="center", width=1) # Status column (no header)
-                table.add_column("ID", style="cyan", justify="right")
-                table.add_column("From", style="magenta", width=30)
-                table.add_column("Email", style="blue", width=30)
-                table.add_column("Subject", style="white", overflow="ellipsis")
-                table.add_column("Time", style="green", no_wrap=True)
+                table = Table(title=title, show_lines=False, box=None)
+                table.add_column("", justify="center", width=1) # Status column
+                table.add_column("ID", style="cyan", justify="right", width=6)
+                table.add_column("From", style="magenta", width=20)
+                table.add_column("Email", style="blue", width=25)
+                table.add_column("Subject", style="white", ratio=1) # Use ratio to fill space
+                table.add_column("Time", style="green", width=19)
 
                 for em in emails:
                     # Mark unread with *
