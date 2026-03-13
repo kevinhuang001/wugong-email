@@ -201,6 +201,14 @@ class StorageManager:
         conn.commit()
         conn.close()
 
+    def get_all_cached_uids(self, account_name):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT uid FROM emails WHERE account_name = ?", (account_name,))
+        rows = cursor.fetchall()
+        conn.close()
+        return [row[0] for row in rows]
+
     def add_pending_action(self, account_name, action_type, uid):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()

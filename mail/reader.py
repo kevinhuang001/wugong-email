@@ -57,9 +57,18 @@ class MailReader:
             # Fetch the latest UIDs to ensure metadata is up-to-date in cache
             res, data = mail.uid('search', None, "ALL")
             if res == "OK":
-                uids = data[0].split()
+                uids_raw = data[0].split()
+                server_uids = {uid.decode() for uid in uids_raw}
+                
+                # Handle deletions from other clients
+                cached_uids = self.storage_manager.get_all_cached_uids(account_name)
+                for cached_uid in cached_uids:
+                    if cached_uid not in server_uids:
+                        # Email was deleted on another client
+                        self.storage_manager.delete_email_from_cache(account_name, cached_uid)
+                
                 # Get the last 'fetch_limit' UIDs
-                latest_uids = uids[-fetch_limit:] if len(uids) > fetch_limit else uids
+                latest_uids = uids_raw[-fetch_limit:] if len(uids_raw) > fetch_limit else uids_raw
                 
                 fetched_emails = []
                 for uid in reversed(latest_uids):
@@ -119,7 +128,7 @@ class MailReader:
                     newly_fetched_emails = [e for e in fetched_emails if e["id"] in new_uids]
                 
                 # Update sync status
-                new_last_uid = uids[-1].decode() if uids else sync_info.get("uid", "0")
+                new_last_uid = uids_raw[-1].decode() if uids_raw else sync_info.get("uid", "0")
                 self.storage_manager.update_sync_info(account_name, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), new_last_uid)
                 sync_info = self.storage_manager.get_last_sync_info(account_name)
 
