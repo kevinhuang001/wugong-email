@@ -218,6 +218,9 @@ def setup_scheduling(interval_minutes):
     else:
         wugong_exe = "wugong"
 
+    # Define log file path
+    log_file = os.path.join(home, ".wugong", "sync.log")
+
     try:
         if system == "Windows":
             # Windows Task Scheduler
@@ -235,12 +238,18 @@ def setup_scheduling(interval_minutes):
                     pass
                 return True
 
+            # Windows redirection uses >> and 2>&1
+            # Note: Task Scheduler /tr command has some limitations with redirections directly.
+            # Usually, it's better to wrap it in a cmd /c
+            task_command = f'cmd /c "{wugong_bat} sync all --limit 20 >> \\"{log_file}\\" 2>&1"'
+            
             cmd = [
                 "schtasks", "/create", "/sc", "minute", "/mo", str(interval_minutes),
-                "/tn", "WugongSync", "/tr", f'"{wugong_bat}" sync all --limit 20', "/f"
+                "/tn", "WugongSync", "/tr", task_command, "/f"
             ]
             subprocess.run(cmd, check=True, capture_output=True)
             print(f"✅ Scheduled sync every {interval_minutes} minutes via Task Scheduler.")
+            print(f"ℹ️  Logs will be saved to: {log_file}")
         else:
             # Unix-like (macOS/Linux) Cron
             # Read existing crontab
@@ -253,10 +262,11 @@ def setup_scheduling(interval_minutes):
             lines = [line for line in current_cron.splitlines() if "wugong sync all" not in line]
             
             if interval_minutes > 0:
-                # Add new job
-                cron_job = f"*/{interval_minutes} * * * * {wugong_exe} sync all --limit 20 > /dev/null 2>&1"
+                # Add new job with log redirection
+                cron_job = f"*/{interval_minutes} * * * * {wugong_exe} sync all --limit 20 >> {log_file} 2>&1"
                 lines.append(cron_job)
                 print(f"✅ Scheduled sync every {interval_minutes} minutes via Crontab.")
+                print(f"ℹ️  Logs will be saved to: {log_file}")
             else:
                 print("✅ Auto-sync disabled (Crontab entry removed).")
             

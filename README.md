@@ -174,6 +174,19 @@ Maintenance is now integrated directly into the `wugong` command:
 
 ---
 
-## � Directory Structure
+## 📝 Logging
+
+Wugong Email logs its background synchronization activities to help you monitor and troubleshoot the periodic sync task.
+
+- **Sync Log Location**: `~/.wugong/sync.log` (or `%USERPROFILE%\.wugong\sync.log` on Windows)
+- **What's logged**: Success/failure status of background syncs, number of new emails found, and any errors encountered during the process.
+
+You can view the logs in real-time using:
+- **macOS/Linux**: `tail -f ~/.wugong/sync.log`
+- **Windows (PowerShell)**: `Get-Content "$HOME\.wugong\sync.log" -Wait`
+
+---
+
+## 📁 Directory Structure
 - **Executable Binaries**: `~/.wugong/` (Source code and virtual environment)
 - **Configuration**: `~/.config/wugong/config.toml` (Overrideable via `WUGONG_CONFIG` environment variable)

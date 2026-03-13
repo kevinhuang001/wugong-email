@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.6] - 2026-03-13
+
+### Added
+- **Background Sync Logging**: Background synchronization tasks now redirect their output to a log file located at `~/.wugong/sync.log` (Unix/macOS) or `%USERPROFILE%\.wugong\sync.log` (Windows). This allows users to easily track the status and troubleshoot periodic syncs.
+- **Log Visibility in README**: Updated the documentation to include details on the log file location and how to monitor logs in real-time across different operating systems.
+
 ## [1.9.5] - 2026-03-13
 
 ### Added
