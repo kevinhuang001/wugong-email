@@ -45,14 +45,13 @@ mkdir -p "$INSTALL_DIR"
 mkdir -p "$CONFIG_DIR"
 
 # 4. Copy Files
-echo -e "${BLUE}📦 Copying all project files to $INSTALL_DIR...${NC}"
-# Use rsync if available, otherwise fallback to cp
-if command -v rsync &> /dev/null; then
-    rsync -av --exclude='.git' --exclude='.venv' --exclude='__pycache__' "$SOURCE_DIR/" "$INSTALL_DIR/"
-else
-    cp -R "$SOURCE_DIR"/* "$INSTALL_DIR/"
-    rm -rf "$INSTALL_DIR/.git" "$INSTALL_DIR/.venv" "$INSTALL_DIR/__pycache__" 2>/dev/null
-fi
+echo -e "${BLUE}📦 Copying files...${NC}"
+# Custom sync: copy only project files, no rsync dependency
+for file in "$SOURCE_DIR"/*.py "$SOURCE_DIR"/*.sh "$SOURCE_DIR"/requirements.txt "$SOURCE_DIR"/README.md "$SOURCE_DIR"/.gitignore; do
+    if [ -f "$file" ]; then
+        cp "$file" "$INSTALL_DIR/"
+    fi
+done
 
 # 5. Setup Virtual Environment and Install Dependencies
 cd "$INSTALL_DIR" || exit

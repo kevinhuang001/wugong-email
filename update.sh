@@ -61,36 +61,35 @@ fi
 
 # 4. Update Installation
 if [ -d "$INSTALL_DIR" ]; then
-    echo -e "${BLUE}📦 Updating all files in $INSTALL_DIR...${NC}"
-    # Sync all files from source to install directory, excluding hidden git files and the update script itself
-    # We exclude update.sh to avoid shell confusion while the script is running
-    rsync -av --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='update.sh' "$SOURCE_DIR/" "$INSTALL_DIR/" || {
-        echo -e "${YELLOW}⚠️  rsync not found, falling back to cp...${NC}"
-        # When using cp, we can't easily exclude just one file, so we copy everything
-        # This might still cause the "unexpected EOF" warning but the update will have finished
-        cp -R "$SOURCE_DIR"/* "$INSTALL_DIR/"
-        # Cleanup some common exclusions if we had to use cp
-        rm -rf "$INSTALL_DIR/.git" "$INSTALL_DIR/.venv" "$INSTALL_DIR/__pycache__" 2>/dev/null
-    }
+    echo -e "${BLUE}📦 Updating files...${NC}"
+    
+    # Custom sync logic: copy files individually to avoid rsync dependency and be cleaner
+    # We copy all .py files, scripts, and requirements
+    for file in "$SOURCE_DIR"/*.py "$SOURCE_DIR"/*.sh "$SOURCE_DIR"/requirements.txt "$SOURCE_DIR"/README.md "$SOURCE_DIR"/.gitignore; do
+        if [ -f "$file" ]; then
+            filename=$(basename "$file")
+            # Skip updating itself while running to avoid shell confusion, update at the end
+            if [ "$filename" != "update.sh" ]; then
+                cp "$file" "$INSTALL_DIR/$filename"
+            fi
+        fi
+    done
 
     # Update dependencies
     cd "$INSTALL_DIR" || exit
     if [ -d ".venv" ]; then
-        source .venv/bin/activate
+        source .venv/bin/activate &>/dev/null
         if command -v uv &> /dev/null; then
-            echo -e "${GREEN}✨ Using uv to update dependencies...${NC}"
-            uv pip install -r requirements.txt
+            uv pip install -r requirements.txt &>/dev/null
         else
-            echo -e "${BLUE}🐍 Using pip to update dependencies...${NC}"
-            pip install -r requirements.txt
+            pip install -r requirements.txt &>/dev/null
         fi
     fi
     
     # Finally, update the update script itself
-    # We do this as the last step to minimize shell confusion
     cp "$SOURCE_DIR/update.sh" "$INSTALL_DIR/update.sh"
     
-    echo -e "${GREEN}✅ Installation updated.${NC}"
+    echo -e "${GREEN}✅ Update completed.${NC}"
 else
     echo -e "${YELLOW}ℹ️  Installation directory $INSTALL_DIR not found, update only applied to source.${NC}"
 fi

@@ -305,5 +305,27 @@ def main():
             except Exception as e:
                 console.print(f"[red]Error: {e}[/red]")
 
+    elif args.command == "update":
+        import os
+        import subprocess
+        install_dir = os.path.expanduser("~/.wugong")
+        script_path = os.path.join(install_dir, "update.sh")
+        if os.name == 'nt':
+            script_path = os.path.join(install_dir, "update.ps1")
+            subprocess.run(["powershell", "-ExecutionPolicy", "Bypass", "-File", script_path])
+        else:
+            subprocess.run(["bash", script_path])
+
+    elif args.command == "uninstall":
+        import os
+        import subprocess
+        install_dir = os.path.expanduser("~/.wugong")
+        script_path = os.path.join(install_dir, "uninstall.sh")
+        if os.name == 'nt':
+            script_path = os.path.join(install_dir, "uninstall.ps1")
+            subprocess.run(["powershell", "-ExecutionPolicy", "Bypass", "-File", script_path])
+        else:
+            subprocess.run(["bash", script_path])
+
 if __name__ == "__main__":
     main()
