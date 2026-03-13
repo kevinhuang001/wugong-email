@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.2] - 2026-03-13
+
+### Fixed
+- Improved HTML text extraction to correctly filter out `<style>` and `<script>` tag content, ensuring cleaner plain-text output.
+
 ## [1.0.1] - 2026-03-13
 
 ### Fixed

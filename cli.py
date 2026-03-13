@@ -233,11 +233,13 @@ def main():
                         ).ask()
                         
                         if choice == "Extract text (may be incomplete, sentences might run together)":
-                            # Basic HTML stripping
-                            text = re.sub(r'<[^<]+?>', '', html_content)
+                            # Remove <style> and <script> tags and their content
+                            text = re.sub(r'<(style|script)[^>]*>.*?</\1>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+                            # Basic HTML stripping for remaining tags
+                            text = re.sub(r'<[^<]+?>', '', text)
                             # Replace multiple newlines, using raw strings to avoid SyntaxWarning
                             text = re.sub(r'\n\s*\n', '\n\n', text)
-                            content = f"[Note: This content is text extracted from HTML]\n\n{text}"
+                            content = f"[Note: This content is text extracted from HTML]\n\n{text.strip()}"
                         elif choice == "View raw HTML code":
                             content = html_content
                         else:
