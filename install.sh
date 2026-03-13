@@ -35,7 +35,7 @@ if [ -f "cli.py" ] && [ -f "wizard.py" ]; then
 else
     echo -e "${BLUE}📡 Source files not found locally. Cloning from GitHub...${NC}"
     TEMP_DIR=$(mktemp -d)
-    git clone --depth 1 "$REPO_URL" "$TEMP_DIR" || { echo -e "${RED}❌ Error: Failed to clone repository.${NC}"; exit 1; }
+    git clone --quiet --depth 1 "$REPO_URL" "$TEMP_DIR" || { echo -e "${RED}❌ Error: Failed to clone repository.${NC}"; exit 1; }
     SOURCE_DIR="$TEMP_DIR"
 fi
 
@@ -71,13 +71,13 @@ if command -v uv &> /dev/null; then
     echo -e "${GREEN}✨ uv found! Using uv for faster installation...${NC}"
     uv venv &> /dev/null
     source .venv/bin/activate
-    uv pip install -r requirements.txt
+    uv pip install --quiet -r requirements.txt
 else
     echo -e "${BLUE}🐍 uv not found, using standard venv and pip...${NC}"
     python3 -m venv .venv
     source .venv/bin/activate
-    pip install --upgrade pip
-    pip install -r requirements.txt
+    pip install --quiet --upgrade pip
+    pip install --quiet -r requirements.txt
 fi
 
 # 6. Create Wrapper Scripts

@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.3] - 2026-03-13
+
+### Changed
+- **Clean Installation**: Optimized `install.sh` and `install.ps1` to suppress verbose output from `git`, `pip`, and `uv`. The installation process is now much cleaner and focuses on key status updates.
+
 ## [1.9.2] - 2026-03-13
 
 ### Changed

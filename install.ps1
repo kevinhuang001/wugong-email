@@ -34,7 +34,7 @@ if (-not (Test-Path (Join-Path $SourceDir "cli.py")) -or -not (Test-Path (Join-P
     Write-Host "📡 Source files not found locally. Cloning from GitHub..." -ForegroundColor Blue
     $TempDir = Join-Path $env:TEMP "wugong_install_$(Get-Random)"
     New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
-    git clone --depth 1 $RepoUrl $TempDir
+    git clone --quiet --depth 1 $RepoUrl $TempDir
     $SourceDir = $TempDir
 } else {
     Write-Host "📂 Local source files found. Using current directory." -ForegroundColor Blue
@@ -64,8 +64,8 @@ foreach ($Item in $ItemsToCopy) {
 Set-Location $InstallDir
 Write-Host "🐍 Setting up virtual environment..." -ForegroundColor Blue
 python -m venv .venv
-& "$InstallDir\.venv\Scripts\python.exe" -m pip install --upgrade pip
-& "$InstallDir\.venv\Scripts\pip.exe" install -r requirements.txt
+& "$InstallDir\.venv\Scripts\python.exe" -m pip install --quiet --upgrade pip
+& "$InstallDir\.venv\Scripts\pip.exe" install --quiet -r requirements.txt
 
 # 6. Setup Wrapper Scripts
 Write-Host "🔨 Setting up executable wrapper..." -ForegroundColor Blue
