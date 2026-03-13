@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.17] - 2026-03-13
+
+### Changed
+- **Sync Progress Accuracy**: The sync progress bar now correctly reflects the total number of emails being synchronized (including those already cached), ensuring the total matches the requested limit.
+- **Status Syncing**: The `sync` command now checks and updates the 'read/unread' (`\Seen`) status for already cached emails, addressing cases where an email's status was modified on the server.
+- **Performance Optimization**: Status checking for cached emails is performed in bulk to maintain high sync speed.
+
 ## [1.9.16] - 2026-03-13
 
 ### Changed

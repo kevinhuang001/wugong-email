@@ -1,11 +1,11 @@
 import imaplib
 import email
-import re
 from email.header import decode_header, make_header
 from email.utils import parseaddr
 from datetime import datetime
+import re
 
-class MailReader:
+class EmailReader:
     def __init__(self, auth_manager, storage_manager, config, save_config_callback):
         self.auth_manager = auth_manager
         self.storage_manager = storage_manager
@@ -85,43 +85,73 @@ class MailReader:
                             if cached_uid not in server_uids:
                                 self.storage_manager.delete_email_from_cache(account_name, cached_uid)
                     
-                    # 4. Identify truly NEW emails that are not in cache
-                    cached_uids_set = set(self.storage_manager.get_all_cached_uids(account_name))
-                    
+                    # 4. Identify UIDs to process (sync)
                     if is_initial_sync:
-                        init_limit = account.get("initial_sync_limit")
-                        if init_limit is None:
-                            init_limit = self.config.get("general", {}).get("initial_sync_limit", 20)
-                        
+                        init_limit = limit if limit != 20 else account.get("initial_sync_limit", 20)
                         if init_limit == -1:
-                            new_uids_to_fetch = [uid for uid in uids_raw if uid.decode() not in cached_uids_set]
+                            uids_to_process = uids_raw
                         else:
-                            potential_uids = uids_raw[-init_limit:] if len(uids_raw) > init_limit else uids_raw
-                            new_uids_to_fetch = [uid for uid in potential_uids if uid.decode() not in cached_uids_set]
+                            uids_to_process = uids_raw[-init_limit:] if len(uids_raw) > init_limit else uids_raw
                     elif limit > 0 and not search_criteria:
                         # User specified a specific limit of recent emails for sync
-                        potential_uids = uids_raw[-limit:] if len(uids_raw) > limit else uids_raw
-                        new_uids_to_fetch = [uid for uid in potential_uids if uid.decode() not in cached_uids_set]
+                        uids_to_process = uids_raw[-limit:] if len(uids_raw) > limit else uids_raw
                     else:
-                        new_uids_to_fetch = [uid for uid in uids_raw if uid.decode() not in cached_uids_set]
+                        # Incremental or other sync
+                        uids_to_process = uids_raw
                     
-                    # 5. Fetch Full Emails for NEW emails
-                    if new_uids_to_fetch:
-                        total_to_fetch = len(new_uids_to_fetch)
-                        for i, uid in enumerate(reversed(new_uids_to_fetch)):
-                            if progress_callback:
-                                progress_callback(i + 1, total_to_fetch, f"Fetching {i+1}/{total_to_fetch}...")
-                            
-                            uid_str = uid.decode()
-                            res, msg_data = mail.uid('fetch', uid, '(RFC822)')
+                    if uids_to_process:
+                        total_uids = len(uids_to_process)
+                        uids_to_process_decoded = [uid.decode() for uid in uids_to_process]
+                        
+                        # Get cached statuses for comparison
+                        cached_statuses = self.storage_manager.get_cached_statuses(account_name, uids_to_process_decoded)
+                        
+                        # Fetch current FLAGS for all UIDs to process in batches
+                        server_statuses = {}
+                        batch_size = 500
+                        for i in range(0, len(uids_to_process), batch_size):
+                            batch = uids_to_process[i:i + batch_size]
+                            uids_str = ",".join([uid.decode() for uid in batch])
+                            res, data = mail.uid('fetch', uids_str, '(FLAGS)')
                             if res == "OK":
-                                raw_msg = msg_data[0][1]
-                                msg = email.message_from_bytes(raw_msg)
-                                parsed = self._parse_email(uid_str, msg, msg_data[0][0])
-                                newly_fetched_emails.append(parsed)
-                    
-                    if newly_fetched_emails:
-                        self.storage_manager.save_emails_to_cache(account_name, newly_fetched_emails, auth_password)
+                                for item in data:
+                                    if isinstance(item, tuple):
+                                        resp_text = item[0].decode()
+                                        uid_match = re.search(r'UID (\d+)', resp_text)
+                                        if uid_match:
+                                            uid = uid_match.group(1)
+                                            is_seen = '\\Seen' in resp_text
+                                            server_statuses[uid] = is_seen
+
+                        # Now iterate and sync (reversed for latest first)
+                        for i, uid_bin in enumerate(reversed(uids_to_process)):
+                            uid_str = uid_bin.decode()
+                            server_seen = server_statuses.get(uid_str, False)
+                            
+                            if progress_callback:
+                                msg = f"Syncing {i+1}/{total_uids}..."
+                                progress_callback(i + 1, total_uids, msg)
+
+                            if uid_str in cached_statuses:
+                                # Email is in cache, check if status changed
+                                if server_seen != cached_statuses[uid_str]:
+                                    self.storage_manager.update_seen_status(account_name, uid_str, server_seen)
+                            else:
+                                # Email is NOT in cache, fetch full content
+                                res, msg_data = mail.uid('fetch', uid_bin, '(RFC822)')
+                                if res == "OK" and msg_data[0]:
+                                    raw_msg = msg_data[0][1]
+                                    msg = email.message_from_bytes(raw_msg)
+                                    # Use the seen status we already fetched to avoid another fetch
+                                    status_data = f"(FLAGS ({'\\Seen' if server_seen else ''}))"
+                                    parsed = self._parse_email(uid_str, msg, status_data)
+                                    newly_fetched_emails.append(parsed)
+                                    
+                                    # Save to cache immediately if needed, or batch it
+                                    # For now we'll collect and save at the end as before
+                        
+                        if newly_fetched_emails:
+                            self.storage_manager.save_emails_to_cache(account_name, newly_fetched_emails, auth_password)
                     
                     # 6. Update sync status
                     new_last_uid = uids_raw[-1].decode() if uids_raw else sync_info.get("uid", "0")

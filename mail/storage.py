@@ -250,9 +250,43 @@ class StorageManager:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute("SELECT uid FROM emails WHERE account_name = ?", (account_name,))
-        rows = cursor.fetchall()
+        uids = [row[0] for row in cursor.fetchall()]
         conn.close()
-        return [row[0] for row in rows]
+        return uids
+
+    def get_cached_statuses(self, account_name, uids):
+        """Returns a dict of {uid: seen_bool} for the given UIDs."""
+        if not uids:
+            return {}
+        
+        results = {}
+        # Batch to avoid SQLite parameter limit
+        batch_size = 900
+        for i in range(0, len(uids), batch_size):
+            batch = uids[i:i + batch_size]
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            placeholders = ', '.join(['?'] * len(batch))
+            cursor.execute(f'''
+                SELECT uid, seen FROM emails 
+                WHERE account_name = ? AND uid IN ({placeholders})
+            ''', (account_name, *batch))
+            rows = cursor.fetchall()
+            conn.close()
+            for row in rows:
+                results[row[0]] = bool(row[1])
+        return results
+
+    def update_seen_status(self, account_name, uid, seen):
+        """Updates only the seen status of a cached email."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE emails SET seen = ? 
+            WHERE account_name = ? AND uid = ?
+        ''', (1 if seen else 0, account_name, uid))
+        conn.commit()
+        conn.close()
 
     def add_pending_action(self, account_name, action_type, uid):
         conn = sqlite3.connect(self.db_path)
