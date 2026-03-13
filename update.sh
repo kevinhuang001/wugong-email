@@ -152,14 +152,5 @@ if [ -n "$TEMP_DIR" ]; then
 fi
 
 echo -e "\n${GREEN}🎉 Wugong Email has been updated successfully!${NC}"
-    echo -e "--------------------------------------------------"
-    
-    # Show the latest changelog
-    if [ -f "$INSTALL_DIR/CHANGELOG.md" ]; then
-        echo -e "${BLUE}📄 What's new in this version:${NC}"
-        # Extract the first version block from CHANGELOG.md
-        sed -n '/^## \[/,/^## \[/ { /^## \[/ { h; d; }; p; }' "$INSTALL_DIR/CHANGELOG.md" | sed '$d' | head -n 30
-        echo -e "--------------------------------------------------"
-    fi
     exit 0
 }

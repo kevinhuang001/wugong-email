@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.6] - 2026-03-13
+
+### Changed
+- **Update UX**: Removed changelog display from update scripts after successful update. Changelog is now only shown before confirmation.
+
 ## [1.8.5] - 2026-03-13
 
 ### Changed
