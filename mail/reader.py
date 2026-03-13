@@ -20,13 +20,16 @@ class MailReader:
         
         # Determine sync range
         # Default to a larger fetch_limit to ensure we capture most recent emails and detect deletions
-        # If limit is small (like 10), we still fetch more UIDs to detect remote deletions effectively.
-        fetch_limit = max(limit, 100) 
+        # If limit is 0, it means unlimited sync.
+        if limit == 0:
+            fetch_limit = 10000 # Effectively "unlimited" for metadata sync
+        else:
+            fetch_limit = max(limit, 100) 
         
         # Check if we need to sync all emails (e.g. first run)
         sync_all = account.get("sync_all_on_next_run", False)
         if sync_all:
-            fetch_limit = 2000 # Larger limit for "all" sync
+            fetch_limit = 10000 # Larger limit for "all" sync
 
         try:
             # Before fetching new emails, process any pending actions (like deletions)

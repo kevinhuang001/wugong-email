@@ -353,7 +353,7 @@ def main():
     # List command
     list_parser = subparsers.add_parser("list", help="List accounts or emails")
     list_parser.add_argument("account", nargs="?", help="Friendly name of the account to list emails from (use 'all' for all accounts)")
-    list_parser.add_argument("--limit", "-l", type=int, default=100, help="Number of emails to list per account")
+    list_parser.add_argument("--limit", "-l", type=int, default=10, help="Number of emails to list per account")
     list_parser.add_argument("--keyword", "-k", help="Search by keyword in subject or body")
     list_parser.add_argument("--from-user", "-f", help="Search by sender's email or name")
     list_parser.add_argument("--since", help="Search emails since date (e.g., 01-Jan-2024)")
@@ -395,7 +395,7 @@ def main():
     # Email Sync command
     sync_parser = subparsers.add_parser("sync", help="Sync latest emails from server")
     sync_parser.add_argument("account", nargs="?", help="Friendly name of the account to sync (use 'all' for all accounts)")
-    sync_parser.add_argument("--limit", "-l", type=int, default=500, help="Number of emails to sync per account")
+    sync_parser.add_argument("--limit", "-l", type=int, default=0, help="Number of emails to sync per account (0 for unlimited)")
 
     # Upgrade command (code update)
     subparsers.add_parser("upgrade", help="Update Wugong Email code to the latest version")
