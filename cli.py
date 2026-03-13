@@ -127,9 +127,9 @@ def main():
                     status_mark = "" if em.get("seen") else "*"
                     
                     # Clean subject and from for single-line display
-                    subject = em["subject"].replace("\n", " ").replace("\r", "")
-                    from_user = em["from"].replace("\n", " ").replace("\r", "")
-                    from_email = em.get("from_email", "").replace("\n", " ").replace("\r", "")
+                    subject = (em.get("subject") or "").replace("\n", " ").replace("\r", "")
+                    from_user = (em.get("from") or "").replace("\n", " ").replace("\r", "")
+                    from_email = (em.get("from_email") or "").replace("\n", " ").replace("\r", "")
                     
                     # Format time: YYYY-MM-DD HH:MM:SS
                     display_time = em["date"]
