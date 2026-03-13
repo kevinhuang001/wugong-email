@@ -131,8 +131,10 @@ class MailManager:
                     raise Exception("Authentication failed.")
 
         mail.select("INBOX")
-        # Use BODY.PEEK to fetch content without marking it as seen
-        res, msg_data = mail.fetch(email_id, "(BODY.PEEK[])")
+        # Mark as seen on server
+        mail.store(email_id, '+FLAGS', '\\Seen')
+        # Fetch content
+        res, msg_data = mail.fetch(email_id, "(RFC822)")
         
         content = ""
         html_content = ""
@@ -166,6 +168,9 @@ class MailManager:
         
         # If no plain text found, return a dict with HTML content for CLI to handle
         if not content and html_content:
+            # We return it but need to make sure we close the connection correctly
+            mail.close()
+            mail.logout()
             return {
                 "type": "html_only",
                 "html": html_content
