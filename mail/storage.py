@@ -201,6 +201,16 @@ class StorageManager:
         conn.commit()
         conn.close()
 
+    def update_email_seen_status(self, account_name, uid, seen):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE emails SET seen = ? 
+            WHERE account_name = ? AND uid = ?
+        ''', (1 if seen else 0, account_name, uid))
+        conn.commit()
+        conn.close()
+
     def get_all_cached_uids(self, account_name):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()

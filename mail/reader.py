@@ -1,5 +1,6 @@
 import imaplib
 import email
+import re
 from email.header import decode_header, make_header
 from email.utils import parseaddr
 from datetime import datetime
@@ -70,8 +71,33 @@ class MailReader:
                 # Get the last 'fetch_limit' UIDs
                 latest_uids = uids_raw[-fetch_limit:] if len(uids_raw) > fetch_limit else uids_raw
                 
+                # Performance optimization: Fetch flags for all cached UIDs in this range
+                # to sync seen/unseen status from other clients
+                latest_uids_str = b",".join(latest_uids)
+                if latest_uids_str:
+                    res, flag_data = mail.uid('fetch', latest_uids_str.decode(), '(FLAGS)')
+                    if res == "OK" and flag_data:
+                        for item in flag_data:
+                            if isinstance(item, tuple):
+                                # Extract UID and FLAGS from the response
+                                # format: b'UID 123 FLAGS (\\Seen)'
+                                content = item[0].decode()
+                                uid_match = re.search(r'UID (\d+)', content)
+                                if uid_match:
+                                    f_uid = uid_match.group(1)
+                                    is_seen = '\\Seen' in content
+                                    self.storage_manager.update_email_seen_status(account_name, f_uid, is_seen)
+
                 fetched_emails = []
                 for uid in reversed(latest_uids):
+                    uid_str = uid.decode()
+                    
+                    # Check if we already have this email in cache
+                    # If we do, we only need to sync flags (already done above in batch)
+                    # and skip full header fetch unless it's a new email
+                    if uid_str in cached_uids:
+                        continue
+                        
                     res, msg_data = mail.uid('fetch', uid, '(RFC822.SIZE BODY[HEADER.FIELDS (SUBJECT FROM DATE)])')
                     if res == "OK":
                         raw_msg = msg_data[0][1]
@@ -114,12 +140,12 @@ class MailReader:
                             sender_name = email_addr or from_header
                         
                         fetched_emails.append({
-                            "id": uid.decode(),
+                            "id": uid_str,
                             "from": sender_name,
                             "from_email": email_addr,
                             "subject": subject,
                             "date": msg.get("Date"),
-                            "seen": False # New emails are assumed unread for now
+                            "seen": '\\Seen' in str(msg_data[0][0]) # Check seen flag from fetch response
                         })
                 
                 if fetched_emails:
