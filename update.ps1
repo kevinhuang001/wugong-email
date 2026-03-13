@@ -53,12 +53,13 @@ if ($TempDir) {
 if (Test-Path $InstallDir) {
     Write-Host "📦 Updating files..." -ForegroundColor Blue
     
-    # Custom sync logic: copy files individually
-    $FilesToSync = Get-ChildItem -Path $SourceDir -Include *.py, *.ps1, *.sh, requirements.txt, README.md, .gitignore -File
+    # Custom sync logic: copy ALL files except hidden/venv/pycache and the update script itself
+    $FilesToSync = Get-ChildItem -Path $SourceDir -File | Where-Object { 
+        $_.Name -ne "update.ps1" -and 
+        $_.FullName -notmatch "\\(\.git|\.venv|__pycache__)\\" 
+    }
     foreach ($File in $FilesToSync) {
-        if ($File.Name -ne "update.ps1") {
-            Copy-Item -Path $File.FullName -Destination (Join-Path $InstallDir $File.Name) -Force
-        }
+        Copy-Item -Path $File.FullName -Destination (Join-Path $InstallDir $File.Name) -Force
     }
 
     # Update dependencies

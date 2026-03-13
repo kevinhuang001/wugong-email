@@ -63,17 +63,9 @@ fi
 if [ -d "$INSTALL_DIR" ]; then
     echo -e "${BLUE}📦 Updating files...${NC}"
     
-    # Custom sync logic: copy files individually to avoid rsync dependency and be cleaner
-    # We copy all .py files, scripts, and requirements
-    for file in "$SOURCE_DIR"/*.py "$SOURCE_DIR"/*.sh "$SOURCE_DIR"/requirements.txt "$SOURCE_DIR"/README.md "$SOURCE_DIR"/.gitignore; do
-        if [ -f "$file" ]; then
-            filename=$(basename "$file")
-            # Skip updating itself while running to avoid shell confusion, update at the end
-            if [ "$filename" != "update.sh" ]; then
-                cp "$file" "$INSTALL_DIR/$filename"
-            fi
-        fi
-    done
+    # Custom sync logic: copy ALL files except hidden directories and the update script itself
+    # We use find to get all files in the source directory, excluding .git, .venv, and __pycache__
+    find "$SOURCE_DIR" -maxdepth 1 -not -path '*/.*' -not -path '*/__pycache__*' -not -name "update.sh" -type f -exec cp {} "$INSTALL_DIR/" \;
 
     # Update dependencies
     cd "$INSTALL_DIR" || exit
