@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.26] - 2026-03-13
+
+### Fixed
+- **PowerShell Path Handling**: Improved path resolution in `install.ps1` and `update.ps1` by explicitly using `.Path` property from `Get-Location`, preventing "empty string" errors during remote execution via `iex`.
+
 ## [1.9.25] - 2026-03-13
 
 ### Fixed
