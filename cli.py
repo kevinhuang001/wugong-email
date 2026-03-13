@@ -136,12 +136,20 @@ def main():
                     subject = em["subject"].replace("\n", " ").replace("\r", "")
                     from_user = em["from"].replace("\n", " ").replace("\r", "")
                     
+                    # Format time: YYYY-MM-DD HH:MM:SS
+                    display_time = em["date"]
+                    try:
+                        dt = parsedate_to_datetime(em["date"])
+                        display_time = dt.strftime("%Y-%m-%d %H:%M:%S")
+                    except:
+                        pass
+                    
                     table.add_row(
                         status_mark,
                         em["id"],
                         from_user,
                         subject,
-                        em["date"]
+                        display_time
                     )
                 console.print(table)
             except Exception as e:
