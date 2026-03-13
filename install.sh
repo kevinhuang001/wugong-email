@@ -47,11 +47,12 @@ mkdir -p "$CONFIG_DIR"
 # 4. Copy Files
 echo -e "${BLUE}📦 Copying files...${NC}"
 if command -v rsync &> /dev/null; then
-    rsync -av --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='*.db' "$SOURCE_DIR/" "$INSTALL_DIR/" &>/dev/null
+    # Use --delete to remove old files, but EXCLUDE config and database
+    rsync -av --delete --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='*.db' --exclude='config.toml' "$SOURCE_DIR/" "$INSTALL_DIR/" &>/dev/null
 else
     # Fallback to cp -R
     cp -R "$SOURCE_DIR"/. "$INSTALL_DIR/"
-    # Cleanup unwanted bits if we used cp -R
+    # Cleanup unwanted bits if we used cp -R (but keep config and db)
     rm -rf "$INSTALL_DIR/.git" "$INSTALL_DIR/.venv" "$INSTALL_DIR/__pycache__"
 fi
 
@@ -78,6 +79,7 @@ cat > wugong <<EOF
 #!/bin/bash
 source "$INSTALL_DIR/.venv/bin/activate"
 export WUGONG_CONFIG="$CONFIG_FILE"
+export PYTHONPATH="$INSTALL_DIR:\$PYTHONPATH"
 python3 "$INSTALL_DIR/cli.py" "\$@"
 EOF
 
