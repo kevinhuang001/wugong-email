@@ -345,11 +345,11 @@ def handle_account(args, manager, account_parser):
             
         case "add":
             account_add_wizard()
-            # After adding accounts, reload manager and ask if user wants to sync now
+            # After adding accounts, reload manager and auto-sync if interval > 0
             manager = MailManager()
             if manager.accounts:
-                sync_now = questionary.confirm("Do you want to sync your emails now?").ask()
-                if sync_now:
+                sync_interval = manager.config.get("general", {}).get("sync_interval", 0)
+                if sync_interval > 0:
                     # Sync all accounts with is_initial_sync=True
                     password = ""
                     if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):

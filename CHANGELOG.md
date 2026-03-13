@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.14] - 2026-03-13
+
+### Changed
+- **Auto-Sync after Account Add**: Removed the confirmation question "Do you want to sync your emails now?" after adding an account. The system now automatically determines whether to sync based on the configured `sync_interval` (automatically syncs if interval > 0, skips if 0).
+
 ## [1.9.13] - 2026-03-13
 
 ### Changed
