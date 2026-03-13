@@ -122,7 +122,7 @@ def main():
                     title += f" (Filters: {', '.join(active_filters)})"
 
                 table = Table(title=title, show_lines=False)
-                table.add_column("S", justify="center", width=1) # Status column
+                table.add_column("", justify="center", width=1) # Status column (no header)
                 table.add_column("ID", style="cyan", justify="right")
                 table.add_column("From", style="magenta", width=40)
                 table.add_column("Subject", style="white", overflow="ellipsis")
