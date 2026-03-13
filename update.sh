@@ -85,8 +85,8 @@ if [ -d "$INSTALL_DIR" ]; then
     # Custom sync logic: copy ALL files and directories except hidden ones, venv, pycache, and the update script itself
     # Use rsync if available for cleaner directory syncing, otherwise fallback to cp -R
     if command -v rsync &> /dev/null; then
-        # Use --delete but EXCLUDE config and database
-        rsync -av --delete --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='update.sh' --exclude='*.db' --exclude='config.toml' "$SOURCE_DIR/" "$INSTALL_DIR/" &>/dev/null
+        # Use --delete but EXCLUDE config, database, and the wrapper script itself
+        rsync -av --delete --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='update.sh' --exclude='wugong' --exclude='*.db' --exclude='config.toml' "$SOURCE_DIR/" "$INSTALL_DIR/" &>/dev/null
     else
         # Fallback to cp -R, but we need to be careful with exclusions
         echo -e "${BLUE}⚠️  rsync not found, using cp -R (files will be overwritten)...${NC}"
@@ -97,7 +97,7 @@ if [ -d "$INSTALL_DIR" ]; then
             [ -e "$item" ] || continue
             name=$(basename "$item")
             case "$name" in
-                .git|.venv|__pycache__|update.sh|*.db|config.toml) continue ;;
+                .git|.venv|__pycache__|update.sh|wugong|*.db|config.toml) continue ;;
             esac
             cp -R "$item" "$INSTALL_DIR/" &>/dev/null
         done
@@ -116,6 +116,18 @@ if [ -d "$INSTALL_DIR" ]; then
     
     # Finally, update the update script itself
     cp "$SOURCE_DIR/update.sh" "$INSTALL_DIR/update.sh"
+    
+    # Recreate the 'wugong' wrapper script to ensure it's correct
+    # We use the same path logic as install.sh
+    CONFIG_FILE="${HOME}/.config/wugong/config.toml"
+    cat > "$INSTALL_DIR/wugong" <<EOF
+#!/bin/bash
+source "$INSTALL_DIR/.venv/bin/activate"
+export WUGONG_CONFIG="$CONFIG_FILE"
+export PYTHONPATH="$INSTALL_DIR:\$PYTHONPATH"
+python3 "$INSTALL_DIR/cli.py" "\$@"
+EOF
+    chmod +x "$INSTALL_DIR/wugong"
     
     # Save the current version if we cloned it
     if [ -n "$NEW_VERSION" ]; then

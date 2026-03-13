@@ -47,16 +47,22 @@ mkdir -p "$CONFIG_DIR"
 # 4. Copy Files
 echo -e "${BLUE}📦 Copying files...${NC}"
 if command -v rsync &> /dev/null; then
-    # Use --delete to remove old files, but EXCLUDE config and database
-    rsync -av --delete --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='*.db' --exclude='config.toml' "$SOURCE_DIR/" "$INSTALL_DIR/" &>/dev/null
+    # Use --delete but EXCLUDE config, database, and the wrapper script itself
+    rsync -av --delete --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='wugong' --exclude='*.db' --exclude='config.toml' "$SOURCE_DIR/" "$INSTALL_DIR/" &>/dev/null
 else
     # Fallback to cp -R
     echo -e "${BLUE}⚠️  rsync not found, using cp -R (files will be overwritten)...${NC}"
     # Manually remove old core files to simulate --delete for critical files
     rm -f "$INSTALL_DIR/read_config.py"
-    cp -R "$SOURCE_DIR"/. "$INSTALL_DIR/"
-    # Cleanup unwanted bits if we used cp -R (but keep config and db)
-    rm -rf "$INSTALL_DIR/.git" "$INSTALL_DIR/.venv" "$INSTALL_DIR/__pycache__"
+    # Using a loop to avoid copying excluded dirs/files
+    for item in "$SOURCE_DIR"/*; do
+        [ -e "$item" ] || continue
+        name=$(basename "$item")
+        case "$name" in
+            .git|.venv|__pycache__|wugong|*.db|config.toml) continue ;;
+        esac
+        cp -R "$item" "$INSTALL_DIR/" &>/dev/null
+    done
 fi
 
 # 5. Setup Virtual Environment and Install Dependencies
