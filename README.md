@@ -59,6 +59,13 @@ We provide an automated installation script that handles Python version checks, 
 
 ## 🚀 Quick Start
 
+### 0. Initialization
+Run the initialization command to setup master encryption and periodic sync scheduling.
+```bash
+wugong init
+```
+*Note: This command will set up a Cron job (Linux/macOS) or Scheduled Task (Windows) for automatic background syncing.*
+
 ### 1. Configure Account
 Run the configuration wizard to add your first email account.
 ```bash

@@ -11,7 +11,7 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 from mail import MailManager
-from wizard import run_wizard
+from wizard import run_wizard, run_init
 
 console = Console()
 
@@ -34,6 +34,13 @@ def handle_list(args, manager):
     # Get password once if encryption is enabled (assume same password for all for simplicity in CLI)
     password = ""
     if manager.encryption_enabled:
+        # Check if we are in a terminal (for background cron jobs)
+        if not sys.stdin.isatty():
+            # If not in a terminal, we can't ask for a password.
+            # For now, we'll skip syncing if it's encrypted and no password can be provided.
+            # In the future, this could use a system keyring.
+            return
+
         if args.account == "all":
             prompt_text = "Enter encryption password for all accounts:"
         else:
@@ -49,6 +56,9 @@ def handle_list(args, manager):
         
         # 1. Sync first (unless --no-sync is specified)
         if not args.no_sync:
+            # Hide progress bar if not in a TTY (background sync)
+            is_tty = sys.stdin.isatty()
+            
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
@@ -56,7 +66,8 @@ def handle_list(args, manager):
                 TaskProgressColumn(),
                 TimeRemainingColumn(),
                 console=console,
-                transient=True
+                transient=True,
+                disable=not is_tty
             ) as progress:
                 task = progress.add_task(f"[green]Syncing {account_name}...", total=None)
                 
@@ -249,6 +260,22 @@ def handle_send(args, manager):
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
 
+def handle_init(args, manager):
+    """Handles the 'init' command to setup encryption and sync schedule."""
+    # Check for administrative privileges if on Windows (recommended for schtasks)
+    if os.name == 'nt':
+        import ctypes
+        if not ctypes.windll.shell32.IsUserAnAdmin():
+            console.print("[yellow]Warning: You are not running as administrator. Scheduling may fail.[/yellow]")
+            console.print("[yellow]Please run the terminal as Administrator and try again if schtasks fails.[/yellow]\n")
+    elif os.getuid() != 0:
+        # On Unix, crontab doesn't need root, but it's good to mention if they want system-wide (though we don't do that)
+        pass
+
+    should_add_account = run_init()
+    if should_add_account:
+        run_wizard()
+
 def handle_account(args, manager, account_parser):
     match args.account_command:
         case "list":
@@ -335,6 +362,7 @@ def handle_sync(args, manager):
 
     for account in target_accounts:
         account_name = account.get("friendly_name") or "default"
+        is_tty = sys.stdin.isatty()
         
         with Progress(
             SpinnerColumn(),
@@ -343,7 +371,8 @@ def handle_sync(args, manager):
             TaskProgressColumn(),
             TimeRemainingColumn(),
             console=console,
-            transient=True # Remove the progress bar after completion
+            transient=True, # Remove the progress bar after completion
+            disable=not is_tty
         ) as progress:
             task = progress.add_task(f"[green]Syncing {account_name}...", total=None)
             
@@ -447,6 +476,9 @@ def main():
     # Uninstall command
     subparsers.add_parser("uninstall", help="Uninstall Wugong Email")
 
+    # Init command
+    subparsers.add_parser("init", help="Initialize configuration, encryption, and sync schedule")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -460,6 +492,8 @@ def main():
         return
 
     match args.command:
+        case "init":
+            handle_init(args, manager)
         case "list":
             handle_list(args, manager)
         case "read":

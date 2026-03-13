@@ -7,6 +7,8 @@ import webbrowser
 import logging
 import config
 import imaplib
+import platform
+import subprocess
 from flask import Flask, request
 from requests_oauthlib import OAuth2Session
 from crypto_utils import generate_salt, encrypt_data, decrypt_data
@@ -200,6 +202,143 @@ def test_imap_connection(imap_server, imap_port, username, password=None, access
     except Exception as e:
         return False, str(e)
 
+def setup_scheduling(interval_minutes):
+    """Sets up a periodic sync task using Cron (Unix) or Task Scheduler (Windows)."""
+    if interval_minutes <= 0:
+        print("Sync interval must be greater than 0. Skipping scheduling.")
+        return False
+
+    system = platform.system()
+    
+    # Get absolute path to wugong executable
+    # If running from source, it's current dir/wugong
+    # If installed, it's ~/.wugong/wugong
+    home = os.path.expanduser("~")
+    wugong_installed = os.path.join(home, ".wugong", "wugong")
+    wugong_local = os.path.join(os.getcwd(), "wugong")
+    
+    if os.path.exists(wugong_installed):
+        wugong_exe = wugong_installed
+    elif os.path.exists(wugong_local):
+        wugong_exe = wugong_local
+    else:
+        # Fallback to just 'wugong' if it's in PATH
+        wugong_exe = "wugong"
+
+    try:
+        if system == "Windows":
+            # Windows Task Scheduler
+            # schtasks /create /sc minute /mo <interval> /tn "WugongSync" /tr "wugong sync all" /f
+            # Use wugong.bat for Windows
+            wugong_bat = wugong_exe.replace("wugong", "wugong.bat")
+            if not os.path.exists(wugong_bat):
+                wugong_bat = "wugong.bat"
+            
+            cmd = [
+                "schtasks", "/create", "/sc", "minute", "/mo", str(interval_minutes),
+                "/tn", "WugongSync", "/tr", f'"{wugong_bat}" sync all', "/f"
+            ]
+            subprocess.run(cmd, check=True, capture_output=True)
+            print(f"✅ Scheduled sync every {interval_minutes} minutes via Task Scheduler.")
+        else:
+            # Unix-like (macOS/Linux) Cron
+            # Add line to crontab: */interval * * * * /path/to/wugong sync all
+            cron_job = f"*/{interval_minutes} * * * * {wugong_exe} sync all > /dev/null 2>&1"
+            
+            # Read existing crontab
+            try:
+                current_cron = subprocess.check_output(["crontab", "-l"], stderr=subprocess.STDOUT).decode()
+            except subprocess.CalledProcessError:
+                current_cron = ""
+            
+            # Remove old Wugong sync jobs
+            lines = [line for line in current_cron.splitlines() if "wugong sync all" not in line]
+            # Add new job
+            lines.append(cron_job)
+            
+            # Write back
+            new_cron = "\n".join(lines) + "\n"
+            process = subprocess.Popen(["crontab", "-"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = process.communicate(input=new_cron.encode())
+            
+            if process.returncode != 0:
+                print(f"❌ Error setting up crontab: {stderr.decode()}")
+                return False
+            
+            print(f"✅ Scheduled sync every {interval_minutes} minutes via Crontab.")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to setup scheduling: {e}")
+        return False
+
+def run_init():
+    """Initializes the configuration, sets up encryption, and schedules periodic sync."""
+    try:
+        print("\n=== Wugong Email Initialization ===")
+        
+        config_path = config.get_config_path()
+        current_config = config.load_config(config_path)
+        
+        # 1. Encryption Setup
+        encrypt_enabled = questionary.confirm("Enable credential encryption? (Highly Recommended)", default=True).ask()
+        if encrypt_enabled is None: raise KeyboardInterrupt
+        
+        encryption_password = None
+        salt_val = ""
+        if encrypt_enabled:
+            encryption_password = questionary.password("Set your master encryption password:").ask()
+            if encryption_password is None: raise KeyboardInterrupt
+            if not encryption_password:
+                print("Password cannot be empty if encryption is enabled.")
+                return False
+            salt_val = base64.b64encode(generate_salt()).decode()
+        
+        encrypt_emails = questionary.confirm("Encrypt locally cached email bodies?", default=True).ask()
+        if encrypt_emails is None: raise KeyboardInterrupt
+        
+        # 2. Sync Interval & Scheduling
+        sync_interval = questionary.text("Sync interval in minutes (e.g., 5, 10, 60. Enter 0 to disable auto-sync):", default="10").ask()
+        if sync_interval is None: raise KeyboardInterrupt
+        
+        try:
+            interval = int(sync_interval)
+        except ValueError:
+            print("Invalid interval. Defaulting to 10 minutes.")
+            interval = 10
+            
+        if interval > 0:
+            setup_scheduling(interval)
+        
+        # 3. Save initial config
+        if "general" not in current_config:
+            current_config["general"] = {}
+            
+        current_config["general"]["encryption_enabled"] = encrypt_enabled
+        current_config["general"]["encrypt_emails"] = encrypt_emails
+        current_config["general"]["salt"] = salt_val
+        current_config["general"]["sync_interval"] = interval
+        
+        config.save_config(current_config, config_path)
+        print(f"✅ Configuration initialized and saved to {config_path}")
+        print(f"ℹ️  You can manually change the sync interval in the config file.")
+
+        # 4. First Account
+        if not current_config.get("accounts"):
+            add_first = questionary.confirm("No accounts found. Would you like to add your first account now?", default=True).ask()
+            if add_first:
+                # We need the password we just set for account addition
+                # run_wizard will handle it if we pass it or if it prompts
+                print("\nLaunching Account Configuration Wizard...")
+                return True # Signal that we should run the full wizard next
+        
+        return False
+    except KeyboardInterrupt:
+        print("\nInitialization cancelled.")
+        return False
+    except Exception as e:
+        print(f"\n❌ Error during initialization: {e}")
+        return False
+
 def run_wizard():
     try:
         print("=== Email Configuration Wizard ===")
@@ -221,53 +360,43 @@ def run_wizard():
             print(f"Loaded existing config with {original_accounts_count} account(s).")
 
         # 2. Setup/Verify encryption
-        if first_use:
-            print("First use detected. Please set up global encryption settings.")
+        if first_use or "encryption_enabled" not in current_config.get("general", {}):
+            print("\nInitialization required.")
+            should_continue = run_init()
+            if not should_continue:
+                return # User cancelled or just wanted to init
             
-            encryption_password = questionary.password("Set an encryption password for sensitive data (accounts, tokens):").ask()
-            if encryption_password is None: raise KeyboardInterrupt
-            if not encryption_password:
-                print("Password cannot be empty.")
-                return
-                
-            encrypt_emails = questionary.confirm("Encrypt locally stored emails?").ask()
-            if encrypt_emails is None: raise KeyboardInterrupt
+            # Reload config after init
+            current_config = config.load_config(config_path)
             
-            encrypt_enabled = questionary.confirm("Enable encryption for account credentials?").ask()
-            if encrypt_enabled is None: raise KeyboardInterrupt
+        # Re-verify encryption password for the current session
+        encryption_password = questionary.password("Enter your encryption password to proceed:").ask()
+        if encryption_password is None: raise KeyboardInterrupt
+        
+        # Simple validation: Try to decrypt one piece of sensitive data if it exists
+        if current_config.get("accounts"):
+            first_acc = current_config["accounts"][0]
+            first_auth = first_acc.get("auth", {})
+            sensitive_keys = ["password", "client_id", "client_secret", "refresh_token", "access_token"]
             
-            salt_val = generate_salt()
-            current_config["general"]["encryption_enabled"] = encrypt_enabled
-            current_config["general"]["encrypt_emails"] = encrypt_emails
-            current_config["general"]["salt"] = base64.b64encode(salt_val).decode() if encrypt_enabled else ""
-        else:
-            encryption_password = questionary.password("Enter your encryption password to proceed:").ask()
-            if encryption_password is None: raise KeyboardInterrupt
+            test_val = None
+            for k in sensitive_keys:
+                if first_auth.get(k):
+                    test_val = first_auth[k]
+                    break
             
-            # Simple validation: Try to decrypt one piece of sensitive data if it exists
-            if current_config.get("accounts"):
-                first_acc = current_config["accounts"][0]
-                first_auth = first_acc.get("auth", {})
-                sensitive_keys = ["password", "client_id", "client_secret", "refresh_token", "access_token"]
-                
-                test_val = None
-                for k in sensitive_keys:
-                    if first_auth.get(k):
-                        test_val = first_auth[k]
-                        break
-                
-                if test_val:
-                    from crypto_utils import decrypt_data
-                    from rich import print as rprint
-                    try:
-                        decrypt_data(test_val, encryption_password, config.get_salt(current_config))
-                    except Exception:
-                        rprint("[red]Error: Incorrect encryption password. Access denied.[/red]")
-                        return
-            
-            encrypt_enabled = current_config["general"]["encryption_enabled"]
-            encrypt_emails = current_config["general"].get("encrypt_emails", False)
-            salt_val = config.get_salt(current_config)
+            if test_val:
+                from crypto_utils import decrypt_data
+                from rich import print as rprint
+                try:
+                    decrypt_data(test_val, encryption_password, config.get_salt(current_config))
+                except Exception:
+                    rprint("[red]Error: Incorrect encryption password. Access denied.[/red]")
+                    return
+        
+        encrypt_enabled = current_config["general"].get("encryption_enabled", False)
+        encrypt_emails = current_config["general"].get("encrypt_emails", False)
+        salt_val = config.get_salt(current_config)
 
         # 3. Add Account(s) Loop
         while True:
