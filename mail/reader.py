@@ -153,94 +153,94 @@ class MailReader:
         
         if not local_only:
             try:
-            auth = self.auth_manager.decrypt_account_auth(account, auth_password)
-            mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
+                auth = self.auth_manager.decrypt_account_auth(account, auth_password)
+                mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
             
-            # Authentication
-            if account['login_method'] == "Account/Password":
-                mail.login(auth['username'], auth['password'])
-            else:
-                user = auth.get("username")
-                token = auth.get("access_token")
-                try:
-                    auth_string = f"user={user}\x01auth=Bearer {token}\x01\x01"
-                    mail.authenticate('XOAUTH2', lambda x: auth_string)
-                except imaplib.IMAP4.error:
-                    new_token = self.auth_manager.refresh_oauth2_token(account, auth, auth_password, self.config)
-                    if new_token:
-                        self.save_config_callback()
-                        mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
-                        auth_string = f"user={user}\x01auth=Bearer {new_token}\x01\x01"
+                # Authentication
+                if account['login_method'] == "Account/Password":
+                    mail.login(auth['username'], auth['password'])
+                else:
+                    user = auth.get("username")
+                    token = auth.get("access_token")
+                    try:
+                        auth_string = f"user={user}\x01auth=Bearer {token}\x01\x01"
                         mail.authenticate('XOAUTH2', lambda x: auth_string)
-                    else:
-                        raise Exception("Authentication failed.")
+                    except imaplib.IMAP4.error:
+                        new_token = self.auth_manager.refresh_oauth2_token(account, auth, auth_password, self.config)
+                        if new_token:
+                            self.save_config_callback()
+                            mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
+                            auth_string = f"user={user}\x01auth=Bearer {new_token}\x01\x01"
+                            mail.authenticate('XOAUTH2', lambda x: auth_string)
+                        else:
+                            raise Exception("Authentication failed.")
 
-            mail.select("INBOX", readonly=True)
-            
-            # 1. Construct Search Query
-            search_query_parts = []
-            if search_criteria:
-                if search_criteria.get("keyword"):
-                    search_query_parts.append(f'TEXT "{search_criteria["keyword"]}"')
-                if search_criteria.get("from"):
-                    search_query_parts.append(f'FROM "{search_criteria["from"]}"')
-                if search_criteria.get("since"):
-                    try:
-                        since_date = datetime.strptime(search_criteria["since"], "%Y-%m-%d").strftime("%d-%b-%Y")
-                        search_query_parts.append(f'SINCE "{since_date}"')
-                    except: pass
-                if search_criteria.get("before"):
-                    try:
-                        before_date = datetime.strptime(search_criteria["before"], "%Y-%m-%d").strftime("%d-%b-%Y")
-                        search_query_parts.append(f'BEFORE "{before_date}"')
-                    except: pass
-            
-            search_query = " ".join(search_query_parts) if search_query_parts else "ALL"
-            res, data = mail.uid('search', None, search_query)
-            
-            if res == "OK":
-                uids_raw = data[0].split()
-                # We only need the top 'limit' results (newest first)
-                view_uids = uids_raw[-limit:] if limit > 0 and len(uids_raw) > limit else uids_raw
-                view_uids = list(reversed(view_uids)) # Newest first
+                mail.select("INBOX", readonly=True)
                 
-                results = []
-                for i, uid in enumerate(view_uids):
-                    uid_str = uid.decode()
-                    if progress_callback:
-                        progress_callback(i + 1, len(view_uids), f"Fetching metadata {i+1}/{len(view_uids)}...")
+                # 1. Construct Search Query
+                search_query_parts = []
+                if search_criteria:
+                    if search_criteria.get("keyword"):
+                        search_query_parts.append(f'TEXT "{search_criteria["keyword"]}"')
+                    if search_criteria.get("from"):
+                        search_query_parts.append(f'FROM "{search_criteria["from"]}"')
+                    if search_criteria.get("since"):
+                        try:
+                            since_date = datetime.strptime(search_criteria["since"], "%Y-%m-%d").strftime("%d-%b-%Y")
+                            search_query_parts.append(f'SINCE "{since_date}"')
+                        except: pass
+                    if search_criteria.get("before"):
+                        try:
+                            before_date = datetime.strptime(search_criteria["before"], "%Y-%m-%d").strftime("%d-%b-%Y")
+                            search_query_parts.append(f'BEFORE "{before_date}"')
+                        except: pass
+                
+                search_query = " ".join(search_query_parts) if search_query_parts else "ALL"
+                res, data = mail.uid('search', None, search_query)
+                
+                if res == "OK":
+                    uids_raw = data[0].split()
+                    # We only need the top 'limit' results (newest first)
+                    view_uids = uids_raw[-limit:] if limit > 0 and len(uids_raw) > limit else uids_raw
+                    view_uids = list(reversed(view_uids)) # Newest first
                     
-                    # Fetch metadata from server ONLY, no cache check here
-                    res_m, msg_data = mail.uid('fetch', uid, '(RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)])')
-                    if res_m == "OK":
-                        header_data = msg_data[0][1]
-                        msg = email.message_from_bytes(header_data)
+                    results = []
+                    for i, uid in enumerate(view_uids):
+                        uid_str = uid.decode()
+                        if progress_callback:
+                            progress_callback(i + 1, len(view_uids), f"Fetching metadata {i+1}/{len(view_uids)}...")
                         
-                        # Parse basic metadata
-                        try:
-                            subject_header = msg.get("Subject")
-                            subject = str(make_header(decode_header(subject_header))) if subject_header else "No Subject"
-                        except: subject = "No Subject"
-                        
-                        try:
-                            from_header = str(make_header(decode_header(msg.get("From", "Unknown"))))
-                        except: from_header = "Unknown"
-                        
-                        name, email_addr = parseaddr(from_header)
-                        sender_name = name or (from_header.split("<")[0].strip() if "<" in from_header else from_header)
-                        
-                        results.append({
-                            "id": uid_str,
-                            "from": sender_name,
-                            "from_email": email_addr,
-                            "subject": subject,
-                            "date": msg.get("Date"),
-                            "seen": '\\Seen' in str(msg_data[0][0])
-                        })
-                
-                mail.close()
-                mail.logout()
-                return results, {"last_sync": sync_info.get("time"), "is_offline": False}
+                        # Fetch metadata from server ONLY, no cache check here
+                        res_m, msg_data = mail.uid('fetch', uid, '(RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)])')
+                        if res_m == "OK":
+                            header_data = msg_data[0][1]
+                            msg = email.message_from_bytes(header_data)
+                            
+                            # Parse basic metadata
+                            try:
+                                subject_header = msg.get("Subject")
+                                subject = str(make_header(decode_header(subject_header))) if subject_header else "No Subject"
+                            except: subject = "No Subject"
+                            
+                            try:
+                                from_header = str(make_header(decode_header(msg.get("From", "Unknown"))))
+                            except: from_header = "Unknown"
+                            
+                            name, email_addr = parseaddr(from_header)
+                            sender_name = name or (from_header.split("<")[0].strip() if "<" in from_header else from_header)
+                            
+                            results.append({
+                                "id": uid_str,
+                                "from": sender_name,
+                                "from_email": email_addr,
+                                "subject": subject,
+                                "date": msg.get("Date"),
+                                "seen": '\\Seen' in str(msg_data[0][0])
+                            })
+                    
+                    mail.close()
+                    mail.logout()
+                    return results, {"last_sync": sync_info.get("time"), "is_offline": False}
                 
             except Exception as e:
                 is_offline = True

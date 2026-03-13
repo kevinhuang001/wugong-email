@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.12] - 2026-03-13
+
+### Fixed
+- **Reader Indentation Error**: Fixed another critical `IndentationError` in `mail/reader.py` within the `query_emails` method.
+
 ## [1.9.11] - 2026-03-13
 
 ### Fixed
