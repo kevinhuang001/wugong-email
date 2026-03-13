@@ -256,6 +256,16 @@ def handle_account(args, manager, account_parser):
             
         case "add":
             run_wizard()
+            # After adding accounts, reload manager and ask if user wants to sync now
+            manager = MailManager()
+            if manager.accounts:
+                sync_now = questionary.confirm("Do you want to sync your emails now?").ask()
+                if sync_now:
+                    # Reuse handle_sync logic for all accounts
+                    class Args:
+                        account = "all"
+                        limit = 0 # Full metadata sync
+                    handle_sync(Args(), manager)
             
         case "delete":
             account_name = args.name

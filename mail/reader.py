@@ -18,19 +18,6 @@ class MailReader:
         is_offline = False
         newly_fetched_emails = []
         
-        # Determine sync range
-        # Default to a larger fetch_limit to ensure we capture most recent emails and detect deletions
-        # If limit is 0, it means unlimited sync.
-        if limit == 0:
-            fetch_limit = 10000 # Effectively "unlimited" for metadata sync
-        else:
-            fetch_limit = max(limit, 100) 
-        
-        # Check if we need to sync all emails (e.g. first run)
-        sync_all = account.get("sync_all_on_next_run", False)
-        if sync_all:
-            fetch_limit = 10000 # Larger limit for "all" sync
-
         try:
             # Before fetching new emails, process any pending actions (like deletions)
             self.sync_pending_actions(account, auth_password)
@@ -59,7 +46,7 @@ class MailReader:
 
             mail.select("INBOX")
             
-            # 1. Fetch ALL UIDs from server to detect deletions
+            # 1. Fetch ALL UIDs from server to detect deletions and find new ones
             res, data = mail.uid('search', None, "ALL")
             if res == "OK":
                 uids_raw = data[0].split()
@@ -73,17 +60,17 @@ class MailReader:
                         self.storage_manager.delete_email_from_cache(account_name, cached_uid)
                 
                 # 3. Identify truly NEW emails that are not in cache
-                # We only fetch metadata for these
+                # We fetch metadata for ALL new UIDs discovered on the server
                 new_uids_to_fetch = [uid for uid in uids_raw if uid.decode() not in cached_uids_set]
                 
-                # If we have too many new emails, we might still want to respect some limit
-                # but for now, let's fetch metadata for all new ones up to fetch_limit
-                if len(new_uids_to_fetch) > fetch_limit:
-                    new_uids_to_fetch = new_uids_to_fetch[-fetch_limit:]
+                # For safety, we still cap the batch at 10,000 for a single sync run,
+                # but this effectively means "all" for most users.
+                if len(new_uids_to_fetch) > 10000:
+                    new_uids_to_fetch = new_uids_to_fetch[-10000:]
                 
-                # 4. Performance optimization: Sync Flags (Seen/Unseen) for existing emails in the current view
-                # We check flags for the 'limit' most recent emails
-                view_uids = uids_raw[-limit:] if len(uids_raw) > limit else uids_raw
+                # 4. Sync Flags (Seen/Unseen) for emails in the current view
+                # We check flags for the 'limit' requested emails to ensure seen status is fresh
+                view_uids = uids_raw[-limit:] if limit > 0 and len(uids_raw) > limit else uids_raw
                 view_uids_str = b",".join(view_uids)
                 if view_uids_str:
                     res, flag_data = mail.uid('fetch', view_uids_str.decode(), '(FLAGS)')
@@ -97,7 +84,7 @@ class MailReader:
                                     is_seen = '\\Seen' in content
                                     self.storage_manager.update_email_seen_status(account_name, f_uid, is_seen)
 
-                # 5. Fetch Metadata for NEW emails
+                # 5. Fetch Metadata for ALL NEW emails
                 fetched_emails = []
                 if new_uids_to_fetch:
                     # Fetch in reversed order (newest first)
@@ -108,7 +95,7 @@ class MailReader:
                             raw_msg = msg_data[0][1]
                             msg = email.message_from_bytes(raw_msg)
                             
-                            # (Header decoding logic remains same...)
+                            # (Header decoding logic...)
                             try:
                                 subject_header = msg.get("Subject")
                                 subject = str(make_header(decode_header(subject_header))) if subject_header else "No Subject"
@@ -144,10 +131,6 @@ class MailReader:
                 new_last_uid = uids_raw[-1].decode() if uids_raw else sync_info.get("uid", "0")
                 self.storage_manager.update_sync_info(account_name, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), new_last_uid)
                 sync_info = self.storage_manager.get_last_sync_info(account_name)
-
-                if sync_all:
-                    account["sync_all_on_next_run"] = False
-                    self.save_config_callback()
 
             mail.close()
             mail.logout()

@@ -463,15 +463,6 @@ def run_wizard():
                 print("✅ Connection test successful!")
                 current_config["accounts"].append(account)
                 
-                # Ask about full sync
-                sync_now = questionary.confirm("Do you want to sync ALL emails from this account now? (Recommended for first use)").ask()
-                if sync_now is None: raise KeyboardInterrupt
-                if sync_now:
-                    account["sync_all_on_next_run"] = True
-                    print("Marked for full sync on next run.")
-                else:
-                    print("Full sync deferred to later.")
-
             add_another = questionary.confirm("Add another account?").ask()
             if add_another is None: raise KeyboardInterrupt
             if not add_another:
