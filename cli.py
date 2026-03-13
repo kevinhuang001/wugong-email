@@ -51,6 +51,14 @@ def main():
     read_parser.add_argument("--account", "-a", required=True, help="Account name")
     read_parser.add_argument("--id", "-i", required=True, help="Email ID to read")
 
+    # Send command
+    send_parser = subparsers.add_parser("send", help="Send an email")
+    send_parser.add_argument("--account", "-a", help="Account name (uses default if not specified)")
+    send_parser.add_argument("--to", "-t", required=True, help="Recipient email address")
+    send_parser.add_argument("--subject", "-s", required=True, help="Email subject")
+    send_parser.add_argument("--body", "-b", help="Email body content")
+    send_parser.add_argument("--attach", nargs="+", help="Paths to files to attach")
+
     # Configure command
     subparsers.add_parser("configure", help="Run the configuration wizard")
 
@@ -254,6 +262,40 @@ def main():
                     console.print(panel)
                 else:
                     console.print(f"[yellow]No text content found for email {args.id}.[/yellow]")
+            except Exception as e:
+                console.print(f"[red]Error: {e}[/red]")
+
+    elif args.command == "send":
+        account_name = args.account or "default"
+        account = manager.get_account_by_name(account_name)
+        if not account:
+            console.print(f"[red]Error: Account '{account_name}' not found.[/red]")
+            return
+
+        password = ""
+        if manager.encryption_enabled:
+            password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
+            if not password:
+                return
+
+        body = args.body
+        if not body:
+            # If body is not provided, open interactive text area
+            body = questionary.text("Email Body (press enter for multiple lines, type 'DONE' on a new line to finish):", multiline=True).ask()
+            if body is None:
+                return
+
+        with console.status(f"[bold green]Sending email via {account_name}...") as status:
+            try:
+                manager.send_email(
+                    account, 
+                    password, 
+                    to=args.to, 
+                    subject=args.subject, 
+                    body=body, 
+                    attachments=args.attach
+                )
+                console.print(f"[green]Successfully sent email to {args.to}![/green]")
             except Exception as e:
                 console.print(f"[red]Error: {e}[/red]")
 

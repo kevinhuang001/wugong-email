@@ -1,6 +1,10 @@
 import imaplib
+import smtplib
 import email
 from email.header import decode_header
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
 import toml
 import base64
 import requests
@@ -252,3 +256,57 @@ class MailManager:
         mail.close()
         mail.logout()
         return email_list
+
+    def send_email(self, account, auth_password, to, subject, body, attachments=None):
+        auth = self.decrypt_account_auth(account, auth_password)
+        
+        # Create message
+        if attachments:
+            msg = MIMEMultipart()
+            msg.attach(MIMEText(body))
+        else:
+            msg = MIMEText(body)
+            
+        msg['Subject'] = subject
+        msg['From'] = auth['username']
+        msg['To'] = to
+        
+        if attachments:
+            for file_path in attachments:
+                if not os.path.exists(file_path):
+                    continue
+                with open(file_path, "rb") as f:
+                    part = MIMEApplication(f.read(), Name=os.path.basename(file_path))
+                    part['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
+                    msg.attach(part)
+        
+        # Connect to SMTP
+        # Gmail/Outlook usually use TLS on 587 or SSL on 465
+        if account['smtp_port'] == 465:
+            server = smtplib.SMTP_SSL(account['smtp_server'], account['smtp_port'])
+        else:
+            server = smtplib.SMTP(account['smtp_server'], account['smtp_port'])
+            server.starttls()
+            
+        if account['login_method'] == "Account/Password":
+            server.login(auth['username'], auth['password'])
+        else:
+            # OAuth2 authentication (XOAUTH2)
+            user = auth.get("username")
+            token = auth.get("access_token")
+            
+            try:
+                auth_string = f"user={user}\x01auth=Bearer {token}\x01\x01"
+                server.docmd("AUTH", "XOAUTH2 " + base64.b64encode(auth_string.encode()).decode())
+            except smtplib.SMTPException:
+                # Try refreshing token
+                new_token = self._refresh_oauth2_token(account, auth, auth_password)
+                if new_token:
+                    auth_string = f"user={user}\x01auth=Bearer {new_token}\x01\x01"
+                    server.docmd("AUTH", "XOAUTH2 " + base64.b64encode(auth_string.encode()).decode())
+                else:
+                    raise Exception("SMTP Authentication failed and token refresh failed.")
+        
+        server.send_message(msg)
+        server.quit()
+        return True
