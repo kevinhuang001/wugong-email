@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.6] - 2026-03-13
+
+### Fixed
+- **Stability Improvement**: Fixed a `NoneType` error in `wugong list` command where `subject`, `from`, or `from_email` fields being null would cause a crash. Added robust `None` checks and fallback to empty strings.
+
 ## [1.1.5] - 2026-03-13
 
 ### Added
