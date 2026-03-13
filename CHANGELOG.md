@@ -11,21 +11,11 @@ All notable changes to this project will be documented in this file.
 ## [1.0.0] - 2026-03-13
 
 ### Added
-- Integrated `update` and `uninstall` commands directly into `wugong` CLI.
-- Added native Windows support with `update.ps1` and `uninstall.ps1`.
-- Implemented a more efficient file synchronization logic (no longer depends on `rsync`).
-- Added HTML-to-text extraction for reading emails that only contain HTML content.
-- Support for default accounts in `read` and `list` commands.
-- Security First: End-to-end encryption for configuration files using PBKDF2 + Fernet.
-- OAuth2 Automation: Built-in local server for automatic Access/Refresh Token exchange.
-- Smart Search: Multi-criteria filtering by keywords, sender, and date ranges.
-
-### Changed
-- Simplified the `update` process to hide verbose git output.
-- Optimized version checking using a local `.version` file to avoid redundant updates.
-- Improved the layout of the email list for better readability.
-- Translated interactive prompts to English.
-
-### Fixed
-- Fixed `UnboundLocalError` in CLI by reorganizing imports.
-- Fixed self-update syntax errors in shell scripts.
+- **Minimalist TUI**: Beautiful terminal interface powered by `Rich` and `Questionary`.
+- **Multi-Account Support**: Pre-configured for major providers (Gmail, Outlook, QQ, 163) with support for a "default account".
+- **Security First**: End-to-end encryption for configuration files using PBKDF2 + Fernet.
+- **OAuth2 Automation**: Built-in local server for automatic Access/Refresh Token exchange and silent background refresh.
+- **Smart Search**: Multi-criteria filtering by keywords, sender, and date ranges.
+- **Integrated Maintenance**: Built-in `update` and `uninstall` commands directly within the CLI.
+- **Cross-Platform Compatibility**: Native support for macOS/Linux (`.sh`) and Windows (`.ps1`).
+- **HTML Content Handling**: Automatic text extraction and raw code viewing options for emails containing only HTML.
