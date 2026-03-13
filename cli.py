@@ -59,9 +59,6 @@ def main():
     send_parser.add_argument("--body", "-b", help="Email body content")
     send_parser.add_argument("--attach", nargs="+", help="Paths to files to attach")
 
-    # Configure command
-    subparsers.add_parser("configure", help="Run the configuration wizard")
-
     # Account command
     account_parser = subparsers.add_parser("account", help="Manage email accounts")
     account_subparsers = account_parser.add_subparsers(dest="account_command", help="Account operations")
@@ -171,13 +168,10 @@ def main():
             except Exception as e:
                 console.print(f"[red]Error: {e}[/red]")
 
-    elif args.command == "configure":
-        run_wizard()
-
     elif args.command == "account":
         if args.account_command == "list":
             if not manager.accounts:
-                console.print("[yellow]No accounts configured yet. Run 'wugong configure' or 'wugong account add' to get started.[/yellow]")
+                console.print("[yellow]No accounts configured yet. Run 'wugong account add' to get started.[/yellow]")
                 return
                 
             table = Table(title="Configured Email Accounts")
