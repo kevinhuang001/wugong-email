@@ -77,12 +77,14 @@ def main():
             console.print("[yellow]No accounts configured yet. Run 'wugong account add' to get started.[/yellow]")
             return
 
-        account = manager.get_account_by_name(args.account) if args.account else manager.accounts[0]
+        # Try to get the account: either specified, or "default", or the first account
+        account = manager.get_account_by_name(args.account) if args.account else manager.get_account_by_name("default")
+        
         if not account:
-            console.print(f"[red]Error: Account '{args.account}' not found.[/red]")
+            console.print(f"[red]Error: Account '{args.account or 'default'}' not found.[/red]")
             return
-
-        # Use the actual friendly name
+            
+        # Use the actual friendly name for display
         account_name = account.get("friendly_name") or "default"
         password = ""
         if manager.encryption_enabled:
@@ -193,12 +195,12 @@ def main():
             account_parser.print_help()
 
     elif args.command == "read":
-        account_name = args.account or "default"
-        account = manager.get_account_by_name(account_name)
+        account = manager.get_account_by_name(args.account) if args.account else manager.get_account_by_name("default")
         if not account:
-            console.print(f"[red]Error: Account '{account_name}' not found.[/red]")
+            console.print(f"[red]Error: Account '{args.account or 'default'}' not found.[/red]")
             return
 
+        account_name = account.get("friendly_name") or "default"
         password = ""
         if manager.encryption_enabled:
             password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
@@ -248,12 +250,12 @@ def main():
                 console.print(f"[red]Error: {e}[/red]")
 
     elif args.command == "send":
-        account_name = args.account or "default"
-        account = manager.get_account_by_name(account_name)
+        account = manager.get_account_by_name(args.account) if args.account else manager.get_account_by_name("default")
         if not account:
-            console.print(f"[red]Error: Account '{account_name}' not found.[/red]")
+            console.print(f"[red]Error: Account '{args.account or 'default'}' not found.[/red]")
             return
 
+        account_name = account.get("friendly_name") or "default"
         password = ""
         if manager.encryption_enabled:
             password = questionary.password(f"Enter encryption password for '{account_name}':").ask()

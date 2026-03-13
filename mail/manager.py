@@ -32,10 +32,15 @@ class MailManager:
         config.save_config(self.config, self.config_path)
 
     def get_account_by_name(self, name):
-        if name == "default" and self.accounts:
-            return self.accounts[0]
+        # 1. First, look for an exact match by friendly_name
         for acc in self.accounts:
             if acc.get("friendly_name") == name:
                 return acc
+        
+        # 2. If name is "default" and no account is explicitly named "default",
+        # fall back to the first account in the list
+        if name == "default" and self.accounts:
+            return self.accounts[0]
+            
         return None
 
