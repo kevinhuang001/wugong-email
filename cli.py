@@ -79,7 +79,9 @@ def handle_list(args, manager):
                         progress.update(task, description=f"[green]Syncing {account_name}: {description or ''}")
 
                 try:
-                    manager.reader.fetch_emails(account, password, limit=args.limit, progress_callback=update_progress)
+                    # Sync up to 20 emails even if we only display 10
+                    sync_limit = max(20, args.limit)
+                    manager.reader.fetch_emails(account, password, limit=sync_limit, progress_callback=update_progress)
                 except Exception as e:
                     console.print(f"[red]❌ Error syncing {account_name}: {e}[/red]")
 
@@ -309,7 +311,7 @@ def handle_account(args, manager, account_parser):
                     # Reuse handle_sync logic for all accounts
                     class Args:
                         account = "all"
-                        limit = 0 # Full metadata sync
+                        limit = 20 # Sync latest 20 emails for initial sync
                     handle_sync(Args(), manager)
             
         case "delete":
@@ -436,21 +438,30 @@ def handle_upgrade():
         with urllib.request.urlopen(f"{raw_url_base}/CHANGELOG.md") as response:
             changelog_content = response.read().decode("utf-8")
             
-        # Extract the latest version block
+        # Extract version blocks from current to latest
         lines = changelog_content.splitlines()
-        latest_block = []
-        found_first = False
+        display_block = []
+        found_any = False
+        
+        # We want to show everything from latest down to (but not including) current_version
+        # If current_version is Unknown, show the last 3 versions
+        version_count = 0
         for line in lines:
             if line.startswith("## ["):
-                if found_first:
+                version_match = line.split("[")[1].split("]")[0]
+                if version_match == current_version:
                     break
-                found_first = True
-            if found_first:
-                latest_block.append(line)
+                version_count += 1
+                if current_version == "Unknown" and version_count > 3:
+                    break
+                found_any = True
+            
+            if found_any:
+                display_block.append(line)
         
-        if latest_block:
+        if display_block:
             console.print("\n" + "=" * 40)
-            console.print(Markdown("\n".join(latest_block)))
+            console.print(Markdown("\n".join(display_block)))
             console.print("=" * 40 + "\n")
         
         if not questionary.confirm(f"Do you want to update to v{latest_version}?").ask():
@@ -529,7 +540,7 @@ def main():
     # Email Sync command
     sync_parser = subparsers.add_parser("sync", help="Sync latest emails from server")
     sync_parser.add_argument("account", nargs="?", help="Friendly name of the account to sync (use 'all' for all accounts)")
-    sync_parser.add_argument("--limit", "-l", type=int, default=0, help="Number of emails to sync per account (0 for unlimited)")
+    sync_parser.add_argument("--limit", "-l", type=int, default=20, help="Number of emails to sync per account (0 for unlimited)")
 
     # Upgrade command (code update)
     subparsers.add_parser("upgrade", help="Update Wugong Email code to the latest version")

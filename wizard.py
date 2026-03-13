@@ -236,14 +236,14 @@ def setup_scheduling(interval_minutes):
             
             cmd = [
                 "schtasks", "/create", "/sc", "minute", "/mo", str(interval_minutes),
-                "/tn", "WugongSync", "/tr", f'"{wugong_bat}" sync all', "/f"
+                "/tn", "WugongSync", "/tr", f'"{wugong_bat}" sync all --limit 20', "/f"
             ]
             subprocess.run(cmd, check=True, capture_output=True)
             print(f"✅ Scheduled sync every {interval_minutes} minutes via Task Scheduler.")
         else:
             # Unix-like (macOS/Linux) Cron
-            # Add line to crontab: */interval * * * * /path/to/wugong sync all
-            cron_job = f"*/{interval_minutes} * * * * {wugong_exe} sync all > /dev/null 2>&1"
+            # Add line to crontab: */interval * * * * /path/to/wugong sync all --limit 20
+            cron_job = f"*/{interval_minutes} * * * * {wugong_exe} sync all --limit 20 > /dev/null 2>&1"
             
             # Read existing crontab
             try:

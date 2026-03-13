@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4] - 2026-03-13
+
+### Added
+- **Incremental Changelog**: Upgrade command now shows all release notes between your current version and the latest version.
+
+### Changed
+- **Default Limits**: `list` command now defaults to 10 emails for display, while `sync` defaults to 20 emails.
+- **Scheduled Sync**: Background sync (Cron/Task Scheduler) now syncs only the latest 20 emails by default.
+- **Initial Sync**: Sync after adding an account now defaults to 20 emails instead of a full metadata sync.
+
 ## [1.8.3] - 2026-03-13
 
 ### Fixed
