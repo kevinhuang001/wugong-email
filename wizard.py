@@ -430,6 +430,7 @@ def init_wizard():
         return False, None
 
 def account_add_wizard():
+    newly_added = []
     try:
         print("=== Email Configuration Wizard ===")
         
@@ -699,8 +700,8 @@ def account_add_wizard():
                         print("Invalid limit. Defaulting to 20.")
                         limit = 20
                 
-                # Save the initial sync limit in the account object
-                account["initial_sync_limit"] = limit
+                # Save the initial sync limit (one-time use, not in config)
+                newly_added.append((account, limit))
                 current_config["accounts"].append(account)
                 
             add_another = questionary.confirm("Add another account?").ask()
@@ -712,6 +713,7 @@ def account_add_wizard():
         config.save_config(current_config, config_path)
 
         print(f"\nConfiguration saved to {config_path} with {len(current_config['accounts'])} account(s)!")
+        return newly_added
 
     except KeyboardInterrupt:
         new_accounts_count = len(current_config.get("accounts", [])) - original_accounts_count
@@ -719,9 +721,10 @@ def account_add_wizard():
             # If there are new accounts added, save them
             config.save_config(current_config, config_path)
             print(f"\n[!] Configuration interrupted. {new_accounts_count} new account(s) were saved to {config_path}.")
+            return newly_added
         else:
             print("\n[!] Configuration cancelled. No changes were made.")
-        return
+            return []
 
 if __name__ == "__main__":
     init_wizard()

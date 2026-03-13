@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.16] - 2026-03-13
+
+### Changed
+- **Initial Sync Logic**: The initial sync after adding an account is now triggered based on the limit entered during the wizard session, rather than the global `sync_interval`.
+- **Configuration Cleanup**: `initial_sync_limit` is no longer saved permanently in the configuration file, keeping the config clean while still allowing one-time initial syncs.
+
 ## [1.9.15] - 2026-03-13
 
 ### Changed

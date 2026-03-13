@@ -344,43 +344,46 @@ def handle_account(args, manager, account_parser):
             console.print(table)
             
         case "add":
-            account_add_wizard()
-            # After adding accounts, reload manager and auto-sync if interval > 0
-            manager = MailManager()
-            if manager.accounts:
-                sync_interval = manager.config.get("general", {}).get("sync_interval", 0)
-                if sync_interval > 0:
-                    # Sync all accounts with is_initial_sync=True
-                    password = ""
-                    if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):
-                        password = questionary.password("Enter encryption password to sync:").ask()
-                        if not password: return
+            newly_added = account_add_wizard()
+            # After adding accounts, auto-sync based on provided limits
+            if newly_added:
+                # Need encryption password if enabled
+                manager = MailManager()
+                password = ""
+                if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):
+                    password = questionary.password("Enter encryption password to start initial sync:").ask()
+                    if not password: return
 
-                    for acc in manager.accounts:
-                        account_name = acc.get("friendly_name")
-                        with Progress(
-                            SpinnerColumn(),
-                            TextColumn("[progress.description]{task.description}"),
-                            BarColumn(),
-                            TaskProgressColumn(),
-                            TimeRemainingColumn(),
-                            console=console,
-                            transient=True,
-                            disable=not sys.stdin.isatty()
-                        ) as progress:
-                            sync_task = progress.add_task(f"[green]Initial sync for {account_name}...", total=None)
-                            
-                            def update_progress(current, total, description=None):
-                                if total:
-                                    progress.update(sync_task, total=total, completed=current, description=f"[green]Initial sync for {account_name}: {description or ''}")
-                                else:
-                                    progress.update(sync_task, description=f"[green]Initial sync for {account_name}: {description or ''}")
+                for acc, limit in newly_added:
+                    account_name = acc.get("friendly_name")
+                    if limit == 0:
+                        console.print(f"[yellow]ℹ️  {account_name}: Skipping initial sync as limit was set to 0.[/yellow]")
+                        continue
 
-                            try:
-                                manager.reader.fetch_emails(acc, password, is_initial_sync=True, progress_callback=update_progress)
-                                console.print(f"[green]✅ {account_name}: Initial sync complete.[/green]")
-                            except Exception as e:
-                                console.print(f"[red]❌ Error syncing {account_name}: {e}[/red]")
+                    with Progress(
+                        SpinnerColumn(),
+                        TextColumn("[progress.description]{task.description}"),
+                        BarColumn(),
+                        TaskProgressColumn(),
+                        TimeRemainingColumn(),
+                        console=console,
+                        transient=True,
+                        disable=not sys.stdin.isatty()
+                    ) as progress:
+                        sync_task = progress.add_task(f"[green]Initial sync for {account_name}...", total=None)
+                        
+                        def update_progress(current, total, description=None):
+                            if total:
+                                progress.update(sync_task, total=total, completed=current, description=f"[green]Initial sync for {account_name}: {description or ''}")
+                            else:
+                                progress.update(sync_task, description=f"[green]Initial sync for {account_name}: {description or ''}")
+
+                        try:
+                            # Use the limit specified in the wizard session
+                            manager.reader.fetch_emails(acc, password, limit=limit, is_initial_sync=True, progress_callback=update_progress)
+                            console.print(f"[green]✅ {account_name}: Initial sync complete (limit: {limit if limit > 0 else 'all'}).[/green]")
+                        except Exception as e:
+                            console.print(f"[red]❌ Error syncing {account_name}: {e}[/red]")
             
         case "delete":
             account_name = args.name
