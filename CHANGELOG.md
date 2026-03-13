@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.7] - 2026-03-13
+
+### Changed
+- **Installation Docs**: Updated `install.sh` and `install.ps1` to display the full suite of modern commands including `init` and `sync`.
+
 ## [1.8.6] - 2026-03-13
 
 ### Changed
