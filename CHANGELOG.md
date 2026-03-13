@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.5] - 2026-03-13
+
+### Added
+- **Unified Wrapper Script**: Extracted `wugong` (Bash) and `wugong.bat` (Windows) into separate, standalone files for better maintainability and consistent behavior across installation and updates.
+- **Improved Installation Logic**: Simplified `install.sh` and `update.sh` by removing dynamic script generation, ensuring the CLI wrapper always points to the correct virtual environment and configuration paths.
+
+### Changed
+- **Aligned Update Process**: Synchronized configuration variables and environment setup between `install.sh` and `update.sh` to prevent command-not-found errors after updates.
+- **Enhanced Windows Support**: Updated `install.ps1` to use the pre-defined `wugong.bat` wrapper, ensuring consistent environment variable handling on Windows.
+
 ## [1.1.0] - 2026-03-13
 
 ### Added
