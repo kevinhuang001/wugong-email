@@ -79,5 +79,6 @@ Write-Host "Config:   $ConfigFile"
 Write-Host "`nTo use 'wugong' from anywhere, add this directory to your PATH:" -ForegroundColor Blue
 Write-Host "$InstallDir" -ForegroundColor Green
 Write-Host "--------------------------------------------------"
-Write-Host "Run 'wugong configure' to setup your accounts."
+Write-Host "Run 'wugong account add' to setup your accounts."
 Write-Host "Run 'wugong list' to view your emails."
+Write-Host "Run 'wugong send' to send emails."

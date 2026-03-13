@@ -59,7 +59,7 @@ We provide an automated installation script that handles Python version checks, 
 ### 1. Configure Account
 Run the configuration wizard to add your first email account.
 ```bash
-wugong configure
+wugong account add
 ```
 *Tip: You can set the first account as the "default account" to skip entering the account name in future `list` commands.*
 
@@ -82,6 +82,22 @@ After getting an email ID from the `list` command, use the `read` command to vie
 - **Arguments**:
   - `-a, --account`: Required. Friendly name of the account.
   - `-i, --id`: Required. Unique ID of the email on the IMAP server.
+
+### 4. Send Email (Send)
+Send an email with optional attachments:
+- **Send simple email**:
+  ```bash
+  wugong send -t recipient@example.com -s "Hello" -b "This is the body"
+  ```
+- **Send with attachments**:
+  ```bash
+  wugong send -t recipient@example.com -s "Files" -b "See attached" --attach file1.pdf file2.jpg
+  ```
+
+### 5. Account Management
+- **List all accounts**: `wugong account list`
+- **Add/Update account**: `wugong account add`
+- **Delete account**: `wugong account delete <name>`
 
 ---
 
