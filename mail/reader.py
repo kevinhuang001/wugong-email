@@ -70,16 +70,17 @@ class MailReader:
                             from_header = msg.get("From", "Unknown")
                         
                         name, email_addr = parseaddr(from_header)
-                        if name and email_addr:
-                            sender = f"{name} <{email_addr}>"
-                        elif email_addr:
-                            sender = email_addr
-                        else:
-                            sender = from_header
-                            
+                        # 'from' stores the name or raw header (if no name), 'from_email' stores the actual address
+                        sender_name = name if name else from_header
+                        # If the name is the same as the address, or contains the address, 
+                        # we try to clean it to just the name.
+                        if name and email_addr and email_addr in name:
+                            sender_name = name.replace(f"<{email_addr}>", "").replace(email_addr, "").strip()
+                        
                         new_emails.append({
                             "id": uid.decode(),
-                            "from": sender,
+                            "from": sender_name or from_header,
+                            "from_email": email_addr,
                             "subject": subject,
                             "date": msg.get("Date"),
                             "seen": False # New emails are assumed unread for now
