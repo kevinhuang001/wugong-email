@@ -12,27 +12,6 @@ from wizard import run_wizard
 
 console = Console()
 
-def format_short_date(date_str):
-    if not date_str or date_str == "N/A":
-        return "N/A"
-    
-    try:
-        dt = parsedate_to_datetime(date_str)
-        now = datetime.now(dt.tzinfo)
-        
-        if dt.date() == now.date():
-            # Today: HH:MM
-            return dt.strftime("%H:%M")
-        elif dt.year == now.year:
-            # This year: MM-DD
-            return dt.strftime("%m-%d")
-        else:
-            # Other years: YYYY-MM-DD
-            return dt.strftime("%Y-%m-%d")
-    except:
-        # Fallback to a shorter version if parsing fails
-        return date_str[:11] if len(date_str) > 11 else date_str
-
 def main():
     parser = argparse.ArgumentParser(description="Wugong Email CLI Manager")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -145,9 +124,9 @@ def main():
                 table = Table(title=title, show_lines=False)
                 table.add_column("S", justify="center", width=1) # Status column
                 table.add_column("ID", style="cyan", justify="right")
-                table.add_column("From", style="magenta", width=25)
+                table.add_column("From", style="magenta", width=40)
                 table.add_column("Subject", style="white", overflow="ellipsis")
-                table.add_column("Date", style="green", no_wrap=True)
+                table.add_column("Time", style="green", no_wrap=True)
 
                 for em in emails:
                     # Mark unread with *
@@ -162,7 +141,7 @@ def main():
                         em["id"],
                         from_user,
                         subject,
-                        format_short_date(em["date"])
+                        em["date"]
                     )
                 console.print(table)
             except Exception as e:
