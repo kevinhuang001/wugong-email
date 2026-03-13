@@ -548,6 +548,7 @@ def handle_uninstall():
 
 def main():
     parser = argparse.ArgumentParser(description="Wugong Email CLI Manager")
+    parser.add_argument("--version", "-v", action="store_true", help="Show the version of Wugong Email")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # List command
@@ -612,6 +613,16 @@ def main():
     subparsers.add_parser("configure", help="Modify settings like sync interval")
 
     args = parser.parse_args()
+    
+    if args.version:
+        install_dir = os.path.dirname(os.path.abspath(__file__))
+        version_file = os.path.join(install_dir, ".version")
+        version = "Unknown"
+        if os.path.exists(version_file):
+            with open(version_file, "r") as f:
+                version = f.read().strip()
+        console.print(f"Wugong Email v{version}")
+        return
 
     if not args.command:
         parser.print_help()

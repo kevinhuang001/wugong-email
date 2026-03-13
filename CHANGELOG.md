@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - **Verified Maintenance Scripts**: Audited and confirmed correctness of all install, update, and uninstall scripts for Bash and PowerShell.
 
 ### Added
+- **Version Command**: Added support for `--version` or `-v` to show the current installed version of Wugong Email.
 - **Documentation Update**: Added `--limit` and `--all` options to the `sync` command documentation in `README.md`.
 
 ## [1.9.23] - 2026-03-13
