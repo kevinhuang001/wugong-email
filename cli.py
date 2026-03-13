@@ -171,6 +171,33 @@ def handle_read(args, manager):
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
 
+def handle_delete(args, manager):
+    account = manager.get_account_by_name(args.account) if args.account else manager.get_account_by_name("default")
+    if not account:
+        console.print(f"[red]Error: Account '{args.account or 'default'}' not found.[/red]")
+        return
+
+    account_name = account.get("friendly_name") or "default"
+    password = ""
+    if manager.encryption_enabled:
+        password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
+        if not password:
+            return
+
+    confirm = questionary.confirm(f"Are you sure you want to delete email {args.id} from {account_name}?").ask()
+    if not confirm:
+        return
+
+    with console.status(f"[bold red]Deleting email {args.id} from {account_name}...") as status:
+        try:
+            success, message = manager.reader.delete_email(account, password, args.id)
+            if success:
+                console.print(f"[green]✅ {message}[/green]")
+            else:
+                console.print(f"[yellow]⚠️ {message}[/yellow]")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+
 def handle_send(args, manager):
     account = manager.get_account_by_name(args.account) if args.account else manager.get_account_by_name("default")
     if not account:
@@ -338,6 +365,11 @@ def main():
     read_parser.add_argument("--account", "-a", help="Account name (uses default if not specified)")
     read_parser.add_argument("--id", "-i", required=True, help="Email ID to read")
 
+    # Delete command
+    delete_parser = subparsers.add_parser("delete", help="Delete a specific email")
+    delete_parser.add_argument("--account", "-a", help="Account name (uses default if not specified)")
+    delete_parser.add_argument("--id", "-i", required=True, help="Email ID to delete")
+
     # Send command
     send_parser = subparsers.add_parser("send", help="Send an email")
     send_parser.add_argument("--account", "-a", help="Account name (uses default if not specified)")
@@ -388,6 +420,8 @@ def main():
             handle_list(args, manager)
         case "read":
             handle_read(args, manager)
+        case "delete":
+            handle_delete(args, manager)
         case "send":
             handle_send(args, manager)
         case "account":

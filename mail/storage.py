@@ -1,5 +1,6 @@
 import sqlite3
 import os
+from datetime import datetime
 from crypto_utils import decrypt_data, encrypt_data
 
 class StorageManager:
@@ -34,6 +35,16 @@ class StorageManager:
                 account_name TEXT PRIMARY KEY,
                 last_sync_time TEXT,
                 last_uid TEXT
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS pending_actions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_name TEXT,
+                action_type TEXT, -- e.g., 'delete'
+                uid TEXT,
+                created_at TEXT
             )
         ''')
 
@@ -182,3 +193,38 @@ class StorageManager:
                 content = decrypt_data(content, password, self.salt)
             return content_type, content
         return None, None
+
+    def delete_email_from_cache(self, account_name, uid):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM emails WHERE account_name = ? AND uid = ?", (account_name, uid))
+        conn.commit()
+        conn.close()
+
+    def add_pending_action(self, account_name, action_type, uid):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO pending_actions (account_name, action_type, uid, created_at)
+            VALUES (?, ?, ?, ?)
+        ''', (account_name, action_type, uid, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+        conn.close()
+
+    def get_pending_actions(self, account_name, action_type=None):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        if action_type:
+            cursor.execute("SELECT id, uid FROM pending_actions WHERE account_name = ? AND action_type = ?", (account_name, action_type))
+        else:
+            cursor.execute("SELECT id, action_type, uid FROM pending_actions WHERE account_name = ?", (account_name,))
+        rows = cursor.fetchall()
+        conn.close()
+        return rows
+
+    def remove_pending_action(self, action_id):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM pending_actions WHERE id = ?", (action_id,))
+        conn.commit()
+        conn.close()

@@ -28,6 +28,9 @@ class MailReader:
             fetch_limit = limit
 
         try:
+            # Before fetching new emails, process any pending actions (like deletions)
+            self.sync_pending_actions(account, auth_password)
+            
             auth = self.auth_manager.decrypt_account_auth(account, auth_password)
             mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
             
@@ -216,3 +219,83 @@ class MailReader:
 
         except Exception as e:
             return f"Error: {e}"
+
+    def delete_email(self, account, auth_password, email_id):
+        """
+        Delete an email by UID from both remote server and local cache.
+        If network fails, records a pending action for later synchronization.
+        """
+        account_name = account.get("name")
+        mail = None
+        try:
+            # 1. Try to delete from remote server
+            mail = self._connect_imap(account, auth_password)
+            mail.select("INBOX")
+            
+            # Store the deletion in IMAP
+            mail.uid('STORE', email_id, '+FLAGS', '(\\Deleted)')
+            mail.expunge()
+            
+            # 2. If remote success, delete from local cache
+            self.storage_manager.delete_email_from_cache(account_name, email_id)
+            
+            mail.close()
+            mail.logout()
+            return True, "Email deleted successfully from server and local cache."
+            
+        except Exception as e:
+            # 3. If remote fails (network issue), record as pending action
+            print(f"⚠️ Network issue during deletion: {e}. Recording for later sync.")
+            self.storage_manager.add_pending_action(account_name, 'delete', email_id)
+            # Also remove from local cache to provide immediate feedback to user
+            self.storage_manager.delete_email_from_cache(account_name, email_id)
+            
+            if mail:
+                try:
+                    mail.logout()
+                except:
+                    pass
+            return False, f"Network issue: Deletion scheduled for next sync. Local cache updated."
+
+    def sync_pending_actions(self, account, auth_password):
+        """
+        Process pending actions (like deletions) that failed previously.
+        """
+        account_name = account.get("name")
+        pending_actions = self.storage_manager.get_pending_actions(account_name)
+        
+        if not pending_actions:
+            return
+            
+        mail = None
+        processed_ids = []
+        try:
+            mail = self._connect_imap(account, auth_password)
+            mail.select("INBOX")
+            
+            for action_id, action_type, uid in pending_actions:
+                if action_type == 'delete':
+                    try:
+                        # Try to delete from remote
+                        mail.uid('STORE', uid, '+FLAGS', '(\\Deleted)')
+                        processed_ids.append(action_id)
+                    except Exception as e:
+                        print(f"Failed to process pending deletion for UID {uid}: {e}")
+            
+            if processed_ids:
+                mail.expunge()
+                # Remove successfully processed actions from DB
+                for action_id in processed_ids:
+                    self.storage_manager.remove_pending_action(action_id)
+                print(f"✅ Processed {len(processed_ids)} pending actions for {account_name}.")
+            
+            mail.close()
+            mail.logout()
+            
+        except Exception as e:
+            print(f"⚠️ Failed to sync pending actions for {account_name}: {e}")
+            if mail:
+                try:
+                    mail.logout()
+                except:
+                    pass
