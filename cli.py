@@ -78,7 +78,7 @@ def handle_list(args, manager):
         should_sync = not args.no_sync
         
         if should_sync:
-            # Sync and Fetch
+            # Real-time Query via IMAP
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
@@ -89,13 +89,13 @@ def handle_list(args, manager):
                 transient=True,
                 disable=not sys.stdin.isatty()
             ) as progress:
-                sync_task = progress.add_task(f"[green]Syncing {account_name}...", total=None)
+                query_task = progress.add_task(f"[green]Querying {account_name}...", total=None)
                 
                 def update_progress(current, total, description=None):
                     if total:
-                        progress.update(sync_task, total=total, completed=current, description=f"[green]Syncing {account_name}: {description or ''}")
+                        progress.update(query_task, total=total, completed=current, description=f"[green]Querying {account_name}: {description or ''}")
                     else:
-                        progress.update(sync_task, description=f"[green]Syncing {account_name}: {description or ''}")
+                        progress.update(query_task, description=f"[green]Querying {account_name}: {description or ''}")
 
                 try:
                     # Use query_emails for listing (IMAP search first, no sync side effects)
@@ -120,7 +120,8 @@ def handle_list(args, manager):
                 emails, metadata = manager.reader.query_emails(
                     account, password, 
                     limit=list_limit, 
-                    search_criteria=search_criteria
+                    search_criteria=search_criteria,
+                    local_only=True
                 )
 
         # 3. Display Results

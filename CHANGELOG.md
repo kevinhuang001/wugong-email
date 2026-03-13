@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.20] - 2026-03-13
+
+### Changed
+- **List UI Update**: Renamed "Syncing" to "Querying" in `list` command to accurately reflect that it's a real-time query without side effects (no database update).
+- **No-Sync Fix**: Fixed a bug where `list --no-sync` would still attempt to connect to the server. Now it correctly queries the local cache only.
+- **Improved Transparency**: Clarified the difference between real-time IMAP querying and database synchronization in the CLI output.
+
 ## [1.9.19] - 2026-03-13
 
 ### Changed
