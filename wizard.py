@@ -5,6 +5,7 @@ import questionary
 import threading
 import webbrowser
 import logging
+import config
 from flask import Flask, request
 from requests_oauthlib import OAuth2Session
 from crypto_utils import generate_salt, encrypt_data
@@ -183,43 +184,25 @@ def run_wizard():
     try:
         print("=== Email Configuration Wizard ===")
         
-        # Determine config path: ENV > USER_CONFIG > LOCAL
-        global CONFIG_FILE
-        env_path = os.environ.get("WUGONG_CONFIG")
-        user_path = os.path.expanduser("~/.config/wugong/config.toml")
+        # Determine config path using centralized config module
+        config_path = config.get_config_path()
         
-        if env_path:
-            CONFIG_FILE = env_path
-        elif os.path.exists(os.path.dirname(user_path)):
-            CONFIG_FILE = user_path
-        
-        # Ensure directory exists if it's in ~/.config
-        config_dir = os.path.dirname(CONFIG_FILE)
+        # Ensure directory exists
+        config_dir = os.path.dirname(config_path)
         if config_dir and not os.path.exists(config_dir):
             os.makedirs(config_dir, exist_ok=True)
 
         # 1. Load existing config or initialize new one
-        first_use = not os.path.exists(CONFIG_FILE)
-        config = {"general": {"encryption_enabled": True, "salt": ""}, "accounts": []}
-        original_accounts_count = 0
+        first_use = not os.path.exists(config_path)
+        current_config = config.load_config(config_path)
+        original_accounts_count = len(current_config.get('accounts', []))
         
         if not first_use:
-            try:
-                with open(CONFIG_FILE, "r") as f:
-                    config = toml.load(f)
-                original_accounts_count = len(config.get('accounts', []))
-                print(f"Loaded existing config with {original_accounts_count} account(s).")
-            except Exception as e:
-                print(f"Error loading config: {e}. Starting fresh.")
-                first_use = True
+            print(f"Loaded existing config with {original_accounts_count} account(s).")
 
         # 2. Setup/Verify encryption
         if first_use:
             print("First use detected. Please set up global encryption settings.")
-            
-            # Ask about email encryption first as requested
-            encrypt_emails = questionary.confirm("Encrypt locally stored emails?").ask()
-            if encrypt_emails is None: raise KeyboardInterrupt
             
             encryption_password = questionary.password("Set an encryption password for sensitive data (accounts, tokens):").ask()
             if encryption_password is None: raise KeyboardInterrupt
@@ -227,20 +210,23 @@ def run_wizard():
                 print("Password cannot be empty.")
                 return
                 
+            encrypt_emails = questionary.confirm("Encrypt locally stored emails?").ask()
+            if encrypt_emails is None: raise KeyboardInterrupt
+            
             encrypt_enabled = questionary.confirm("Enable encryption for account credentials?").ask()
             if encrypt_enabled is None: raise KeyboardInterrupt
             
             salt_val = generate_salt()
-            config["general"]["encryption_enabled"] = encrypt_enabled
-            config["general"]["encrypt_emails"] = encrypt_emails
-            config["general"]["salt"] = base64.b64encode(salt_val).decode() if encrypt_enabled else ""
+            current_config["general"]["encryption_enabled"] = encrypt_enabled
+            current_config["general"]["encrypt_emails"] = encrypt_emails
+            current_config["general"]["salt"] = base64.b64encode(salt_val).decode() if encrypt_enabled else ""
         else:
             encryption_password = questionary.password("Enter your encryption password to proceed:").ask()
             if encryption_password is None: raise KeyboardInterrupt
             
             # Simple validation: Try to decrypt one piece of sensitive data if it exists
-            if config.get("accounts"):
-                first_acc = config["accounts"][0]
+            if current_config.get("accounts"):
+                first_acc = current_config["accounts"][0]
                 first_auth = first_acc.get("auth", {})
                 sensitive_keys = ["password", "client_id", "client_secret", "refresh_token", "access_token"]
                 
@@ -254,22 +240,22 @@ def run_wizard():
                     from crypto_utils import decrypt_data
                     from rich import print as rprint
                     try:
-                        decrypt_data(test_val, encryption_password, base64.b64decode(config["general"]["salt"]))
+                        decrypt_data(test_val, encryption_password, config.get_salt(current_config))
                     except Exception:
                         rprint("[red]Error: Incorrect encryption password. Access denied.[/red]")
                         return
             
-            encrypt_enabled = config["general"]["encryption_enabled"]
-            encrypt_emails = config["general"].get("encrypt_emails", False)
-            salt_val = base64.b64decode(config["general"]["salt"]) if encrypt_enabled else None
+            encrypt_enabled = current_config["general"]["encryption_enabled"]
+            encrypt_emails = current_config["general"].get("encrypt_emails", False)
+            salt_val = config.get_salt(current_config)
 
         # 3. Add Account(s) Loop
         while True:
-            print(f"\n--- Adding Account #{len(config['accounts']) + 1} ---")
+            print(f"\n--- Adding Account #{len(current_config['accounts']) + 1} ---")
             
             is_default = False
             # Check if a default account already exists
-            has_default = any(acc.get("friendly_name") == "default" for acc in config["accounts"])
+            has_default = any(acc.get("friendly_name") == "default" for acc in current_config["accounts"])
             
             if not has_default:
                 is_default = questionary.confirm("Set this as your default account? (No friendly name required)").ask()
@@ -285,14 +271,14 @@ def run_wizard():
                     continue
 
             # Check if friendly name already exists
-            existing_names = [acc.get("friendly_name") for acc in config.get("accounts", [])]
+            existing_names = [acc.get("friendly_name") for acc in current_config.get("accounts", [])]
             if friendly_name in existing_names:
                 overwrite = questionary.confirm(f"Account '{friendly_name}' already exists. Overwrite?").ask()
                 if overwrite is None: raise KeyboardInterrupt
                 if not overwrite:
                     continue
                 # Remove existing account for overwrite
-                config["accounts"] = [acc for acc in config["accounts"] if acc.get("friendly_name") != friendly_name]
+                current_config["accounts"] = [acc for acc in current_config["accounts"] if acc.get("friendly_name") != friendly_name]
                 
             provider_name = questionary.select(
                 "Select your email provider:",
@@ -340,7 +326,7 @@ def run_wizard():
                 if encrypt_enabled:
                     auth_details = {
                         "username": username,
-                        "password": encrypt_data(password, encryption_password, salt)
+                        "password": encrypt_data(password, encryption_password, salt_val)
                     }
                 else:
                     auth_details = {"username": username, "password": password}
@@ -392,18 +378,18 @@ def run_wizard():
                 if not refresh_token:
                     refresh_token = questionary.text("OAuth2 Refresh Token (optional):").ask()
                     if refresh_token is None: raise KeyboardInterrupt
-
+                
                 if encrypt_enabled:
                     auth_details = {
                         "username": username,
-                        "client_id": encrypt_data(client_id, encryption_password, salt),
-                        "client_secret": encrypt_data(client_secret, encryption_password, salt),
+                        "client_id": encrypt_data(client_id, encryption_password, salt_val),
+                        "client_secret": encrypt_data(client_secret, encryption_password, salt_val),
                         "auth_url": auth_url,
                         "token_url": token_url,
                         "redirect_uri": redirect_uri,
                         "scopes": scopes,
-                        "refresh_token": encrypt_data(refresh_token, encryption_password, salt) if refresh_token else "",
-                        "access_token": encrypt_data(access_token, encryption_password, salt) if access_token else ""
+                        "refresh_token": encrypt_data(refresh_token, encryption_password, salt_val) if refresh_token else "",
+                        "access_token": encrypt_data(access_token, encryption_password, salt_val) if access_token else ""
                     }
                 else:
                     auth_details = {
@@ -429,7 +415,7 @@ def run_wizard():
                 "auth": auth_details
             }
             
-            config["accounts"].append(account)
+            current_config["accounts"].append(account)
             
             add_another = questionary.confirm("Add another account?").ask()
             if add_another is None: raise KeyboardInterrupt
@@ -437,18 +423,16 @@ def run_wizard():
                 break
 
         # 4. Save to config.toml
-        with open(CONFIG_FILE, "w") as f:
-            toml.dump(config, f)
+        config.save_config(current_config, config_path)
 
-        print(f"\nConfiguration saved to {CONFIG_FILE} with {len(config['accounts'])} account(s)!")
+        print(f"\nConfiguration saved to {config_path} with {len(current_config['accounts'])} account(s)!")
 
     except KeyboardInterrupt:
-        new_accounts_count = len(config.get("accounts", [])) - original_accounts_count
+        new_accounts_count = len(current_config.get("accounts", [])) - original_accounts_count
         if new_accounts_count > 0:
             # If there are new accounts added, save them
-            with open(CONFIG_FILE, "w") as f:
-                toml.dump(config, f)
-            print(f"\n[!] Configuration interrupted. {new_accounts_count} new account(s) were saved to {CONFIG_FILE}.")
+            config.save_config(current_config, config_path)
+            print(f"\n[!] Configuration interrupted. {new_accounts_count} new account(s) were saved to {config_path}.")
         else:
             print("\n[!] Configuration cancelled. No changes were made.")
         return

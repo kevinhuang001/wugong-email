@@ -73,46 +73,24 @@ def main():
         return
 
     if args.command == "list":
-        if not args.account:
-            # Check for default account
-            default_acc = manager.get_account_by_name("default")
-            if default_acc:
-                # Use default account automatically
-                account = default_acc
-                args.account = "default"
-                # Proceed to fetch emails below
-            else:
-                # List configured accounts
-                table = Table(title="Configured Email Accounts")
-                table.add_column("ID", style="cyan", no_wrap=True)
-                table.add_column("Friendly Name", style="magenta")
-                table.add_column("Method", style="green")
-                table.add_column("IMAP Server", style="yellow")
+        if not manager.accounts:
+            console.print("[yellow]No accounts configured yet. Run 'wugong account add' to get started.[/yellow]")
+            return
 
-                for idx, acc in enumerate(manager.accounts, 1):
-                    table.add_row(
-                        str(idx),
-                        acc.get("friendly_name", "N/A"),
-                        acc.get("login_method", "N/A"),
-                        f"{acc.get('imap_server')}:{acc.get('imap_port')}"
-                    )
-                console.print(table)
-                console.print("\nUse `list <AccountName>` to view emails for a specific account.")
-                return
-
-        # List emails for a specific account (either specified or default)
-        account = manager.get_account_by_name(args.account)
+        account = manager.get_account_by_name(args.account) if args.account else manager.accounts[0]
         if not account:
             console.print(f"[red]Error: Account '{args.account}' not found.[/red]")
             return
 
+        # Always show "default" for the first account
+        account_name = "default" if account == manager.accounts[0] else account.get("friendly_name", "account")
         password = ""
         if manager.encryption_enabled:
-            password = questionary.password(f"Enter encryption password for '{args.account}':").ask()
+            password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
             if not password:
                 return
 
-        with console.status(f"[bold green]Fetching emails for {args.account}...") as status:
+        with console.status(f"[bold green]Fetching emails for {account_name}...") as status:
             try:
                 search_criteria = {
                     "keyword": args.keyword,
@@ -122,7 +100,7 @@ def main():
                 }
                 emails, metadata = manager.reader.fetch_emails(account, password, limit=args.limit, search_criteria=search_criteria)
                 
-                title = f"Latest {len(emails)} Emails for {args.account}"
+                title = f"Latest {len(emails)} Emails for {account_name}"
                 if any(search_criteria.values()):
                     active_filters = [f"{k}={v}" for k, v in search_criteria.items() if v]
                     title += f" (Filters: {', '.join(active_filters)})"
@@ -130,7 +108,8 @@ def main():
                 # Add sync info to title
                 last_sync = metadata.get("last_sync", "Never")
                 is_offline = metadata.get("is_offline", False)
-                status_str = "[red](OFFLINE)[/red]" if is_offline else "[green](ONLINE)[/green]"
+                sync_error = metadata.get("error")
+                status_str = f"[red](OFFLINE: {sync_error})[/red]" if is_offline and sync_error else ("[red](OFFLINE)[/red]" if is_offline else "[green](ONLINE)[/green]")
                 title += f"\n[dim]Last Sync: {last_sync} {status_str}[/dim]"
 
                 table = Table(title=title, show_lines=False)

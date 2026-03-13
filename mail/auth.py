@@ -27,21 +27,26 @@ class AuthManager:
     def refresh_oauth2_token(self, account, auth, password, config):
         """Refreshes the OAuth2 access token and updates config."""
         refresh_token = auth.get("refresh_token")
-        if not refresh_token:
+        token_url = auth.get("token_url")
+        if not refresh_token or not token_url:
             return None
 
         print(f"🔄 Refreshing OAuth2 token for '{account.get('friendly_name')}'...")
         
+        scopes = auth.get('scopes')
+        if scopes is None:
+            scopes = []
+            
         payload = {
             'client_id': auth.get('client_id'),
             'client_secret': auth.get('client_secret'),
             'refresh_token': refresh_token,
             'grant_type': 'refresh_token',
-            'scope': " ".join(auth.get('scopes', []))
+            'scope': " ".join(scopes)
         }
         
         try:
-            response = requests.post(auth.get('token_url'), data=payload)
+            response = requests.post(token_url, data=payload)
             response.raise_for_status()
             token_data = response.json()
             

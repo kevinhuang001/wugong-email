@@ -74,15 +74,21 @@ class MailReader:
                 
                 if new_emails:
                     self.storage_manager.save_emails_to_cache(account_name, new_emails, auth_password)
-                    # Update sync status
-                    new_last_uid = uids[-1].decode() if uids else last_uid
-                    self.storage_manager.update_sync_info(account_name, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), new_last_uid)
+                
+                # Update sync status (even if no new emails, we update the time)
+                new_last_uid = uids[-1].decode() if uids else last_uid
+                self.storage_manager.update_sync_info(account_name, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), new_last_uid)
+                # Refresh sync_info to get the updated time for the return value
+                sync_info = self.storage_manager.get_last_sync_info(account_name)
 
             mail.close()
             mail.logout()
             
         except Exception as e:
+            # print(f"DEBUG: Sync failed for {account_name}: {e}") # Debugging
             is_offline = True
+            sync_error = str(e)
+            return self.storage_manager.get_emails_from_cache(account_name, limit, search_criteria, auth_password), {"last_sync": sync_info.get("time"), "is_offline": is_offline, "error": sync_error}
 
         # Always return from cache (which now includes newly fetched emails)
         email_list = self.storage_manager.get_emails_from_cache(account_name, limit, search_criteria, auth_password)
