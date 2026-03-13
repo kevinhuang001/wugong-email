@@ -27,7 +27,7 @@ def main():
 
     # Read command
     read_parser = subparsers.add_parser("read", help="Read a specific email")
-    read_parser.add_argument("--account", "-a", required=True, help="Account name")
+    read_parser.add_argument("--account", "-a", help="Account name (uses default if not specified)")
     read_parser.add_argument("--id", "-i", required=True, help="Email ID to read")
 
     # Send command
@@ -218,18 +218,19 @@ def main():
             console.print(f"[red]Error: uninstall.sh not found in {install_dir}[/red]")
 
     elif args.command == "read":
-        account = manager.get_account_by_name(args.account)
+        account_name = args.account or "default"
+        account = manager.get_account_by_name(account_name)
         if not account:
-            console.print(f"[red]Error: Account '{args.account}' not found.[/red]")
+            console.print(f"[red]Error: Account '{account_name}' not found.[/red]")
             return
 
         password = ""
         if manager.encryption_enabled:
-            password = questionary.password(f"Enter encryption password for '{args.account}':").ask()
+            password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
             if not password:
                 return
 
-        with console.status(f"[bold green]Fetching content for email {args.id}...") as status:
+        with console.status(f"[bold green]Fetching content for email {args.id} via {account_name}...") as status:
             try:
                 content = manager.get_email_content(account, password, args.id)
                 if content:
