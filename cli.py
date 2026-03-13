@@ -55,10 +55,10 @@ def main():
     delete_parser = account_subparsers.add_parser("delete", help="Delete a configured account")
     delete_parser.add_argument("name", help="Friendly name of the account to delete")
 
-    # Email Update command
-    update_parser = subparsers.add_parser("update", help="Sync latest emails from server")
-    update_parser.add_argument("account", nargs="?", help="Friendly name of the account to update (use 'all' for all accounts)")
-    update_parser.add_argument("--limit", "-l", type=int, default=10, help="Number of emails to sync per account")
+    # Email Sync command
+    sync_parser = subparsers.add_parser("sync", help="Sync latest emails from server")
+    sync_parser.add_argument("account", nargs="?", help="Friendly name of the account to sync (use 'all' for all accounts)")
+    sync_parser.add_argument("--limit", "-l", type=int, default=10, help="Number of emails to sync per account")
 
     # Upgrade command (code update)
     subparsers.add_parser("upgrade", help="Update Wugong Email code to the latest version")
@@ -180,7 +180,7 @@ def main():
                 except Exception as e:
                     console.print(f"[red]Error listing {account_name}: {e}[/red]")
 
-    elif args.command == "update":
+    elif args.command == "sync":
         if not manager.accounts:
             console.print("[yellow]No accounts configured yet.[/yellow]")
             return
@@ -209,12 +209,12 @@ def main():
 
         for account in target_accounts:
             account_name = account.get("friendly_name") or "default"
-            with console.status(f"[bold green]Updating emails for {account_name}...") as status:
+            with console.status(f"[bold green]Syncing emails for {account_name}...") as status:
                 try:
                     manager.reader.fetch_emails(account, password, limit=args.limit)
-                    console.print(f"[green]Successfully updated {account_name}.[/green]")
+                    console.print(f"[green]Successfully synced {account_name}.[/green]")
                 except Exception as e:
-                    console.print(f"[red]Error updating {account_name}: {e}[/red]")
+                    console.print(f"[red]Error syncing {account_name}: {e}[/red]")
 
     elif args.command == "account":
         if args.account_command == "list":
