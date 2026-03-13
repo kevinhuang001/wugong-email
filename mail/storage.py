@@ -69,7 +69,9 @@ class StorageManager:
     def save_emails_to_cache(self, account_name, emails, password):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
+        new_uids = []
         for em in emails:
+            uid = em["id"]
             sender = em.get("from", "")
             sender_email = em.get("from_email", "")
             subject = em.get("subject", "")
@@ -79,6 +81,11 @@ class StorageManager:
                 sender_email = encrypt_data(sender_email, password, self.salt)
                 subject = encrypt_data(subject, password, self.salt)
             
+            # Check if this UID already exists for this account
+            cursor.execute("SELECT 1 FROM emails WHERE account_name = ? AND uid = ?", (account_name, uid))
+            if not cursor.fetchone():
+                new_uids.append(uid)
+
             cursor.execute('''
                 INSERT INTO emails (account_name, uid, sender, sender_email, subject, date, seen)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -88,9 +95,10 @@ class StorageManager:
                     subject = excluded.subject,
                     date = excluded.date,
                     seen = excluded.seen
-            ''', (account_name, em["id"], sender, sender_email, subject, em["date"], 1 if em.get("seen") else 0))
+            ''', (account_name, uid, sender, sender_email, subject, em["date"], 1 if em.get("seen") else 0))
         conn.commit()
         conn.close()
+        return new_uids
 
     def update_email_content(self, account_name, uid, content_type, content, password):
         if self.encrypt_emails and self.encryption_enabled:

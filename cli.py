@@ -14,6 +14,311 @@ from wizard import run_wizard
 
 console = Console()
 
+def handle_list(args, manager):
+    if not manager.accounts:
+        console.print("[yellow]No accounts configured yet. Run 'wugong account add' to get started.[/yellow]")
+        return
+
+    # Handle "all" accounts
+    target_accounts = []
+    if args.account == "all":
+        target_accounts = manager.accounts
+    else:
+        acc = manager.get_account_by_name(args.account) if args.account else manager.get_account_by_name("default")
+        if not acc:
+            console.print(f"[red]Error: Account '{args.account or 'default'}' not found.[/red]")
+            return
+        target_accounts = [acc]
+
+    # Get password once if encryption is enabled (assume same password for all for simplicity in CLI)
+    password = ""
+    if manager.encryption_enabled:
+        if args.account == "all":
+            prompt_text = "Enter encryption password for all accounts:"
+        else:
+            acc_name = target_accounts[0].get("friendly_name") or "default"
+            prompt_text = f"Enter encryption password for '{acc_name}':"
+        
+        password = questionary.password(prompt_text).ask()
+        if not password:
+            return
+
+    for account in target_accounts:
+        account_name = account.get("friendly_name") or "default"
+        
+        # 1. Sync first (unless --no-sync is specified)
+        if not args.no_sync:
+            with console.status(f"[bold green]Updating emails for {account_name}...") as status:
+                try:
+                    manager.reader.fetch_emails(account, password, limit=args.limit)
+                except Exception as e:
+                    console.print(f"[yellow]Warning: Could not sync {account_name}: {e}[/yellow]")
+
+        # 2. List from cache
+        with console.status(f"[bold green]Fetching emails for {account_name}...") as status:
+            try:
+                search_criteria = {
+                    "keyword": args.keyword,
+                    "from": args.from_user,
+                    "since": args.since,
+                    "before": args.before
+                }
+                # fetch_emails with search_criteria will automatically use cache if offline or limit reached
+                emails, metadata = manager.reader.fetch_emails(account, password, limit=args.limit, search_criteria=search_criteria)
+                
+                title = f"Latest {len(emails)} Emails for {account_name}"
+                if any(search_criteria.values()):
+                    active_filters = [f"{k}={v}" for k, v in search_criteria.items() if v]
+                    title += f" (Filters: {', '.join(active_filters)})"
+
+                # Add sync info to title
+                last_sync = metadata.get("last_sync", "Never")
+                is_offline = metadata.get("is_offline", False)
+                sync_error = metadata.get("error")
+                status_str = f"[red](OFFLINE: {sync_error})[/red]" if is_offline and sync_error else ("[red](OFFLINE)[/red]" if is_offline else "[green](ONLINE)[/green]")
+                title += f"\n[dim]Last Sync: {last_sync} {status_str}[/dim]"
+
+                table = Table(title=title, show_lines=False, box=None)
+                table.add_column("", justify="center", width=1) # Status column
+                table.add_column("ID", style="cyan", justify="right", width=6)
+                table.add_column("From", style="magenta", width=20)
+                table.add_column("Email", style="blue", width=25)
+                table.add_column("Subject", style="white", ratio=1) # Use ratio to fill space
+                table.add_column("Time", style="green", width=19)
+
+                for em in emails:
+                    # Mark unread with *
+                    status_mark = "" if em.get("seen") else "*"
+                    
+                    # Clean subject and from for single-line display
+                    subject = (em.get("subject") or "").replace("\n", " ").replace("\r", "")
+                    from_user = (em.get("from") or "").replace("\n", " ").replace("\r", "")
+                    from_email = (em.get("from_email") or "").replace("\n", " ").replace("\r", "")
+                    
+                    # Format time: YYYY-MM-DD HH:MM:SS
+                    display_time = em["date"]
+                    try:
+                        dt = parsedate_to_datetime(em["date"])
+                        display_time = dt.strftime("%Y-%m-%d %H:%M:%S")
+                    except:
+                        pass
+                    
+                    table.add_row(
+                        status_mark,
+                        em["id"],
+                        from_user,
+                        from_email,
+                        subject,
+                        display_time
+                    )
+                console.print(table)
+                console.print("-" * console.width) # Separator between accounts
+            except Exception as e:
+                console.print(f"[red]Error listing {account_name}: {e}[/red]")
+
+def handle_read(args, manager):
+    account = manager.get_account_by_name(args.account) if args.account else manager.get_account_by_name("default")
+    if not account:
+        console.print(f"[red]Error: Account '{args.account or 'default'}' not found.[/red]")
+        return
+
+    account_name = account.get("friendly_name") or "default"
+    password = ""
+    if manager.encryption_enabled:
+        password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
+        if not password:
+            return
+
+    with console.status(f"[bold green]Fetching content for email {args.id} via {account_name}...") as status:
+        try:
+            content = manager.reader.read_email(account, password, args.id)
+            if content:
+                if isinstance(content, dict) and content.get("type") == "html_only":
+                    html_content = content.get("html", "")
+                    status.stop()
+                    choice = questionary.select(
+                        "This email only contains HTML content. Please choose how to view it:",
+                        choices=[
+                            "Extract text (may be incomplete, sentences might run together)",
+                            "View raw HTML code",
+                            "Cancel"
+                        ]
+                    ).ask()
+                    
+                    if choice == "Extract text (may be incomplete, sentences might run together)":
+                        # Remove <style> and <script> tags and their content
+                        text = re.sub(r'<(style|script)[^>]*>.*?</\1>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+                        # Basic HTML stripping for remaining tags
+                        text = re.sub(r'<[^<]+?>', '', text)
+                        # Replace multiple newlines, using raw strings to avoid SyntaxWarning
+                        text = re.sub(r'\n\s*\n', '\n\n', text)
+                        content = f"[Note: This content is text extracted from HTML]\n\n{text.strip()}"
+                    elif choice == "View raw HTML code":
+                        content = html_content
+                    else:
+                        return
+                
+                panel = Panel(
+                    content,
+                    title=f"Email Content (ID: {args.id})",
+                    subtitle=f"Account: {account_name}",
+                    border_style="green",
+                    padding=(1, 2)
+                )
+                console.print(panel)
+            else:
+                console.print(f"[yellow]No content found for email {args.id}.[/yellow]")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+
+def handle_send(args, manager):
+    account = manager.get_account_by_name(args.account) if args.account else manager.get_account_by_name("default")
+    if not account:
+        console.print(f"[red]Error: Account '{args.account or 'default'}' not found.[/red]")
+        return
+
+    account_name = account.get("friendly_name") or "default"
+    password = ""
+    if manager.encryption_enabled:
+        password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
+        if not password:
+            return
+
+    body = args.body
+    if not body:
+        # If body is not provided, open interactive text area
+        body = questionary.text("Email Body (press enter for multiple lines, type 'DONE' on a new line to finish):", multiline=True).ask()
+        if body is None:
+            return
+
+    with console.status(f"[bold green]Sending email via {account_name}...") as status:
+        try:
+            manager.sender.send_email(
+                account, 
+                password, 
+                to=args.to, 
+                subject=args.subject, 
+                body=body, 
+                attachments=args.attach
+            )
+            console.print(f"[green]Successfully sent email to {args.to}![/green]")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+
+def handle_account(args, manager, account_parser):
+    match args.account_command:
+        case "list":
+            if not manager.accounts:
+                console.print("[yellow]No accounts configured yet. Run 'wugong account add' to get started.[/yellow]")
+                return
+                
+            table = Table(title="Configured Email Accounts")
+            table.add_column("ID", style="cyan", no_wrap=True)
+            table.add_column("Friendly Name", style="magenta")
+            table.add_column("Method", style="green")
+            table.add_column("IMAP Server", style="yellow")
+
+            for idx, acc in enumerate(manager.accounts, 1):
+                table.add_row(
+                    str(idx),
+                    acc.get("friendly_name", "N/A"),
+                    acc.get("login_method", "N/A"),
+                    f"{acc.get('imap_server')}:{acc.get('imap_port')}"
+                )
+            console.print(table)
+            
+        case "add":
+            run_wizard()
+            
+        case "delete":
+            account_name = args.name
+            account = manager.get_account_by_name(account_name)
+            if not account:
+                console.print(f"[red]Error: Account '{account_name}' not found.[/red]")
+                return
+                
+            confirm = questionary.confirm(f"Are you sure you want to delete account '{account_name}'?").ask()
+            if confirm:
+                # Remove from manager.accounts
+                manager.accounts = [acc for acc in manager.accounts if acc.get("friendly_name") != account_name]
+                # Update manager.config["accounts"]
+                manager.config["accounts"] = manager.accounts
+                # Save to config file
+                manager._save_config()
+                console.print(f"[green]Successfully deleted account '{account_name}'.[/green]")
+            else:
+                console.print("[yellow]Deletion cancelled.[/yellow]")
+        case _:
+            # Show help for account command if no subcommand provided
+            account_parser.print_help()
+
+def handle_sync(args, manager):
+    if not manager.accounts:
+        console.print("[yellow]No accounts configured yet.[/yellow]")
+        return
+
+    target_accounts = []
+    if args.account == "all":
+        target_accounts = manager.accounts
+    else:
+        acc = manager.get_account_by_name(args.account) if args.account else manager.get_account_by_name("default")
+        if not acc:
+            console.print(f"[red]Error: Account '{args.account or 'default'}' not found.[/red]")
+            return
+        target_accounts = [acc]
+
+    password = ""
+    if manager.encryption_enabled:
+        if args.account == "all":
+            prompt_text = "Enter encryption password for all accounts:"
+        else:
+            acc_name = target_accounts[0].get("friendly_name") or "default"
+            prompt_text = f"Enter encryption password for '{acc_name}':"
+        
+        password = questionary.password(prompt_text).ask()
+        if not password:
+            return
+
+    for account in target_accounts:
+        account_name = account.get("friendly_name") or "default"
+        with console.status(f"[bold green]Syncing emails for {account_name}...") as status:
+            try:
+                _, metadata = manager.reader.fetch_emails(account, password, limit=args.limit)
+                new_emails = metadata.get("new_emails", [])
+                if new_emails:
+                    console.print(f"[green]Successfully synced {account_name}. Found {len(new_emails)} new emails:[/green]")
+                    # Display a small table for new emails
+                    new_table = Table(box=None, show_header=False)
+                    new_table.add_column("From", style="magenta", width=20)
+                    new_table.add_column("Subject", style="white")
+                    for ne in new_emails[:5]: # Show up to 5 new emails
+                        new_table.add_row(ne["from"], ne["subject"])
+                    if len(new_emails) > 5:
+                        new_table.add_row("...", f"and {len(new_emails)-5} more")
+                    console.print(new_table)
+                else:
+                    console.print(f"[green]Successfully synced {account_name}. No new emails.[/green]")
+            except Exception as e:
+                console.print(f"[red]Error syncing {account_name}: {e}[/red]")
+
+def handle_upgrade():
+    install_dir = os.path.expanduser("~/.wugong")
+    script_path = os.path.join(install_dir, "update.sh")
+    if os.name == 'nt':
+        script_path = os.path.join(install_dir, "update.ps1")
+        subprocess.run(["powershell", "-ExecutionPolicy", "Bypass", "-File", script_path])
+    else:
+        subprocess.run(["bash", script_path])
+
+def handle_uninstall():
+    install_dir = os.path.expanduser("~/.wugong")
+    script_path = os.path.join(install_dir, "uninstall.sh")
+    if os.name == 'nt':
+        script_path = os.path.join(install_dir, "uninstall.ps1")
+        subprocess.run(["powershell", "-ExecutionPolicy", "Bypass", "-File", script_path])
+    else:
+        subprocess.run(["bash", script_path])
+
 def main():
     parser = argparse.ArgumentParser(description="Wugong Email CLI Manager")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -78,296 +383,24 @@ def main():
         console.print(f"[red]Error initializing MailManager: {e}[/red]")
         return
 
-    if args.command == "list":
-        if not manager.accounts:
-            console.print("[yellow]No accounts configured yet. Run 'wugong account add' to get started.[/yellow]")
-            return
+    match args.command:
+        case "list":
+            handle_list(args, manager)
+        case "read":
+            handle_read(args, manager)
+        case "send":
+            handle_send(args, manager)
+        case "account":
+            handle_account(args, manager, account_parser)
+        case "sync":
+            handle_sync(args, manager)
+        case "upgrade":
+            handle_upgrade()
+        case "uninstall":
+            handle_uninstall()
+        case _:
+            parser.print_help()
 
-        # Handle "all" accounts
-        target_accounts = []
-        if args.account == "all":
-            target_accounts = manager.accounts
-        else:
-            acc = manager.get_account_by_name(args.account) if args.account else manager.get_account_by_name("default")
-            if not acc:
-                console.print(f"[red]Error: Account '{args.account or 'default'}' not found.[/red]")
-                return
-            target_accounts = [acc]
-
-        # Get password once if encryption is enabled (assume same password for all for simplicity in CLI)
-        password = ""
-        if manager.encryption_enabled:
-            if args.account == "all":
-                prompt_text = "Enter encryption password for all accounts:"
-            else:
-                acc_name = target_accounts[0].get("friendly_name") or "default"
-                prompt_text = f"Enter encryption password for '{acc_name}':"
-            
-            password = questionary.password(prompt_text).ask()
-            if not password:
-                return
-
-        for account in target_accounts:
-            account_name = account.get("friendly_name") or "default"
-            
-            # 1. Sync first (unless --no-sync is specified)
-            if not args.no_sync:
-                with console.status(f"[bold green]Updating emails for {account_name}...") as status:
-                    try:
-                        manager.reader.fetch_emails(account, password, limit=args.limit)
-                    except Exception as e:
-                        console.print(f"[yellow]Warning: Could not sync {account_name}: {e}[/yellow]")
-
-            # 2. List from cache
-            with console.status(f"[bold green]Fetching emails for {account_name}...") as status:
-                try:
-                    search_criteria = {
-                        "keyword": args.keyword,
-                        "from": args.from_user,
-                        "since": args.since,
-                        "before": args.before
-                    }
-                    # fetch_emails with search_criteria will automatically use cache if offline or limit reached
-                    emails, metadata = manager.reader.fetch_emails(account, password, limit=args.limit, search_criteria=search_criteria)
-                    
-                    title = f"Latest {len(emails)} Emails for {account_name}"
-                    if any(search_criteria.values()):
-                        active_filters = [f"{k}={v}" for k, v in search_criteria.items() if v]
-                        title += f" (Filters: {', '.join(active_filters)})"
-
-                    # Add sync info to title
-                    last_sync = metadata.get("last_sync", "Never")
-                    is_offline = metadata.get("is_offline", False)
-                    sync_error = metadata.get("error")
-                    status_str = f"[red](OFFLINE: {sync_error})[/red]" if is_offline and sync_error else ("[red](OFFLINE)[/red]" if is_offline else "[green](ONLINE)[/green]")
-                    title += f"\n[dim]Last Sync: {last_sync} {status_str}[/dim]"
-
-                    table = Table(title=title, show_lines=False, box=None)
-                    table.add_column("", justify="center", width=1) # Status column
-                    table.add_column("ID", style="cyan", justify="right", width=6)
-                    table.add_column("From", style="magenta", width=20)
-                    table.add_column("Email", style="blue", width=25)
-                    table.add_column("Subject", style="white", ratio=1) # Use ratio to fill space
-                    table.add_column("Time", style="green", width=19)
-
-                    for em in emails:
-                        # Mark unread with *
-                        status_mark = "" if em.get("seen") else "*"
-                        
-                        # Clean subject and from for single-line display
-                        subject = (em.get("subject") or "").replace("\n", " ").replace("\r", "")
-                        from_user = (em.get("from") or "").replace("\n", " ").replace("\r", "")
-                        from_email = (em.get("from_email") or "").replace("\n", " ").replace("\r", "")
-                        
-                        # Format time: YYYY-MM-DD HH:MM:SS
-                        display_time = em["date"]
-                        try:
-                            dt = parsedate_to_datetime(em["date"])
-                            display_time = dt.strftime("%Y-%m-%d %H:%M:%S")
-                        except:
-                            pass
-                        
-                        table.add_row(
-                            status_mark,
-                            em["id"],
-                            from_user,
-                            from_email,
-                            subject,
-                            display_time
-                        )
-                    console.print(table)
-                    console.print("-" * console.width) # Separator between accounts
-                except Exception as e:
-                    console.print(f"[red]Error listing {account_name}: {e}[/red]")
-
-    elif args.command == "sync":
-        if not manager.accounts:
-            console.print("[yellow]No accounts configured yet.[/yellow]")
-            return
-
-        target_accounts = []
-        if args.account == "all":
-            target_accounts = manager.accounts
-        else:
-            acc = manager.get_account_by_name(args.account) if args.account else manager.get_account_by_name("default")
-            if not acc:
-                console.print(f"[red]Error: Account '{args.account or 'default'}' not found.[/red]")
-                return
-            target_accounts = [acc]
-
-        password = ""
-        if manager.encryption_enabled:
-            if args.account == "all":
-                prompt_text = "Enter encryption password for all accounts:"
-            else:
-                acc_name = target_accounts[0].get("friendly_name") or "default"
-                prompt_text = f"Enter encryption password for '{acc_name}':"
-            
-            password = questionary.password(prompt_text).ask()
-            if not password:
-                return
-
-        for account in target_accounts:
-            account_name = account.get("friendly_name") or "default"
-            with console.status(f"[bold green]Syncing emails for {account_name}...") as status:
-                try:
-                    manager.reader.fetch_emails(account, password, limit=args.limit)
-                    console.print(f"[green]Successfully synced {account_name}.[/green]")
-                except Exception as e:
-                    console.print(f"[red]Error syncing {account_name}: {e}[/red]")
-
-    elif args.command == "account":
-        if args.account_command == "list":
-            if not manager.accounts:
-                console.print("[yellow]No accounts configured yet. Run 'wugong account add' to get started.[/yellow]")
-                return
-                
-            table = Table(title="Configured Email Accounts")
-            table.add_column("ID", style="cyan", no_wrap=True)
-            table.add_column("Friendly Name", style="magenta")
-            table.add_column("Method", style="green")
-            table.add_column("IMAP Server", style="yellow")
-
-            for idx, acc in enumerate(manager.accounts, 1):
-                table.add_row(
-                    str(idx),
-                    acc.get("friendly_name", "N/A"),
-                    acc.get("login_method", "N/A"),
-                    f"{acc.get('imap_server')}:{acc.get('imap_port')}"
-                )
-            console.print(table)
-            
-        elif args.account_command == "add":
-            run_wizard()
-            
-        elif args.account_command == "delete":
-            account_name = args.name
-            account = manager.get_account_by_name(account_name)
-            if not account:
-                console.print(f"[red]Error: Account '{account_name}' not found.[/red]")
-                return
-                
-            confirm = questionary.confirm(f"Are you sure you want to delete account '{account_name}'?").ask()
-            if confirm:
-                # Remove from manager.accounts
-                manager.accounts = [acc for acc in manager.accounts if acc.get("friendly_name") != account_name]
-                # Update manager.config["accounts"]
-                manager.config["accounts"] = manager.accounts
-                # Save to config file
-                manager._save_config()
-                console.print(f"[green]Successfully deleted account '{account_name}'.[/green]")
-            else:
-                console.print("[yellow]Deletion cancelled.[/yellow]")
-        else:
-            # Show help for account command if no subcommand provided
-            account_parser.print_help()
-
-    elif args.command == "read":
-        account = manager.get_account_by_name(args.account) if args.account else manager.get_account_by_name("default")
-        if not account:
-            console.print(f"[red]Error: Account '{args.account or 'default'}' not found.[/red]")
-            return
-
-        account_name = account.get("friendly_name") or "default"
-        password = ""
-        if manager.encryption_enabled:
-            password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
-            if not password:
-                return
-
-        with console.status(f"[bold green]Fetching content for email {args.id} via {account_name}...") as status:
-            try:
-                content = manager.reader.read_email(account, password, args.id)
-                if content:
-                    if isinstance(content, dict) and content.get("type") == "html_only":
-                        html_content = content.get("html", "")
-                        status.stop()
-                        choice = questionary.select(
-                            "This email only contains HTML content. Please choose how to view it:",
-                            choices=[
-                                "Extract text (may be incomplete, sentences might run together)",
-                                "View raw HTML code",
-                                "Cancel"
-                            ]
-                        ).ask()
-                        
-                        if choice == "Extract text (may be incomplete, sentences might run together)":
-                            # Remove <style> and <script> tags and their content
-                            text = re.sub(r'<(style|script)[^>]*>.*?</\1>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
-                            # Basic HTML stripping for remaining tags
-                            text = re.sub(r'<[^<]+?>', '', text)
-                            # Replace multiple newlines, using raw strings to avoid SyntaxWarning
-                            text = re.sub(r'\n\s*\n', '\n\n', text)
-                            content = f"[Note: This content is text extracted from HTML]\n\n{text.strip()}"
-                        elif choice == "View raw HTML code":
-                            content = html_content
-                        else:
-                            return
-                    
-                    panel = Panel(
-                        content,
-                        title=f"Email Content (ID: {args.id})",
-                        subtitle=f"Account: {account_name}",
-                        border_style="green",
-                        padding=(1, 2)
-                    )
-                    console.print(panel)
-                else:
-                    console.print(f"[yellow]No content found for email {args.id}.[/yellow]")
-            except Exception as e:
-                console.print(f"[red]Error: {e}[/red]")
-
-    elif args.command == "send":
-        account = manager.get_account_by_name(args.account) if args.account else manager.get_account_by_name("default")
-        if not account:
-            console.print(f"[red]Error: Account '{args.account or 'default'}' not found.[/red]")
-            return
-
-        account_name = account.get("friendly_name") or "default"
-        password = ""
-        if manager.encryption_enabled:
-            password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
-            if not password:
-                return
-
-        body = args.body
-        if not body:
-            # If body is not provided, open interactive text area
-            body = questionary.text("Email Body (press enter for multiple lines, type 'DONE' on a new line to finish):", multiline=True).ask()
-            if body is None:
-                return
-
-        with console.status(f"[bold green]Sending email via {account_name}...") as status:
-            try:
-                manager.sender.send_email(
-                    account, 
-                    password, 
-                    to=args.to, 
-                    subject=args.subject, 
-                    body=body, 
-                    attachments=args.attach
-                )
-                console.print(f"[green]Successfully sent email to {args.to}![/green]")
-            except Exception as e:
-                console.print(f"[red]Error: {e}[/red]")
-
-    elif args.command == "upgrade":
-        install_dir = os.path.expanduser("~/.wugong")
-        script_path = os.path.join(install_dir, "update.sh")
-        if os.name == 'nt':
-            script_path = os.path.join(install_dir, "update.ps1")
-            subprocess.run(["powershell", "-ExecutionPolicy", "Bypass", "-File", script_path])
-        else:
-            subprocess.run(["bash", script_path])
-
-    elif args.command == "uninstall":
-        install_dir = os.path.expanduser("~/.wugong")
-        script_path = os.path.join(install_dir, "uninstall.sh")
-        if os.name == 'nt':
-            script_path = os.path.join(install_dir, "uninstall.ps1")
-            subprocess.run(["powershell", "-ExecutionPolicy", "Bypass", "-File", script_path])
-        else:
-            subprocess.run(["bash", script_path])
 
 if __name__ == "__main__":
     main()
