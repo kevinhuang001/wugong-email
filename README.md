@@ -33,6 +33,8 @@ irm https://raw.githubusercontent.com/kevinhuang001/wugong-email/main/install.ps
 
 ## 🚀 Quick Start & Usage
 
+For a complete list of commands and parameters, see the [CLI Reference](CLI_REFERENCE.md).
+
 ### 1. Initialization
 Setup your master password and background sync schedule:
 ```bash

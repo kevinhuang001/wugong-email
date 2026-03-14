@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.3] - 2026-03-14
+
+### Features
+- **Global Localization**: Completed full English translation of all documentation (`README.md`, `CLI_REFERENCE.md`) and source code comments, making the project accessible to a wider audience.
+- **CLI Usability**: Optimized CLI parameter design by converting positional account arguments into optional flags (`--account`/`-a`) for folder-related commands, ensuring better parsing consistency.
+- **Developer Experience**: Added a comprehensive `DEVELOPER.md` guide and decoupled integration tests from local system paths to support easier contributions and CI/CD integration.
+- **Enhanced Documentation**: Created a detailed `CLI_REFERENCE.md` with exhaustive parameter descriptions and usage examples.
+
+### Fixed
+- **Test Portability**: Resolved hardcoded system paths in integration tests, replacing them with flexible environment variable configurations.
+
 ## [1.0.2] - 2026-03-14
 
 ### Features

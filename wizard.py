@@ -1,23 +1,25 @@
-import os
 import base64
-import toml
+import json
+import time
 import questionary
 import threading
 import webbrowser
 import logging
-import config
 import imaplib
 import platform
 import subprocess
+from pathlib import Path
 from flask import Flask, request
 from requests_oauthlib import OAuth2Session
-from crypto_utils import generate_salt, encrypt_data, decrypt_data
+from crypto_utils import generate_salt
+import config
 
 # Disable Flask/Werkzeug default logs to keep terminal clean
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
 # Allow insecure transport for local testing if needed (though usually https is required by providers)
+import os
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 # Relax scope matching for providers like Microsoft that might return different scopes than requested
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
@@ -67,7 +69,7 @@ EMAIL_PROVIDERS = {
         "auth_url": "",
         "token_url": "",
         "scopes": [],
-        "hint": "Note: QQ Mail REQUIRES an 'Authorization Code' (授权码) instead of your regular password."
+        "hint": "Note: QQ Mail REQUIRES an 'Authorization Code' instead of your regular password."
     },
     "163 Mail": {
         "imap_server": "imap.163.com",
@@ -80,7 +82,7 @@ EMAIL_PROVIDERS = {
         "auth_url": "",
         "token_url": "",
         "scopes": [],
-        "hint": "Note: 163 Mail REQUIRES an 'Authorization Code' (授权码) instead of your regular password."
+        "hint": "Note: 163 Mail REQUIRES an 'Authorization Code' instead of your regular password."
     },
     "Other": {
         "imap_server": "",
@@ -97,30 +99,25 @@ EMAIL_PROVIDERS = {
     }
 }
 
-def start_oauth_flow(client_id, client_secret, auth_url, token_url, scopes, redirect_uri):
+def start_oauth_flow(client_id: str, client_secret: str, auth_url: str, token_url: str, scopes: list[str], redirect_uri: str) -> dict:
     """Starts a local server to handle OAuth2 callback and returns the token."""
     app = Flask(__name__)
     token_data = {}
     stop_event = threading.Event()
 
-    # Determine port from redirect_uri
     try:
         port = int(redirect_uri.split(":")[-1].split("/")[0])
-    except:
-        port = 5000 # Default
+    except (ValueError, IndexError):
+        port = 5000
 
     @app.route('/')
     def callback():
-        if "error" in request.args:
-            return f"❌ Authorization Error: {request.args.get('error_description', request.args.get('error', 'Unknown error'))}"
-        if "code" in request.args:
+        if err := request.args.get('error'):
+            return f"❌ Authorization Error: {request.args.get('error_description', err)}"
+        if code := request.args.get('code'):
             try:
                 oauth = OAuth2Session(client_id, scope=scopes, redirect_uri=redirect_uri)
-                # For Gmail, we need to specify access_type='offline' to get refresh_token
-                extra_params = {}
-                if "google.com" in auth_url:
-                    extra_params['access_type'] = 'offline'
-                    extra_params['prompt'] = 'consent'
+                extra_params = {'access_type': 'offline', 'prompt': 'consent'} if "google.com" in auth_url else {}
 
                 token = oauth.fetch_token(
                     token_url,
@@ -129,36 +126,19 @@ def start_oauth_flow(client_id, client_secret, auth_url, token_url, scopes, redi
                     **extra_params
                 )
                 
-                # --- DEBUG LOGGING START ---
-                print("\n[DEBUG] OAuth2 Token Keys:", list(token.keys()))
-                # --- DEBUG LOGGING END ---
-                
-                # Attempt to extract email from id_token or other fields
                 user_email = ""
-                if 'id_token' in token:
-                    import json
-                    # id_token is a JWT (header.payload.signature)
+                if (id_token := token.get('id_token')):
                     try:
-                        payload_b64 = token['id_token'].split('.')[1]
-                        # Fix padding
+                        payload_b64 = id_token.split('.')[1]
                         payload_b64 += '=' * (4 - len(payload_b64) % 4)
                         payload = json.loads(base64.b64decode(payload_b64).decode())
-                        
-                        # --- DEBUG LOGGING START ---
-                        print("[DEBUG] ID Token Payload:", json.dumps(payload, indent=2))
-                        # --- DEBUG LOGGING END ---
-                        
                         user_email = payload.get('email') or payload.get('preferred_username') or payload.get('upn')
-                    except Exception as e:
-                        print(f"[DEBUG] Error decoding ID Token: {e}")
+                    except Exception:
                         pass
                 
-                token_data['token'] = token
-                token_data['user_email'] = user_email
+                token_data.update({'token': token, 'user_email': user_email})
                 
-                # Use a small delay before stopping the server to allow the browser to receive the response
                 def delayed_stop():
-                    import time
                     time.sleep(1)
                     stop_event.set()
                 threading.Thread(target=delayed_stop, daemon=True).start()
@@ -171,196 +151,178 @@ def start_oauth_flow(client_id, client_secret, auth_url, token_url, scopes, redi
     def run_server():
         from werkzeug.serving import make_server
         server = make_server('127.0.0.1', port, app)
-        ctx = app.app_context()
-        ctx.push()
-        while not stop_event.is_set():
-            server.handle_request()
+        with app.app_context():
+            while not stop_event.is_set():
+                server.handle_request()
 
-    # Start server in a background thread
     threading.Thread(target=run_server, daemon=True).start()
 
-    # Open browser
     oauth = OAuth2Session(client_id, scope=scopes, redirect_uri=redirect_uri)
-    authorization_url, state = oauth.authorization_url(auth_url, access_type="offline", prompt="consent")
+    authorization_url, _ = oauth.authorization_url(auth_url, access_type="offline", prompt="consent")
     
     print(f"\nOpening browser for authorization...")
     print(f"If the browser doesn't open, please visit: {authorization_url}")
     webbrowser.open(authorization_url)
 
-    # Wait for token
     print("Waiting for callback on local server...")
-    stop_event.wait(timeout=120) # 2 minute timeout
+    stop_event.wait(timeout=120)
 
     return token_data
 
-def test_imap_connection(imap_server, imap_port, username, password=None, access_token=None, tls_method="SSL/TLS"):
+def test_imap_connection(imap_server: str, imap_port: int, username: str, password: str | None = None, access_token: str | None = None, tls_method: str = "SSL/TLS", timeout: int = 30) -> tuple[bool, str]:
     """Tests if we can connect and login to the IMAP server."""
     try:
         print(f"Testing connection to {imap_server}:{imap_port} ({tls_method})...")
-        if tls_method == "SSL/TLS":
-            mail = imaplib.IMAP4_SSL(imap_server, imap_port)
-        elif tls_method == "STARTTLS":
-            mail = imaplib.IMAP4(imap_server, imap_port)
-            mail.starttls()
-        else:
-            mail = imaplib.IMAP4(imap_server, imap_port)
-        
+        match tls_method:
+            case "SSL/TLS":
+                mail = imaplib.IMAP4_SSL(imap_server, imap_port, timeout=timeout)
+            case "STARTTLS":
+                mail = imaplib.IMAP4(imap_server, imap_port, timeout=timeout)
+                mail.starttls()
+            case _:
+                mail = imaplib.IMAP4(imap_server, imap_port, timeout=timeout)
+
         if access_token:
-            # OAuth2 authentication
+            # OAuth2 authentication (XOAUTH2)
             auth_string = f"user={username}\x01auth=Bearer {access_token}\x01\x01"
             mail.authenticate('XOAUTH2', lambda x: auth_string)
         else:
             # Password authentication
             mail.login(username, password)
-            
+
         mail.logout()
         return True, "Success"
     except Exception as e:
         return False, str(e)
 
-def setup_scheduling(interval_minutes, encryption_password=None):
+def setup_scheduling(interval_minutes: int, encryption_password: str | None = None) -> bool:
     """Sets up a periodic sync task using Cron (Unix) or Task Scheduler (Windows)."""
-    system = platform.system()
+    home = Path.home()
+    wugong_dir = home / ".wugong"
+    wugong_dir.mkdir(parents=True, exist_ok=True)
     
-    # Get absolute path to wugong executable
-    home = os.path.expanduser("~")
-    wugong_installed = os.path.join(home, ".wugong", "wugong")
-    wugong_local = os.path.join(os.getcwd(), "wugong")
-    
-    if os.path.exists(wugong_installed):
-        wugong_exe = wugong_installed
-    elif os.path.exists(wugong_local):
-        wugong_exe = wugong_local
-    else:
-        wugong_exe = "wugong"
-
-    # Define log file path
-    log_file = os.path.join(home, ".wugong", "sync.log")
+    # Locate the executable
+    wugong_exe = next((p for p in [wugong_dir / "wugong", Path.cwd() / "wugong"] if p.exists()), Path("wugong"))
+    log_file = wugong_dir / "sync.log"
 
     try:
-        if system == "Windows":
-            # Windows Task Scheduler
-            wugong_bat = wugong_exe.replace("wugong", "wugong.bat")
-            if not os.path.exists(wugong_bat):
-                wugong_bat = "wugong.bat"
-            
-            if interval_minutes <= 0:
-                # Disable scheduling: delete the task
-                try:
-                    subprocess.run(["schtasks", "/delete", "/tn", "WugongSync", "/f"], check=True, capture_output=True)
-                    print("✅ Auto-sync disabled (Task Scheduler entry removed).")
-                except subprocess.CalledProcessError:
-                    # Task might not exist, that's fine
-                    pass
-                return True
+        match platform.system():
+            case "Windows":
+                # Windows Task Scheduler
+                wugong_bat = next((p for p in [wugong_exe.with_suffix(".bat"), Path("wugong.bat")] if p.exists()), Path("wugong.bat"))
 
-            # Windows redirection uses >> and 2>&1
-            # Note: Task Scheduler /tr command has some limitations with redirections directly.
-            # Usually, it's better to wrap it in a cmd /c
-            
-            # Add WUGONG_PASSWORD to the command if provided
-            env_prefix = ""
-            if encryption_password:
-                env_prefix = f'set WUGONG_PASSWORD={encryption_password} && '
-            
-            task_command = f'cmd /c "{env_prefix}{wugong_bat} sync all >> \\"{log_file}\\" 2>&1"'
-            
-            cmd = [
-                "schtasks", "/create", "/sc", "minute", "/mo", str(interval_minutes),
-                "/tn", "WugongSync", "/tr", task_command, "/f"
-            ]
-            subprocess.run(cmd, check=True, capture_output=True)
-            print(f"✅ Scheduled sync every {interval_minutes} minutes via Task Scheduler.")
-            if encryption_password:
-                print("ℹ️  WUGONG_PASSWORD environment variable included in the scheduled task.")
-            print(f"ℹ️  Logs will be saved to: {log_file}")
-        else:
-            # Unix-like (macOS/Linux) Cron
-            # Read existing crontab
-            try:
-                current_cron = subprocess.check_output(["crontab", "-l"], stderr=subprocess.STDOUT).decode()
-            except subprocess.CalledProcessError:
-                current_cron = ""
-            
-            # Remove existing lines to replace with new ones
-            lines = [line for line in current_cron.splitlines() if "wugong sync all" not in line]
-            
-            if interval_minutes > 0:
-                # Add new job with log redirection
-                # Periodic sync will use the default limit in config
-                
-                # Add WUGONG_PASSWORD to the cron job if provided
-                env_prefix = ""
+                if interval_minutes <= 0:
+                    try:
+                        subprocess.run(["schtasks", "/delete", "/tn", "WugongSync", "/f"], check=True, capture_output=True)
+                        print("✅ Auto-sync disabled (Task Scheduler entry removed).")
+                    except subprocess.CalledProcessError:
+                        pass
+                    return True
+
+                env_prefix = f'set WUGONG_PASSWORD={encryption_password} && ' if encryption_password else ""
+                task_command = f'cmd /c "{env_prefix}{wugong_bat} sync all >> \"{log_file}\" 2>&1"'
+
+                cmd = ["schtasks", "/create", "/sc", "minute", "/mo", str(interval_minutes), "/tn", "WugongSync", "/tr", task_command, "/f"]
+                subprocess.run(cmd, check=True, capture_output=True)
+                print(f"✅ Scheduled sync every {interval_minutes} minutes via Task Scheduler.")
                 if encryption_password:
-                    env_prefix = f"WUGONG_PASSWORD={encryption_password} "
-                
-                cron_job = f"*/{interval_minutes} * * * * {env_prefix}{wugong_exe} sync all >> {log_file} 2>&1"
-                lines.append(cron_job)
-                print(f"✅ Scheduled sync every {interval_minutes} minutes via Crontab.")
-                if encryption_password:
-                    print("ℹ️  WUGONG_PASSWORD environment variable included in the crontab job.")
+                    print("ℹ️  WUGONG_PASSWORD environment variable included in the scheduled task.")
                 print(f"ℹ️  Logs will be saved to: {log_file}")
-            else:
-                print("✅ Auto-sync disabled (Crontab entry removed).")
-            
-            # Write back
-            new_cron = "\n".join(lines) + "\n"
-            process = subprocess.Popen(["crontab", "-"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            stdout, stderr = process.communicate(input=new_cron.encode())
-            
-            if process.returncode != 0:
-                print(f"❌ Error setting up crontab: {stderr.decode()}")
-                return False
-            
+
+            case _:
+                # Unix-like (macOS/Linux) Cron
+                try:
+                    current_cron = subprocess.check_output(["crontab", "-l"], stderr=subprocess.STDOUT).decode()
+                except subprocess.CalledProcessError:
+                    current_cron = ""
+
+                lines = [line for line in current_cron.splitlines() if "wugong sync all" not in line]
+
+                if interval_minutes > 0:
+                    env_prefix = f"WUGONG_PASSWORD={encryption_password} " if encryption_password else ""
+                    cron_job = f"*/{interval_minutes} * * * * {env_prefix}{wugong_exe} sync all >> {log_file} 2>&1"
+                    lines.append(cron_job)
+                    print(f"✅ Scheduled sync every {interval_minutes} minutes via Crontab.")
+                    if encryption_password:
+                        print("ℹ️  WUGONG_PASSWORD environment variable included in the crontab job.")
+                    print(f"ℹ️  Logs will be saved to: {log_file}")
+                else:
+                    print("✅ Auto-sync disabled (Crontab entry removed).")
+
+                new_cron = "\n".join(lines) + "\n"
+                process = subprocess.Popen(["crontab", "-"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                _, stderr = process.communicate(input=new_cron.encode())
+
+                if process.returncode != 0:
+                    print(f"❌ Error setting up crontab: {stderr.decode()}")
+                    return False
         return True
     except Exception as e:
         print(f"❌ Failed to setup scheduling: {e}")
         return False
 
-def configure_wizard():
+def configure_wizard() -> bool:
     """Allows modifying the sync interval and displays a message about password changes."""
     try:
         print("\n=== Wugong Email Configuration ===")
-        
+
         config_path = config.get_config_path()
         current_config = config.load_config(config_path)
-        
+
         if not current_config.get("general", {}).get("salt"):
             print("\n❌ Wugong is not initialized yet. Please run 'wugong init' first.")
             return False
 
         print("\nℹ️  Master password cannot be modified.")
         print("⚠️  If you need to change your master password, please uninstall and reinstall Wugong.")
-        
+
+        # Logging Setup
+        log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        current_console_level = current_config.get("general", {}).get("console_log_level", "WARNING")
+        current_file_level = current_config.get("general", {}).get("file_log_level", "DEBUG")
+
+        if (console_log_level := questionary.select(
+            f"Select console log level (current: {current_console_level}):",
+            choices=log_levels,
+            default=current_console_level
+        ).ask()) is None:
+            raise KeyboardInterrupt
+
+        if (file_log_level := questionary.select(
+            f"Select file log level (current: {current_file_level}):",
+            choices=log_levels,
+            default=current_file_level
+        ).ask()) is None:
+            raise KeyboardInterrupt
+
         # Sync Interval & Scheduling
         current_interval = current_config.get("general", {}).get("sync_interval", 10)
-        sync_interval = questionary.text(
-            f"Sync interval in minutes (current: {current_interval}. Enter 0 to disable auto-sync):", 
+        if (sync_interval := questionary.text(
+            f"Sync interval in minutes (current: {current_interval}. Enter 0 to disable auto-sync):",
             default=str(current_interval)
-        ).ask()
-        
-        if sync_interval is None: raise KeyboardInterrupt
-        
-        try:
-            interval = int(sync_interval)
-        except ValueError:
-            print("Invalid interval. Keeping current setting.")
-            interval = current_interval
+        ).ask()) is None:
+            raise KeyboardInterrupt
 
-        if interval != current_interval:
+        interval = int(sync_interval) if sync_interval.isdigit() else current_interval
+
+        if interval != current_interval or console_log_level != current_console_level or file_log_level != current_file_level:
             # Need password if encryption is enabled to update the scheduled task with environment variable
             encryption_password = None
             if current_config.get("general", {}).get("encryption_enabled") or current_config.get("general", {}).get("encrypt_emails"):
-                encryption_password = config.get_encryption_password(prompt_text="Enter your encryption password to update the scheduled task:")
-                if encryption_password is None: raise KeyboardInterrupt
+                if (encryption_password := config.get_encryption_password(prompt_text="Enter your encryption password to update the scheduled task:")) is None:
+                    raise KeyboardInterrupt
 
             setup_scheduling(interval, encryption_password)
-            current_config["general"]["sync_interval"] = interval
+            general = current_config.setdefault("general", {})
+            general["sync_interval"] = interval
+            general["console_log_level"] = console_log_level
+            general["file_log_level"] = file_log_level
+            
             config.save_config(current_config, config_path)
-            print(f"\n✅ Configuration updated: interval={interval}m.")
+            print(f"\n✅ Configuration updated: interval={interval}m, console={console_log_level}, file={file_log_level}.")
         else:
             print("\nNo changes made to configuration.")
-            
+
         return True
     except KeyboardInterrupt:
         print("\nConfiguration cancelled.")
@@ -369,74 +331,88 @@ def configure_wizard():
         print(f"\n❌ Error during configuration: {e}")
         return False
 
-def init_wizard():
+def init_wizard() -> tuple[bool, str | None]:
     """Initializes the configuration, sets up encryption, and schedules periodic sync."""
     try:
         print("\n=== Wugong Email Initialization ===")
-        
+
         config_path = config.get_config_path()
         current_config = config.load_config(config_path)
-        
+
         # Check if already initialized
         if current_config.get("general", {}).get("salt"):
             print("\n❌ Wugong is already initialized.")
             print("⚠️  If you need to change your master password, please uninstall and reinstall Wugong.")
             print("💡 Use 'wugong configure' to modify settings like the sync interval.")
             return False, None
-        
+
         # 1. Encryption Setup
-        encrypt_creds = questionary.confirm("Enable credential encryption? (Highly Recommended)", default=True).ask()
-        if encrypt_creds is None: raise KeyboardInterrupt
-        
-        encrypt_emails = questionary.confirm("Encrypt locally cached email bodies?", default=True).ask()
-        if encrypt_emails is None: raise KeyboardInterrupt
-        
+        if (encrypt_creds := questionary.confirm("Enable credential encryption? (Highly Recommended)", default=True).ask()) is None:
+            raise KeyboardInterrupt
+
+        if (encrypt_emails := questionary.confirm("Encrypt locally cached email bodies?", default=True).ask()) is None:
+            raise KeyboardInterrupt
+
         encrypt_enabled = encrypt_creds or encrypt_emails
         encryption_password = None
         salt_val = ""
-        
+
         if encrypt_enabled:
             print("\n[Mandatory] Since you enabled encryption, a master password is required.")
-            encryption_password = questionary.password("Set your master encryption password:").ask()
-            if encryption_password is None: raise KeyboardInterrupt
+            if (encryption_password := questionary.password("Set your master encryption password:").ask()) is None:
+                raise KeyboardInterrupt
             if not encryption_password:
                 print("❌ Master password cannot be empty when encryption is enabled. Initialization aborted.")
                 return False, None
             salt_val = base64.b64encode(generate_salt()).decode()
         else:
             print("\n[Warning] Encryption is disabled. Your credentials and data will be stored in plain text.")
-        
-        # 2. Sync Interval & Scheduling
-        sync_interval = questionary.text("Sync interval in minutes (e.g., 5, 10, 60. Enter 0 to disable auto-sync):", default="10").ask()
-        if sync_interval is None: raise KeyboardInterrupt
-        
-        try:
-            interval = int(sync_interval)
-        except ValueError:
-            print("Invalid interval. Defaulting to 10 minutes.")
-            interval = 10
-            
+
+        # 2. Logging Setup
+        log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        if (console_log_level := questionary.select(
+            "Select default console log level:",
+            choices=log_levels,
+            default="WARNING"
+        ).ask()) is None:
+            raise KeyboardInterrupt
+
+        if (file_log_level := questionary.select(
+            "Select default file log level:",
+            choices=log_levels,
+            default="DEBUG"
+        ).ask()) is None:
+            raise KeyboardInterrupt
+
+        # 3. Sync Interval & Scheduling
+        if (sync_interval := questionary.text("Sync interval in minutes (e.g., 5, 10, 60. Enter 0 to disable auto-sync):", default="10").ask()) is None:
+            raise KeyboardInterrupt
+
+        interval = int(sync_interval) if sync_interval.isdigit() else 10
+
         if interval > 0:
             setup_scheduling(interval, encryption_password)
 
-        # 3. Save initial config
-        if "general" not in current_config:
-            current_config["general"] = {}
-            
-        current_config["general"]["encryption_enabled"] = encrypt_creds
-        current_config["general"]["encrypt_emails"] = encrypt_emails
-        current_config["general"]["salt"] = salt_val
-        current_config["general"]["sync_interval"] = interval
-        
+        # 4. Save initial config
+        general = current_config.setdefault("general", {})
+        general["encryption_enabled"] = encrypt_creds
+        general["encrypt_emails"] = encrypt_emails
+        general["salt"] = salt_val
+        general["sync_interval"] = interval
+        general["console_log_level"] = console_log_level
+        general["file_log_level"] = file_log_level
+
         config.save_config(current_config, config_path)
-        
-        # 4. Success Message
+
+        # 5. Success Message
         print(f"\n✅ Configuration initialized and saved to {config_path}")
         print(f"ℹ️  Sync interval: {interval} minutes.")
-        
+        print(f"ℹ️  Console log level: {console_log_level}")
+        print(f"ℹ️  File log level: {file_log_level} (logged to ~/.wugong/wugong.log)")
+
         if not current_config.get("accounts"):
             print("\n💡 Tip: No accounts found. Use 'wugong account add' to add your first email account.")
-        
+
         return True, encryption_password
     except KeyboardInterrupt:
         print("\nInitialization cancelled.")
@@ -445,240 +421,166 @@ def init_wizard():
         print(f"\n❌ Error during initialization: {e}")
         return False, None
 
-def account_add_wizard():
+def account_add_wizard() -> tuple[list, str | None]:
     newly_added = []
     try:
         print("=== Email Configuration Wizard ===")
-        
-        # Determine config path using centralized config module
         config_path = config.get_config_path()
-        
-        # Ensure directory exists
-        config_dir = os.path.dirname(config_path)
-        if config_dir and not os.path.exists(config_dir):
-            os.makedirs(config_dir, exist_ok=True)
+        Path(config_path).parent.mkdir(parents=True, exist_ok=True)
 
-        # 1. Load existing config or initialize new one
-        first_use = not os.path.exists(config_path)
+        first_use = not Path(config_path).exists()
         current_config = config.load_config(config_path)
         original_accounts_count = len(current_config.get('accounts', []))
-        
         if not first_use:
             print(f"Loaded existing config with {original_accounts_count} account(s).")
 
-        # 2. Setup/Verify encryption
         encryption_password = None
-        if first_use or "encryption_enabled" not in current_config.get("general", {}):
+        if first_use or "salt" not in current_config.get("general", {}):
             print("\nInitialization required.")
             should_continue, encryption_password = init_wizard()
             if not should_continue:
-                return # User cancelled or just wanted to init
-            
-            # Reload config after init
+                return [], None
             current_config = config.load_config(config_path)
             
-        # Re-verify encryption password for the current session if not just set
-        if encryption_password is None and (current_config.get("general", {}).get("encryption_enabled") or current_config.get("general", {}).get("encrypt_emails")):
-            encryption_password = config.get_encryption_password(prompt_text="Enter your encryption password to proceed:")
-            if encryption_password is None: raise KeyboardInterrupt
-        
-        # Simple validation: Try to decrypt one piece of sensitive data if it exists
-        if current_config.get("accounts"):
-            first_acc = current_config["accounts"][0]
-            first_auth = first_acc.get("auth", {})
-            sensitive_keys = ["password", "client_id", "client_secret", "refresh_token", "access_token"]
-            
-            test_val = None
-            for k in sensitive_keys:
-                if first_auth.get(k):
-                    test_val = first_auth[k]
-                    break
-            
-            if test_val:
-                from crypto_utils import decrypt_data
-                from rich import print as rprint
-                try:
-                    decrypt_data(test_val, encryption_password, config.get_salt(current_config))
-                except Exception:
-                    rprint("[red]Error: Incorrect encryption password. Access denied.[/red]")
-                    return
-        
-        encrypt_enabled = current_config["general"].get("encryption_enabled", False)
-        encrypt_emails = current_config["general"].get("encrypt_emails", False)
-        salt_val = config.get_salt(current_config)
+        encrypt_enabled = current_config.get("general", {}).get("encryption_enabled") or current_config.get("general", {}).get("encrypt_emails")
+        salt_val = current_config.get("general", {}).get("salt", "")
 
-        # 3. Add Account(s) Loop
+        if encryption_password is None and encrypt_enabled:
+            encryption_password = config.get_encryption_password(prompt_text="Enter your encryption password to add an account:")
+            if encryption_password is None:
+                raise KeyboardInterrupt
+
         while True:
-            print(f"\n--- Adding Account #{len(current_config['accounts']) + 1} ---")
+            print(f"\n--- Adding Account #{len(current_config.get('accounts', [])) + 1} ---")
             
+            has_default = any(acc.get("friendly_name") == "default" for acc in current_config.get("accounts", []))
             is_default = False
-            # Check if a default account already exists
-            has_default = any(acc.get("friendly_name") == "default" for acc in current_config["accounts"])
-            
             if not has_default:
-                is_default = questionary.confirm("Set this as your default account? (No friendly name required)").ask()
-                if is_default is None: raise KeyboardInterrupt
+                if (is_default := questionary.confirm("Set this as your default account? (No friendly name required)").ask()) is None:
+                    raise KeyboardInterrupt
             
-            if is_default:
-                friendly_name = "default"
-            else:
-                friendly_name = questionary.text("Friendly Name (e.g., 'Work Gmail'):").ask()
-                if friendly_name is None: raise KeyboardInterrupt
-                if not friendly_name:
-                    print("Friendly Name is required.")
-                    continue
+            friendly_name = "default" if is_default else questionary.text("Friendly Name (e.g., 'Work Gmail'):").ask()
+            if friendly_name is None:
+                raise KeyboardInterrupt
+            if not friendly_name:
+                print("Friendly Name is required.")
+                continue
 
-            # Check if friendly name already exists
-            existing_names = [acc.get("friendly_name") for acc in current_config.get("accounts", [])]
-            if friendly_name in existing_names:
-                overwrite = questionary.confirm(f"Account '{friendly_name}' already exists. Overwrite?").ask()
-                if overwrite is None: raise KeyboardInterrupt
+            if friendly_name in [acc.get("friendly_name") for acc in current_config.get("accounts", [])]:
+                if (overwrite := questionary.confirm(f"Account '{friendly_name}' already exists. Overwrite?").ask()) is None:
+                    raise KeyboardInterrupt
                 if not overwrite:
                     continue
-                # Remove existing account for overwrite
                 current_config["accounts"] = [acc for acc in current_config["accounts"] if acc.get("friendly_name") != friendly_name]
                 
-            provider_name = questionary.select(
-                "Select your email provider:",
-                choices=list(EMAIL_PROVIDERS.keys())
-            ).ask()
-            if provider_name is None: raise KeyboardInterrupt
+            if (provider_name := questionary.select("Select your email provider:", choices=list(EMAIL_PROVIDERS.keys())).ask()) is None:
+                raise KeyboardInterrupt
             
             provider_info = EMAIL_PROVIDERS[provider_name]
             if provider_info["hint"]:
                 print(f"\n[!] {provider_info['hint']}\n")
 
-            login_method = questionary.select(
-                "Choose login method:",
-                choices=provider_info["auth_methods"]
-            ).ask()
-            if login_method is None: raise KeyboardInterrupt
+            if (login_method := questionary.select("Choose login method:", choices=provider_info["auth_methods"]).ask()) is None:
+                raise KeyboardInterrupt
 
-            # 1. Ask for Email Account (Username) first for both methods
-            username = questionary.text("Email Account (e.g. yourname@example.com):").ask()
-            if username is None: raise KeyboardInterrupt
+            if (username := questionary.text("Email Account (e.g. yourname@example.com):").ask()) is None:
+                raise KeyboardInterrupt
             if not username:
                 print("Email Account is required.")
                 continue
 
-            imap_server = questionary.text("IMAP Server:", default=provider_info["imap_server"]).ask()
-            if imap_server is None: raise KeyboardInterrupt
+            if (imap_server := questionary.text("IMAP Server:", default=provider_info["imap_server"]).ask()) is None:
+                raise KeyboardInterrupt
             
-            imap_tls_method = questionary.select(
-                "IMAP TLS Method:",
-                choices=["SSL/TLS", "STARTTLS", "Plain"],
-                default=provider_info.get("imap_tls_method", "SSL/TLS")
-            ).ask()
-            if imap_tls_method is None: raise KeyboardInterrupt
+            if (imap_tls_method := questionary.select("IMAP TLS Method:", choices=["SSL/TLS", "STARTTLS", "Plain"], default=provider_info.get("imap_tls_method", "SSL/TLS")).ask()) is None:
+                raise KeyboardInterrupt
 
-            default_imap_port = "993" if imap_tls_method == "SSL/TLS" else "143"
-            imap_port_str = questionary.text("IMAP Port:", default=str(provider_info.get("imap_port") or default_imap_port)).ask()
-            if imap_port_str is None: raise KeyboardInterrupt
+            suggested_imap_port = 993 if imap_tls_method == "SSL/TLS" else 143
+            if (imap_port_str := questionary.text("IMAP Port:", default=str(suggested_imap_port)).ask()) is None:
+                raise KeyboardInterrupt
             imap_port = int(imap_port_str)
             
-            smtp_server = questionary.text("SMTP Server:", default=provider_info["smtp_server"]).ask()
-            if smtp_server is None: raise KeyboardInterrupt
+            if (smtp_server := questionary.text("SMTP Server:", default=provider_info["smtp_server"]).ask()) is None:
+                raise KeyboardInterrupt
             
-            smtp_tls_method = questionary.select(
-                "SMTP TLS Method:",
-                choices=["SSL/TLS", "STARTTLS", "Plain"],
-                default=provider_info.get("smtp_tls_method", "SSL/TLS")
-            ).ask()
-            if smtp_tls_method is None: raise KeyboardInterrupt
+            if (smtp_tls_method := questionary.select("SMTP TLS Method:", choices=["SSL/TLS", "STARTTLS", "Plain"], default=provider_info.get("smtp_tls_method", "SSL/TLS")).ask()) is None:
+                raise KeyboardInterrupt
 
-            default_smtp_port = "465" if smtp_tls_method == "SSL/TLS" else ("587" if smtp_tls_method == "STARTTLS" else "25")
-            smtp_port_str = questionary.text("SMTP Port:", default=str(provider_info.get("smtp_port") or default_smtp_port)).ask()
-            if smtp_port_str is None: raise KeyboardInterrupt
+            match smtp_tls_method:
+                case "SSL/TLS": suggested_smtp_port = 465
+                case "STARTTLS": suggested_smtp_port = 587
+                case _: suggested_smtp_port = 25
+
+            if (smtp_port_str := questionary.text("SMTP Port:", default=str(suggested_smtp_port)).ask()) is None:
+                raise KeyboardInterrupt
             smtp_port = int(smtp_port_str)
 
             auth_details = {}
-            if login_method == "Account/Password":
-                pwd_label = "Authorization Code (授权码):" if "授权码" in provider_info["hint"] else "Email Password (or App Password):"
-                password = questionary.password(pwd_label).ask()
-                if password is None: raise KeyboardInterrupt
-                
-                if encrypt_enabled:
+            password = None
+            access_token = ""
+            
+            match login_method:
+                case "Account/Password":
+                    pwd_label = "Authorization Code:" if "Authorization Code" in provider_info["hint"] else "Email Password (or App Password):"
+                    if (password := questionary.password(pwd_label).ask()) is None:
+                        raise KeyboardInterrupt
+                    
                     auth_details = {
                         "username": username,
-                        "password": encrypt_data(password, encryption_password, salt_val)
+                        "password": encrypt_data(password, encryption_password, salt_val) if encrypt_enabled else password
                     }
-                else:
-                    auth_details = {"username": username, "password": password}
-            else:
-                # OAuth2 details
-                client_id = questionary.text("OAuth2 Client ID:").ask()
-                if client_id is None: raise KeyboardInterrupt
-                
-                client_secret = questionary.password("OAuth2 Client Secret:").ask()
-                if client_secret is None: raise KeyboardInterrupt
-                
-                auth_url = questionary.text("OAuth2 Authorization URL:", default=provider_info.get("auth_url", "")).ask()
-                if auth_url is None: raise KeyboardInterrupt
-                
-                token_url = questionary.text("OAuth2 Token URL:", default=provider_info.get("token_url", "")).ask()
-                if token_url is None: raise KeyboardInterrupt
-                
-                scopes_input = questionary.text("OAuth2 Scopes (comma separated):", default=",".join(provider_info.get("scopes", []))).ask()
-                if scopes_input is None: raise KeyboardInterrupt
-                scopes = [s.strip() for s in scopes_input.split(",") if s.strip()]
-                
-                redirect_uri = questionary.text("Redirect URI:", default="http://localhost:5000/").ask()
-                if redirect_uri is None: raise KeyboardInterrupt
-                
-                auto_auth = questionary.confirm("Start local server to automatically fetch tokens?").ask()
-                if auto_auth is None: raise KeyboardInterrupt
-                
-                refresh_token = ""
-                access_token = ""
-                
-                if auto_auth:
-                    token_data = start_oauth_flow(client_id, client_secret, auth_url, token_url, scopes, redirect_uri)
-                    if token_data and 'token' in token_data:
-                        token = token_data['token']
-                        refresh_token = token.get('refresh_token', '')
-                        access_token = token.get('access_token', '')
-                        # If token_data has an email, update the username
-                        detected_email = token_data.get('user_email', '')
-                        if detected_email and detected_email != username:
-                            use_detected = questionary.confirm(f"Detected email '{detected_email}' differs from '{username}'. Use detected email?").ask()
-                            if use_detected is None: raise KeyboardInterrupt
-                            if use_detected:
-                                username = detected_email
+                case "OAuth2":
+                    if (client_id := questionary.text("OAuth2 Client ID:").ask()) is None or (client_secret := questionary.password("OAuth2 Client Secret:").ask()) is None:
+                        raise KeyboardInterrupt
+                    
+                    auth_url = questionary.text("OAuth2 Authorization URL:", default=provider_info.get("auth_url", "")).ask()
+                    token_url = questionary.text("OAuth2 Token URL:", default=provider_info.get("token_url", "")).ask()
+                    scopes_input = questionary.text("OAuth2 Scopes (comma separated):", default=",".join(provider_info.get("scopes", []))).ask()
+                    redirect_uri = questionary.text("Redirect URI:", default="http://localhost:5000/").ask()
+                    
+                    if any(v is None for v in [auth_url, token_url, scopes_input, redirect_uri]):
+                        raise KeyboardInterrupt
                         
-                        print(f"\nSuccessfully obtained tokens!")
+                    scopes = [s.strip() for s in scopes_input.split(",") if s.strip()]
+                    if (auto_auth := questionary.confirm("Start local server to automatically fetch tokens?").ask()) is None:
+                        raise KeyboardInterrupt
+                    
+                    refresh_token = ""
+                    if auto_auth:
+                        if (token_data := start_oauth_flow(client_id, client_secret, auth_url, token_url, scopes, redirect_uri)) and (token := token_data.get('token')):
+                            refresh_token = token.get('refresh_token', '')
+                            access_token = token.get('access_token', '')
+                            if (detected_email := token_data.get('user_email')) and detected_email != username:
+                                if (use_detected := questionary.confirm(f"Detected email '{detected_email}' differs from '{username}'. Use detected email?").ask()) is None:
+                                    raise KeyboardInterrupt
+                                if use_detected:
+                                    username = detected_email
+                            print(f"\nSuccessfully obtained tokens!")
+                        else:
+                            print("Failed to obtain tokens automatically. You can enter them manually.")
+                    
+                    if not refresh_token and (refresh_token := questionary.text("OAuth2 Refresh Token (optional):").ask()) is None:
+                        raise KeyboardInterrupt
+                    
+                    if encrypt_enabled:
+                        auth_details = {
+                            "username": username,
+                            "client_id": encrypt_data(client_id, encryption_password, salt_val),
+                            "client_secret": encrypt_data(client_secret, encryption_password, salt_val),
+                            "auth_url": auth_url,
+                            "token_url": token_url,
+                            "redirect_uri": redirect_uri,
+                            "scopes": scopes,
+                            "refresh_token": encrypt_data(refresh_token, encryption_password, salt_val) if refresh_token else "",
+                            "access_token": encrypt_data(access_token, encryption_password, salt_val) if access_token else ""
+                        }
                     else:
-                        print("Failed to obtain tokens automatically. You can enter them manually.")
-                
-                if not refresh_token:
-                    refresh_token = questionary.text("OAuth2 Refresh Token (optional):").ask()
-                    if refresh_token is None: raise KeyboardInterrupt
-                
-                if encrypt_enabled:
-                    auth_details = {
-                        "username": username,
-                        "client_id": encrypt_data(client_id, encryption_password, salt_val),
-                        "client_secret": encrypt_data(client_secret, encryption_password, salt_val),
-                        "auth_url": auth_url,
-                        "token_url": token_url,
-                        "redirect_uri": redirect_uri,
-                        "scopes": scopes,
-                        "refresh_token": encrypt_data(refresh_token, encryption_password, salt_val) if refresh_token else "",
-                        "access_token": encrypt_data(access_token, encryption_password, salt_val) if access_token else ""
-                    }
-                else:
-                    auth_details = {
-                        "username": username,
-                        "client_id": client_id,
-                        "client_secret": client_secret,
-                        "auth_url": auth_url,
-                        "token_url": token_url,
-                        "redirect_uri": redirect_uri,
-                        "scopes": scopes,
-                        "refresh_token": refresh_token,
-                        "access_token": access_token
-                    }
+                        auth_details = {
+                            "username": username, "client_id": client_id, "client_secret": client_secret,
+                            "auth_url": auth_url, "token_url": token_url, "redirect_uri": redirect_uri,
+                            "scopes": scopes, "refresh_token": refresh_token, "access_token": access_token
+                        }
 
-            # 4. Create account object and test connection
             account = {
                 "friendly_name": friendly_name,
                 "login_method": login_method,
@@ -691,74 +593,53 @@ def account_add_wizard():
                 "auth": auth_details
             }
             
-            # Test connection before adding
-            if login_method == "Account/Password":
-                pwd = password
-                success, msg = test_imap_connection(imap_server, imap_port, username, password=pwd, tls_method=imap_tls_method)
-            else:
-                # For OAuth2, if we have an access_token, we can test it. 
-                # Otherwise, we might only have a refresh_token, which requires fetching a new access_token.
-                # Since we just got it from start_oauth_flow, we might have it.
-                if access_token:
-                    success, msg = test_imap_connection(imap_server, imap_port, username, access_token=access_token, tls_method=imap_tls_method)
-                else:
-                    print("Skipping connection test for manual OAuth2 (no access token provided yet).")
-                    success, msg = True, ""
+            success, msg = True, ""
+            match login_method:
+                case "Account/Password":
+                    success, msg = test_imap_connection(imap_server, imap_port, username, password=password, tls_method=imap_tls_method)
+                case "OAuth2":
+                    if access_token:
+                        success, msg = test_imap_connection(imap_server, imap_port, username, access_token=access_token, tls_method=imap_tls_method)
+                    else:
+                        print("Skipping connection test for manual OAuth2 (no access token provided yet).")
 
             if not success:
                 from rich import print as rprint
                 rprint(f"[red]❌ Connection test failed: {msg}[/red]")
-                retry = questionary.confirm("Do you want to re-enter credentials?").ask()
-                if retry is None: raise KeyboardInterrupt
+                if (retry := questionary.confirm("Do you want to re-enter credentials?").ask()) is None:
+                    raise KeyboardInterrupt
                 if retry:
                     continue
-                else:
-                    print("Account not added.")
-                    # Don't add to config, but ask if they want to add another
+                print("Account not added.")
             else:
                 print("✅ Connection test successful!")
+                if (sync_limit_input := questionary.text(f"Number of latest emails to download during initial sync for '{friendly_name}' (e.g., 20, 50. Enter 'all' for everything):", default="20").ask()) is None:
+                    raise KeyboardInterrupt
                 
-                # Ask for Initial Sync Limit for this account
-                sync_limit_input = questionary.text(
-                    f"Number of latest emails to download during initial sync for '{friendly_name}' (e.g., 20, 50. Enter 'all' for everything):", 
-                    default="20"
-                ).ask()
-                if sync_limit_input is None: raise KeyboardInterrupt
-                
-                if sync_limit_input.lower() == "all":
-                    limit = -1
-                else:
-                    try:
-                        limit = int(sync_limit_input)
-                    except ValueError:
-                        print("Invalid limit. Defaulting to 20.")
-                        limit = 20
-                
-                # Save the initial sync limit (one-time use, not in config)
+                limit = -1 if sync_limit_input.lower() == "all" else int(sync_limit_input) if sync_limit_input.isdigit() else 20
                 newly_added.append((account, limit))
-                current_config["accounts"].append(account)
+                current_config.setdefault("accounts", []).append(account)
                 
-            add_another = questionary.confirm("Add another account?").ask()
-            if add_another is None: raise KeyboardInterrupt
+            if (add_another := questionary.confirm("Add another account?").ask()) is None:
+                raise KeyboardInterrupt
             if not add_another:
                 break
 
-        # 4. Save to config.toml
         config.save_config(current_config, config_path)
-
         print(f"\nConfiguration saved to {config_path} with {len(current_config['accounts'])} account(s)!")
         return newly_added, encryption_password
 
     except KeyboardInterrupt:
         new_accounts_count = len(current_config.get("accounts", [])) - original_accounts_count
         if new_accounts_count > 0:
-            # If there are new accounts added, save them
             config.save_config(current_config, config_path)
             print(f"\n[!] Configuration interrupted. {new_accounts_count} new account(s) were saved to {config_path}.")
             return newly_added, encryption_password
-        else:
-            print("\n[!] Configuration cancelled. No changes were made.")
-            return [], None
+        print("\n[!] Configuration cancelled. No changes were made.")
+        return [], None
+    except Exception as e:
+        print(f"\n❌ Error: {e}")
+        return [], None
 
 if __name__ == "__main__":
     init_wizard()
