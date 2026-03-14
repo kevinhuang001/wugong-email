@@ -1,6 +1,29 @@
 import os
 import toml
 import base64
+import sys
+import questionary
+
+def get_encryption_password(args=None, prompt_text="Enter encryption password:"):
+    """
+    Get encryption password from --password arg, WUGONG_PASSWORD env var, or interactive prompt.
+    """
+    # 1. Check CLI argument if provided
+    if args:
+        password = getattr(args, "password", None)
+        if password:
+            return password
+    
+    # 2. Check environment variable
+    password = os.environ.get("WUGONG_PASSWORD")
+    if password:
+        return password
+    
+    # 3. Interactive prompt (only if in a terminal)
+    if sys.stdin.isatty():
+        return questionary.password(prompt_text).ask()
+    
+    return None
 
 def get_config_path():
     """Determine the configuration file path based on environment variables or defaults."""

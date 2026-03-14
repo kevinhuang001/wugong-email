@@ -4,3 +4,5 @@ questionary
 requests-oauthlib
 flask
 rich
+pytest
+pytest-mock

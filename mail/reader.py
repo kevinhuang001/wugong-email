@@ -14,6 +14,48 @@ class MailReader:
         self.config = config
         self.save_config_callback = save_config_callback
 
+    def _connect_imap(self, account, auth_password):
+        """Helper to connect and authenticate to IMAP server based on configured TLS method."""
+        imap_server = account['imap_server']
+        imap_port = int(account['imap_port'])
+        tls_method = account.get('imap_tls_method', 'SSL/TLS')
+        
+        if tls_method == "SSL/TLS":
+            mail = imaplib.IMAP4_SSL(imap_server, imap_port)
+        elif tls_method == "STARTTLS":
+            mail = imaplib.IMAP4(imap_server, imap_port)
+            mail.starttls()
+        else:
+            mail = imaplib.IMAP4(imap_server, imap_port)
+            
+        auth = self.auth_manager.decrypt_account_auth(account, auth_password)
+        
+        if account['login_method'] == "Account/Password":
+            mail.login(auth['username'], auth['password'])
+        else:
+            user = auth.get("username")
+            token = auth.get("access_token")
+            try:
+                auth_string = f"user={user}\x01auth=Bearer {token}\x01\x01"
+                mail.authenticate('XOAUTH2', lambda x: auth_string)
+            except imaplib.IMAP4.error:
+                new_token = self.auth_manager.refresh_oauth2_token(account, auth, auth_password, self.config)
+                if new_token:
+                    self.save_config_callback()
+                    # Reconnect if token refreshed
+                    if tls_method == "SSL/TLS":
+                        mail = imaplib.IMAP4_SSL(imap_server, imap_port)
+                    elif tls_method == "STARTTLS":
+                        mail = imaplib.IMAP4(imap_server, imap_port)
+                        mail.starttls()
+                    else:
+                        mail = imaplib.IMAP4(imap_server, imap_port)
+                    auth_string = f"user={user}\x01auth=Bearer {new_token}\x01\x01"
+                    mail.authenticate('XOAUTH2', lambda x: auth_string)
+                else:
+                    raise Exception("Authentication failed.")
+        return mail
+
     def fetch_emails(self, account, auth_password, limit=20, search_criteria=None, progress_callback=None, is_initial_sync=False, sync=True):
         """
         Original fetch_emails, now used primarily for 'sync' command.
@@ -29,27 +71,7 @@ class MailReader:
                 # 1. Process pending actions (like deletions)
                 self.sync_pending_actions(account, auth_password)
                 
-                auth = self.auth_manager.decrypt_account_auth(account, auth_password)
-                mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
-                
-                # Authentication logic
-                if account['login_method'] == "Account/Password":
-                    mail.login(auth['username'], auth['password'])
-                else:
-                    user = auth.get("username")
-                    token = auth.get("access_token")
-                    try:
-                        auth_string = f"user={user}\x01auth=Bearer {token}\x01\x01"
-                        mail.authenticate('XOAUTH2', lambda x: auth_string)
-                    except imaplib.IMAP4.error:
-                        new_token = self.auth_manager.refresh_oauth2_token(account, auth, auth_password, self.config)
-                        if new_token:
-                            self.save_config_callback()
-                            mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
-                            auth_string = f"user={user}\x01auth=Bearer {new_token}\x01\x01"
-                            mail.authenticate('XOAUTH2', lambda x: auth_string)
-                        else:
-                            raise Exception("Authentication failed.")
+                mail = self._connect_imap(account, auth_password)
 
                 mail.select("INBOX")
                 
@@ -243,28 +265,8 @@ class MailReader:
         
         if not local_only:
             try:
-                auth = self.auth_manager.decrypt_account_auth(account, auth_password)
-                mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
+                mail = self._connect_imap(account, auth_password)
             
-                # Authentication
-                if account['login_method'] == "Account/Password":
-                    mail.login(auth['username'], auth['password'])
-                else:
-                    user = auth.get("username")
-                    token = auth.get("access_token")
-                    try:
-                        auth_string = f"user={user}\x01auth=Bearer {token}\x01\x01"
-                        mail.authenticate('XOAUTH2', lambda x: auth_string)
-                    except imaplib.IMAP4.error:
-                        new_token = self.auth_manager.refresh_oauth2_token(account, auth, auth_password, self.config)
-                        if new_token:
-                            self.save_config_callback()
-                            mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
-                            auth_string = f"user={user}\x01auth=Bearer {new_token}\x01\x01"
-                            mail.authenticate('XOAUTH2', lambda x: auth_string)
-                        else:
-                            raise Exception("Authentication failed.")
-
                 res, data = mail.select("INBOX")
                 if res != "OK":
                     raise Exception(f"Failed to select INBOX: {str(data)}")
@@ -483,7 +485,9 @@ class MailReader:
                 for part in msg_data:
                     if isinstance(part, tuple):
                         msg = email.message_from_bytes(part[1])
-                        parsed = self._parse_email(email_id, msg, part[0])
+                        # We just marked it as seen on server, so we should save it as seen in cache too
+                        status_data = f"{part[0].decode()} (FLAGS (\\Seen))"
+                        parsed = self._parse_email(email_id, msg, status_data)
                         
                         final_content = parsed["content"]
                         final_type = parsed["content_type"]
@@ -500,30 +504,6 @@ class MailReader:
 
         except Exception as e:
             return f"Error fetching from server: {e}"
-
-    def _connect_imap(self, account, auth_password):
-        """Helper to connect and authenticate to IMAP server."""
-        auth = self.auth_manager.decrypt_account_auth(account, auth_password)
-        mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
-        
-        if account['login_method'] == "Account/Password":
-            mail.login(auth['username'], auth['password'])
-        else:
-            user = auth.get("username")
-            token = auth.get("access_token")
-            try:
-                auth_string = f"user={user}\x01auth=Bearer {token}\x01\x01"
-                mail.authenticate('XOAUTH2', lambda x: auth_string)
-            except imaplib.IMAP4.error:
-                new_token = self.auth_manager.refresh_oauth2_token(account, auth, auth_password, self.config)
-                if new_token:
-                    self.save_config_callback()
-                    mail = imaplib.IMAP4_SSL(account['imap_server'], account['imap_port'])
-                    auth_string = f"user={user}\x01auth=Bearer {new_token}\x01\x01"
-                    mail.authenticate('XOAUTH2', lambda x: auth_string)
-                else:
-                    raise Exception("Authentication failed.")
-        return mail
 
     def delete_email(self, account, auth_password, email_id):
         """
@@ -566,7 +546,7 @@ class MailReader:
         """
         Process pending actions (like deletions) that failed previously.
         """
-        account_name = account.get("name")
+        account_name = account.get("friendly_name") or account.get("name")
         pending_actions = self.storage_manager.get_pending_actions(account_name)
         
         if not pending_actions:

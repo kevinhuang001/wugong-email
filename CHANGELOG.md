@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.2] - 2026-03-14
+
+### Features
+- **Security & Automation**: Centralized password retrieval logic in `config.py` and added support for `--password` CLI argument and `WUGONG_PASSWORD` environment variable to enable non-interactive automation (e.g., cron jobs).
+- **TLS Configuration**: Added explicit selection of TLS methods (SSL/TLS, STARTTLS, Plain) and custom ports during account setup in `wizard.py`, improving compatibility with various email providers.
+- **Reading Experience**: Added `--text` and `--html` parameters to the `read` command to allow manual content type selection and avoid interactive prompts in non-TTY environments.
+- **Test Suite Restructuring**: Reorganized the `tests` directory into `unit` and `integration` subfolders. Added comprehensive boundary condition tests for hybrid sync and expanded integration tests to cover all CLI parameters.
+
+### Fixed
+- **Email Sending Robustness**: Fixed SMTP sending failures for QQ, Gmail, and Outlook accounts by refining address formatting, adding EHLO handshakes before STARTTLS, and using `docmd()` for robust OAuth2 authentication.
+- **Bug Fixes**: Resolved sync pending actions retry logic and fixed OAuth2 authentication string formatting in the account setup wizard.
+
 ## [1.0.1] - 2026-03-13
 
 ### Fixed

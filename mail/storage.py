@@ -188,12 +188,13 @@ class StorageManager:
                 
                 subject_lower = str(subject or "").lower()
                 sender_lower = str(sender or "").lower()
+                sender_email_lower = str(sender_email or "").lower()
                 content_lower = str(content or "").lower()
                 
                 if keyword:
-                    if keyword not in subject_lower and keyword not in sender_lower and keyword not in content_lower:
+                    if keyword not in subject_lower and keyword not in sender_lower and keyword not in sender_email_lower and keyword not in content_lower:
                         continue
-                if from_filter and from_filter not in sender_lower:
+                if from_filter and from_filter not in sender_lower and from_filter not in sender_email_lower:
                     continue
                 
                 # Note: SINCE and BEFORE are usually handled by IMAP search, 

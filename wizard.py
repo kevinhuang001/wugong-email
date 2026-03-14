@@ -28,8 +28,10 @@ EMAIL_PROVIDERS = {
     "Gmail": {
         "imap_server": "imap.gmail.com",
         "imap_port": 993,
+        "imap_tls_method": "SSL/TLS",
         "smtp_server": "smtp.gmail.com",
         "smtp_port": 465,
+        "smtp_tls_method": "SSL/TLS",
         "auth_methods": ["OAuth2", "Account/Password"],
         "auth_url": "https://accounts.google.com/o/oauth2/auth",
         "token_url": "https://oauth2.googleapis.com/token",
@@ -39,8 +41,10 @@ EMAIL_PROVIDERS = {
     "Outlook": {
         "imap_server": "outlook.office365.com",
         "imap_port": 993,
+        "imap_tls_method": "SSL/TLS",
         "smtp_server": "smtp.office365.com",
         "smtp_port": 587,
+        "smtp_tls_method": "STARTTLS",
         "auth_methods": ["OAuth2", "Account/Password"],
         "auth_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
         "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
@@ -55,8 +59,10 @@ EMAIL_PROVIDERS = {
     "QQ Mail": {
         "imap_server": "imap.qq.com",
         "imap_port": 993,
+        "imap_tls_method": "SSL/TLS",
         "smtp_server": "smtp.qq.com",
         "smtp_port": 465,
+        "smtp_tls_method": "SSL/TLS",
         "auth_methods": ["Account/Password"],
         "auth_url": "",
         "token_url": "",
@@ -66,8 +72,10 @@ EMAIL_PROVIDERS = {
     "163 Mail": {
         "imap_server": "imap.163.com",
         "imap_port": 993,
+        "imap_tls_method": "SSL/TLS",
         "smtp_server": "smtp.163.com",
         "smtp_port": 465,
+        "smtp_tls_method": "SSL/TLS",
         "auth_methods": ["Account/Password"],
         "auth_url": "",
         "token_url": "",
@@ -77,8 +85,10 @@ EMAIL_PROVIDERS = {
     "Other": {
         "imap_server": "",
         "imap_port": 993,
+        "imap_tls_method": "SSL/TLS",
         "smtp_server": "",
         "smtp_port": 465,
+        "smtp_tls_method": "SSL/TLS",
         "auth_methods": ["Account/Password", "OAuth2"],
         "auth_url": "",
         "token_url": "",
@@ -183,15 +193,21 @@ def start_oauth_flow(client_id, client_secret, auth_url, token_url, scopes, redi
 
     return token_data
 
-def test_imap_connection(imap_server, imap_port, username, password=None, access_token=None):
+def test_imap_connection(imap_server, imap_port, username, password=None, access_token=None, tls_method="SSL/TLS"):
     """Tests if we can connect and login to the IMAP server."""
     try:
-        print(f"Testing connection to {imap_server}:{imap_port}...")
-        mail = imaplib.IMAP4_SSL(imap_server, imap_port)
+        print(f"Testing connection to {imap_server}:{imap_port} ({tls_method})...")
+        if tls_method == "SSL/TLS":
+            mail = imaplib.IMAP4_SSL(imap_server, imap_port)
+        elif tls_method == "STARTTLS":
+            mail = imaplib.IMAP4(imap_server, imap_port)
+            mail.starttls()
+        else:
+            mail = imaplib.IMAP4(imap_server, imap_port)
         
         if access_token:
             # OAuth2 authentication
-            auth_string = f"user={username}\1auth=Bearer {access_token}\1\1"
+            auth_string = f"user={username}\x01auth=Bearer {access_token}\x01\x01"
             mail.authenticate('XOAUTH2', lambda x: auth_string)
         else:
             # Password authentication
@@ -335,7 +351,7 @@ def configure_wizard():
             # Need password if encryption is enabled to update the scheduled task with environment variable
             encryption_password = None
             if current_config.get("general", {}).get("encryption_enabled") or current_config.get("general", {}).get("encrypt_emails"):
-                encryption_password = questionary.password("Enter your encryption password to update the scheduled task:").ask()
+                encryption_password = config.get_encryption_password(prompt_text="Enter your encryption password to update the scheduled task:")
                 if encryption_password is None: raise KeyboardInterrupt
 
             setup_scheduling(interval, encryption_password)
@@ -463,7 +479,7 @@ def account_add_wizard():
             
         # Re-verify encryption password for the current session if not just set
         if encryption_password is None and (current_config.get("general", {}).get("encryption_enabled") or current_config.get("general", {}).get("encrypt_emails")):
-            encryption_password = questionary.password("Enter your encryption password to proceed:").ask()
+            encryption_password = config.get_encryption_password(prompt_text="Enter your encryption password to proceed:")
             if encryption_password is None: raise KeyboardInterrupt
         
         # Simple validation: Try to decrypt one piece of sensitive data if it exists
@@ -548,14 +564,30 @@ def account_add_wizard():
             imap_server = questionary.text("IMAP Server:", default=provider_info["imap_server"]).ask()
             if imap_server is None: raise KeyboardInterrupt
             
-            imap_port_str = questionary.text("IMAP Port:", default=str(provider_info["imap_port"])).ask()
+            imap_tls_method = questionary.select(
+                "IMAP TLS Method:",
+                choices=["SSL/TLS", "STARTTLS", "Plain"],
+                default=provider_info.get("imap_tls_method", "SSL/TLS")
+            ).ask()
+            if imap_tls_method is None: raise KeyboardInterrupt
+
+            default_imap_port = "993" if imap_tls_method == "SSL/TLS" else "143"
+            imap_port_str = questionary.text("IMAP Port:", default=str(provider_info.get("imap_port") or default_imap_port)).ask()
             if imap_port_str is None: raise KeyboardInterrupt
             imap_port = int(imap_port_str)
             
             smtp_server = questionary.text("SMTP Server:", default=provider_info["smtp_server"]).ask()
             if smtp_server is None: raise KeyboardInterrupt
             
-            smtp_port_str = questionary.text("SMTP Port:", default=str(provider_info["smtp_port"])).ask()
+            smtp_tls_method = questionary.select(
+                "SMTP TLS Method:",
+                choices=["SSL/TLS", "STARTTLS", "Plain"],
+                default=provider_info.get("smtp_tls_method", "SSL/TLS")
+            ).ask()
+            if smtp_tls_method is None: raise KeyboardInterrupt
+
+            default_smtp_port = "465" if smtp_tls_method == "SSL/TLS" else ("587" if smtp_tls_method == "STARTTLS" else "25")
+            smtp_port_str = questionary.text("SMTP Port:", default=str(provider_info.get("smtp_port") or default_smtp_port)).ask()
             if smtp_port_str is None: raise KeyboardInterrupt
             smtp_port = int(smtp_port_str)
 
@@ -652,21 +684,23 @@ def account_add_wizard():
                 "login_method": login_method,
                 "imap_server": imap_server,
                 "imap_port": imap_port,
+                "imap_tls_method": imap_tls_method,
                 "smtp_server": smtp_server,
                 "smtp_port": smtp_port,
+                "smtp_tls_method": smtp_tls_method,
                 "auth": auth_details
             }
             
             # Test connection before adding
             if login_method == "Account/Password":
                 pwd = password
-                success, msg = test_imap_connection(imap_server, imap_port, username, password=pwd)
+                success, msg = test_imap_connection(imap_server, imap_port, username, password=pwd, tls_method=imap_tls_method)
             else:
                 # For OAuth2, if we have an access_token, we can test it. 
                 # Otherwise, we might only have a refresh_token, which requires fetching a new access_token.
                 # Since we just got it from start_oauth_flow, we might have it.
                 if access_token:
-                    success, msg = test_imap_connection(imap_server, imap_port, username, access_token=access_token)
+                    success, msg = test_imap_connection(imap_server, imap_port, username, access_token=access_token, tls_method=imap_tls_method)
                 else:
                     print("Skipping connection test for manual OAuth2 (no access token provided yet).")
                     success, msg = True, ""

@@ -13,6 +13,7 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 from mail import MailManager
 from wizard import account_add_wizard, init_wizard, configure_wizard
+import config
 
 console = Console()
 
@@ -32,24 +33,16 @@ def handle_list(args, manager):
             return
         target_accounts = [acc]
 
-    # Get password once if encryption is enabled (assume same password for all for simplicity in CLI)
+    # Get password once if encryption is enabled
     password = ""
-    # We need a password if either credentials or emails are encrypted
     if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):
-        # Check if we are in a terminal (for background cron jobs)
-        if not sys.stdin.isatty():
-            # If not in a terminal, we can't ask for a password.
-            # For now, we'll skip syncing if it's encrypted and no password can be provided.
-            # In the future, this could use a system keyring.
-            return
-
         if args.account == "all":
             prompt_text = "Enter encryption password for all accounts:"
         else:
             acc_name = target_accounts[0].get("friendly_name") or "default"
             prompt_text = f"Enter encryption password for '{acc_name}':"
         
-        password = questionary.password(prompt_text).ask()
+        password = config.get_encryption_password(args, prompt_text)
         if not password:
             return
 
@@ -145,10 +138,10 @@ def handle_read(args, manager):
         return
 
     account_name = account.get("friendly_name") or "default"
-    password = os.environ.get("WUGONG_PASSWORD", "")
+    password = ""
     # We need a password if either credentials or emails are encrypted
-    if not password and (manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False)):
-        password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
+    if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):
+        password = config.get_encryption_password(args, f"Enter encryption password for '{account_name}':")
         if not password:
             return
 
@@ -159,14 +152,24 @@ def handle_read(args, manager):
                 if isinstance(content, dict) and content.get("type") == "html_only":
                     html_content = content.get("html", "")
                     status.stop()
-                    choice = questionary.select(
-                        "This email only contains HTML content. Please choose how to view it:",
-                        choices=[
-                            "Extract text (may be incomplete, sentences might run together)",
-                            "View raw HTML code",
-                            "Cancel"
-                        ]
-                    ).ask()
+                    
+                    choice = None
+                    if args.text:
+                        choice = "Extract text (may be incomplete, sentences might run together)"
+                    elif args.html:
+                        choice = "View raw HTML code"
+                    elif sys.stdin.isatty():
+                        choice = questionary.select(
+                            "This email only contains HTML content. Please choose how to view it:",
+                            choices=[
+                                "Extract text (may be incomplete, sentences might run together)",
+                                "View raw HTML code",
+                                "Cancel"
+                            ]
+                        ).ask()
+                    else:
+                        # Non-interactive fallback: Default to text extraction
+                        choice = "Extract text (may be incomplete, sentences might run together)"
                     
                     if choice == "Extract text (may be incomplete, sentences might run together)":
                         # Remove <style> and <script> tags and their content
@@ -201,10 +204,10 @@ def handle_delete(args, manager):
         return
 
     account_name = account.get("friendly_name") or "default"
-    password = os.environ.get("WUGONG_PASSWORD", "")
+    password = ""
     # We need a password if either credentials or emails are encrypted
-    if not password and (manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False)):
-        password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
+    if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):
+        password = config.get_encryption_password(args, f"Enter encryption password for '{account_name}':")
         if not password:
             return
 
@@ -229,10 +232,10 @@ def handle_send(args, manager):
         return
 
     account_name = account.get("friendly_name") or "default"
-    password = os.environ.get("WUGONG_PASSWORD", "")
+    password = ""
     # We need a password if either credentials or emails are encrypted
-    if not password and (manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False)):
-        password = questionary.password(f"Enter encryption password for '{account_name}':").ask()
+    if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):
+        password = config.get_encryption_password(args, f"Enter encryption password for '{account_name}':")
         if not password:
             return
 
@@ -304,7 +307,7 @@ def handle_account(args, manager, account_parser):
                 # Need encryption password if enabled and not already provided
                 manager = MailManager()
                 if (manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False)) and not password:
-                    password = questionary.password("Enter encryption password to start initial sync:").ask()
+                    password = config.get_encryption_password(args, "Enter encryption password to start initial sync:")
                     if not password: return
 
                 for acc, limit in newly_added:
@@ -379,13 +382,13 @@ def handle_sync(args, manager):
 
     # Use existing password from env or ask once
     acc_name = target_accounts[0].get("friendly_name") or "default"
-    password = os.environ.get("WUGONG_PASSWORD", "")
-    if not password and (manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False)):
+    password = ""
+    if manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False):
         prompt_text = f"Enter encryption password for '{acc_name}':"
         if len(target_accounts) > 1:
             prompt_text = "Enter encryption password for all accounts:"
         
-        password = questionary.password(prompt_text).ask()
+        password = config.get_encryption_password(args, prompt_text)
         if not password:
             return
 
@@ -535,6 +538,7 @@ def handle_uninstall():
 def main():
     parser = argparse.ArgumentParser(description="Wugong Email CLI Manager")
     parser.add_argument("--version", "-v", action="store_true", help="Show the version of Wugong Email")
+    parser.add_argument("--password", "-p", help="Encryption password (also looks for WUGONG_PASSWORD environment variable)")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # List command
@@ -552,6 +556,8 @@ def main():
     read_parser = subparsers.add_parser("read", help="Read a specific email")
     read_parser.add_argument("--account", "-a", help="Account name (uses default if not specified)")
     read_parser.add_argument("--id", "-i", required=True, help="Email ID to read")
+    read_parser.add_argument("--text", action="store_true", help="Force text extraction if email is HTML-only")
+    read_parser.add_argument("--html", action="store_true", help="Show raw HTML if email is HTML-only")
 
     # Delete command
     delete_parser = subparsers.add_parser("delete", help="Delete a specific email")
@@ -600,6 +606,10 @@ def main():
 
     args = parser.parse_args()
     
+    # If --password is provided, set it in the environment so it's available globally
+    if args.password:
+        os.environ["WUGONG_PASSWORD"] = args.password
+
     if args.version:
         install_dir = os.path.dirname(os.path.abspath(__file__))
         version_file = os.path.join(install_dir, ".version")
