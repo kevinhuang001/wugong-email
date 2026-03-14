@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.4] - 2026-03-14
+
+### Features
+- **Comprehensive Documentation**: Greatly expanded the Quick Start section in `README.md` to cover all 12 core CLI commands with detailed usage examples.
+- **Improved Installation Experience**: Updated `install.sh` and `install.ps1` to display the full command list after installation, helping users get started faster.
+- **CLI Visibility**: All commands available in `--help` are now fully documented in the main README and installation guides.
+
 ## [1.0.3] - 2026-03-14
 
 ### Features

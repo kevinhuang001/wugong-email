@@ -32,7 +32,7 @@ try {
 $SourceDir = $PSScriptRoot
 if (-not $SourceDir) { $SourceDir = (Get-Location).Path }
 
-if (-not $SourceDir -or -not (Test-Path (Join-Path $SourceDir "cli.py")) -or -not (Test-Path (Join-Path $SourceDir "wizard.py"))) {
+if (-not $SourceDir -or -not (Test-Path (Join-Path $SourceDir "main.py")) -or -not (Test-Path (Join-Path $SourceDir "wizard.py"))) {
     Write-Host "📡 Source files not found locally. Cloning from GitHub..." -ForegroundColor Blue
     $TempDir = Join-Path $env:TEMP "wugong_install_$(Get-Random)"
     New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
@@ -88,11 +88,15 @@ Write-Host "$InstallDir" -ForegroundColor Green
 Write-Host "--------------------------------------------------"
 Write-Host "Quick Start Guide:"
 Write-Host "1. wugong init        - Setup master password & sync schedule"
-Write-Host "2. wugong configure   - Modify sync interval"
+Write-Host "2. wugong configure   - Modify sync interval or settings"
 Write-Host "3. wugong account add - Setup your email accounts"
-Write-Host "4. wugong sync        - Manually sync emails"
-Write-Host "5. wugong list        - View your emails"
-Write-Host "6. wugong send        - Send an email"
-Write-Host "7. wugong upgrade     - Update to the latest version"
-Write-Host "8. wugong uninstall   - Uninstall Wugong Email"
+Write-Host "4. wugong account list- List all configured accounts"
+Write-Host "5. wugong sync        - Manually sync emails"
+Write-Host "6. wugong list        - View your emails (search with -k)"
+Write-Host "7. wugong read -i <ID>- Read an email in terminal"
+Write-Host "8. wugong send        - Send an email"
+Write-Host "9. wugong delete -i <ID>- Delete an email"
+Write-Host "10. wugong folder list- List all mailbox folders"
+Write-Host "11. wugong upgrade    - Update to the latest version"
+Write-Host "12. wugong uninstall  - Uninstall Wugong Email"
 Write-Host "--------------------------------------------------"

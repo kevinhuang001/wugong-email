@@ -29,7 +29,7 @@ fi
 echo -e "${GREEN}✅ Python $PYTHON_VERSION found.${NC}"
 
 # 2. Check if running via curl or local
-if [ -f "cli.py" ] && [ -f "wizard.py" ]; then
+if [ -f "main.py" ] && [ -f "wizard.py" ]; then
     echo -e "${BLUE}📂 Local source files found. Using current directory.${NC}"
     SOURCE_DIR=$(pwd)
 else
@@ -102,11 +102,15 @@ echo -e "Then run: ${BLUE}source ~/.zshrc${NC} (or your shell's config file)"
 echo -e "--------------------------------------------------"
 echo -e "Quick Start Guide:"
 echo -e "1. ${BLUE}wugong init${NC}        - Setup master password & sync schedule"
-echo -e "2. ${BLUE}wugong configure${NC}   - Modify sync interval"
+echo -e "2. ${BLUE}wugong configure${NC}   - Modify sync interval or settings"
 echo -e "3. ${BLUE}wugong account add${NC} - Setup your email accounts"
-echo -e "4. ${BLUE}wugong sync${NC}        - Manually sync emails"
-echo -e "5. ${BLUE}wugong list${NC}        - View your emails"
-echo -e "6. ${BLUE}wugong send${NC}        - Send an email"
-echo -e "7. ${BLUE}wugong upgrade${NC}     - Update to the latest version"
-echo -e "8. ${BLUE}wugong uninstall${NC}   - Uninstall Wugong Email"
+echo -e "4. ${BLUE}wugong account list${NC}- List all configured accounts"
+echo -e "5. ${BLUE}wugong sync${NC}        - Manually sync emails"
+echo -e "6. ${BLUE}wugong list${NC}        - View your emails (search with -k)"
+echo -e "7. ${BLUE}wugong read -i <ID>${NC}- Read an email in terminal"
+echo -e "8. ${BLUE}wugong send${NC}        - Send an email"
+echo -e "9. ${BLUE}wugong delete -i <ID>${NC}- Delete an email"
+echo -e "10. ${BLUE}wugong folder list${NC} - List all mailbox folders"
+echo -e "11. ${BLUE}wugong upgrade${NC}     - Update to the latest version"
+echo -e "12. ${BLUE}wugong uninstall${NC}   - Uninstall Wugong Email"
 echo -e "--------------------------------------------------"

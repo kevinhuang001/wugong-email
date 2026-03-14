@@ -40,46 +40,61 @@ Setup your master password and background sync schedule:
 ```bash
 wugong init
 ```
+*Note: Use `wugong configure` later if you need to modify sync intervals.*
 
-### 2. Add an Account
+### 2. Account Management
 Follow the interactive wizard to add your first email account:
 ```bash
-wugong account add
+wugong account add          # Interactive setup wizard
+wugong account list         # List all configured accounts
+wugong account delete <name> # Remove an account
 ```
 
-### 3. List Emails
-Display the latest emails from your default or specific account:
-```bash
-wugong list                       # Show default account
-wugong list work --limit 20       # Show 20 emails from 'work' account
-wugong list --keyword "invoice"   # Search by keyword
-wugong list --from "boss"         # Filter by sender
-wugong list --since 2024-01-01    # Filter by date
-```
-
-### 4. Sync Emails
+### 3. Sync Emails
 Synchronize your local cache with the IMAP server:
 ```bash
-wugong sync                       # Sync all accounts
-wugong sync work --limit 100      # Sync latest 100 emails for 'work'
+wugong sync                 # Sync all accounts (latest emails)
+wugong sync work --limit 50 # Sync latest 50 emails for 'work' account
+wugong sync --folder "Sent" # Sync a specific folder
 ```
 
-### 5. Read an Email
-Read the content of a specific email by its ID:
+### 4. List and Search Emails
+Display emails from your local cache or fetch them directly from the server:
 ```bash
-wugong read -i <ID>
+wugong list                       # Show latest emails (default account)
+wugong list work --limit 20       # Show 20 emails from 'work' account
+wugong list --keyword "invoice"   # Search subject/body for keywords
+wugong list --from "boss"         # Filter by sender
+wugong list --since 2024-01-01    # Search by date range
+wugong list --local               # Offline mode (cache only)
 ```
 
-### 6. Send an Email
-Send a quick email from the command line:
+### 5. Read, Send, and Delete Emails
 ```bash
+# Read an email (use -i for UID)
+wugong read -i <ID>               # Read in terminal
+wugong read -i <ID> --text        # Strip HTML, show plain text
+wugong read -i <ID> --browser     # Open in default web browser
+
+# Send an email
 wugong send --to recipient@example.com --subject "Hello" --body "Message body"
+wugong send -t user@test.com -s "File" --attach document.pdf
+
+# Delete an email
+wugong delete -i <ID>             # Delete from local and server
+```
+
+### 6. Folder Management
+```bash
+wugong folder list                # List all folders for default account
+wugong folder create "Archive"    # Create a new folder
+wugong folder move <ID> "Archive" # Move an email to a folder
 ```
 
 ### 7. Maintenance
 ```bash
 wugong upgrade                    # Update to the latest version
-wugong uninstall                  # Remove Wugong Email
+wugong uninstall                  # Remove Wugong Email and its data
 ```
 
 ---
