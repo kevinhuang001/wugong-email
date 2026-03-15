@@ -43,12 +43,26 @@ wugong init
 *Note: Use `wugong configure` later if you need to modify sync intervals.*
 
 ### 2. Account Management
-Follow the interactive wizard to add your first email account:
+
+Follow the interactive wizard to add your first email account. You can provide all parameters at once, or provide some and let the wizard ask for the rest:
+
 ```bash
-wugong account add          # Interactive setup wizard
+wugong account add          # Full interactive setup wizard
+wugong account add --friendly-name "Work" --provider "gmail" # Partial interactive
 wugong account list         # List all configured accounts
 wugong account delete <name> # Remove an account
 ```
+
+---
+
+### 💡 Flexible Interactive Mode
+
+Wugong Email's wizards (`init`, `account add`, `configure`) support **partial interaction**:
+- If you provide a parameter via the command line (e.g., `--friendly-name "MyQQ"`), the wizard will **skip** that question.
+- If you don't provide a parameter, the wizard will ask you interactively.
+- This is perfect for combining the ease of a GUI-like wizard with the speed of a CLI.
+
+---
 
 ### 3. Sync Emails
 Synchronize your local cache with the IMAP server:

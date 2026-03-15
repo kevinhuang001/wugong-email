@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.6] - 2026-03-15
+
+### Features
+- **Flexible Interactive Mode**: Enhanced `account add` wizard to skip questions for parameters already provided via CLI arguments. This allows for "partial interaction" where you can pre-fill some fields and let the wizard ask for the rest.
+- **Improved Documentation**: Updated `README.md` and `CLI_REFERENCE.md` to highlight the new flexible interaction capabilities in wizards.
+
+### Fixed
+- **Sync Status Reporting**: Fixed a bug in `account add` where the initial sync would report success even if it failed (e.g., due to login errors). It now correctly displays failure messages with the specific error from the IMAP server.
+
 ## [1.0.5] - 2026-03-15
 
 ### Features

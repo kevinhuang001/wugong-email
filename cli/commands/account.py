@@ -233,98 +233,118 @@ def account_add_wizard(
             print("\n=== Add New Email Account ===")
 
             is_default = len(current_config.get("accounts", [])) == 0
-            if (friendly_name := questionary.text("Friendly Name (e.g., 'Work Gmail'):", default="default" if is_default else "").ask()) is None:
-                raise KeyboardInterrupt
+            if friendly_name is None:
+                if (friendly_name := questionary.text("Friendly Name (e.g., 'Work Gmail'):", default="default" if is_default else "").ask()) is None:
+                    raise KeyboardInterrupt
 
-            if (provider := questionary.select("Select your email provider:", choices=list(EMAIL_PROVIDERS.keys()), default="other").ask()) is None:
-                raise KeyboardInterrupt
+            if provider is None:
+                if (provider := questionary.select("Select your email provider:", choices=list(EMAIL_PROVIDERS.keys()), default="other").ask()) is None:
+                    raise KeyboardInterrupt
             
             provider_info = EMAIL_PROVIDERS.get(provider, EMAIL_PROVIDERS["other"])
             if provider_info["hint"]:
                 print(f"\n[!] {provider_info['hint']}\n")
 
-            if (login_method := questionary.select("Choose login method:", choices=provider_info["auth_methods"], default=provider_info["auth_methods"][0]).ask()) is None:
-                raise KeyboardInterrupt
+            if login_method is None:
+                if (login_method := questionary.select("Choose login method:", choices=provider_info["auth_methods"], default=provider_info["auth_methods"][0]).ask()) is None:
+                    raise KeyboardInterrupt
 
-            if (username := questionary.text("Email Account (e.g. yourname@example.com):").ask()) is None:
-                raise KeyboardInterrupt
+            if username is None:
+                if (username := questionary.text("Email Account (e.g. yourname@example.com):").ask()) is None:
+                    raise KeyboardInterrupt
+            
             if not username:
                 print("Email Account is required.")
+                friendly_name = None # Reset for retry
                 continue
 
-            if (imap_server := questionary.text("IMAP Server:", default=provider_info["imap_server"]).ask()) is None:
-                raise KeyboardInterrupt
+            if imap_server is None:
+                if (imap_server := questionary.text("IMAP Server:", default=provider_info["imap_server"]).ask()) is None:
+                    raise KeyboardInterrupt
             
-            if (imap_tls_method := questionary.select("IMAP TLS Method:", choices=["SSL/TLS", "STARTTLS", "Plain"], default=provider_info.get("imap_tls_method", "SSL/TLS")).ask()) is None:
-                raise KeyboardInterrupt
+            if imap_tls_method is None:
+                if (imap_tls_method := questionary.select("IMAP TLS Method:", choices=["SSL/TLS", "STARTTLS", "Plain"], default=provider_info.get("imap_tls_method", "SSL/TLS")).ask()) is None:
+                    raise KeyboardInterrupt
 
-            suggested_imap_port = provider_info.get("imap_port") or (993 if imap_tls_method == "SSL/TLS" else 143)
-            if (imap_port_str := questionary.text("IMAP Port:", default=str(suggested_imap_port)).ask()) is None:
-                raise KeyboardInterrupt
-            imap_port = int(imap_port_str)
+            if imap_port is None:
+                suggested_imap_port = provider_info.get("imap_port") or (993 if imap_tls_method == "SSL/TLS" else 143)
+                if (imap_port_str := questionary.text("IMAP Port:", default=str(suggested_imap_port)).ask()) is None:
+                    raise KeyboardInterrupt
+                imap_port = int(imap_port_str)
             
-            if (smtp_server := questionary.text("SMTP Server:", default=provider_info["smtp_server"]).ask()) is None:
-                raise KeyboardInterrupt
+            if smtp_server is None:
+                if (smtp_server := questionary.text("SMTP Server:", default=provider_info["smtp_server"]).ask()) is None:
+                    raise KeyboardInterrupt
             
-            if (smtp_tls_method := questionary.select("SMTP TLS Method:", choices=["SSL/TLS", "STARTTLS", "Plain"], default=provider_info.get("smtp_tls_method", "SSL/TLS")).ask()) is None:
-                raise KeyboardInterrupt
+            if smtp_tls_method is None:
+                if (smtp_tls_method := questionary.select("SMTP TLS Method:", choices=["SSL/TLS", "STARTTLS", "Plain"], default=provider_info.get("smtp_tls_method", "SSL/TLS")).ask()) is None:
+                    raise KeyboardInterrupt
 
-            suggested_smtp_port = provider_info.get("smtp_port") or (465 if smtp_tls_method == "SSL/TLS" else 587 if smtp_tls_method == "STARTTLS" else 25)
-            if (smtp_port_str := questionary.text("SMTP Port:", default=str(suggested_smtp_port)).ask()) is None:
-                raise KeyboardInterrupt
-            smtp_port = int(smtp_port_str)
+            if smtp_port is None:
+                suggested_smtp_port = provider_info.get("smtp_port") or (465 if smtp_tls_method == "SSL/TLS" else 587 if smtp_tls_method == "STARTTLS" else 25)
+                if (smtp_port_str := questionary.text("SMTP Port:", default=str(suggested_smtp_port)).ask()) is None:
+                    raise KeyboardInterrupt
+                smtp_port = int(smtp_port_str)
 
             if encryption_password is None:
                 encryption_password = config.get_verified_password(current_config, args, prompt_text="Enter your encryption password to encrypt new account credentials:")
 
             auth_details = {}
             access_token = ""
-            password_val = None
+            password_val = password
             
             match login_method:
                 case "Account/Password":
-                    pwd_label = "Authorization Code:" if "Authorization Code" in provider_info["hint"] else "Email Password (or App Password):"
-                    if (password_val := questionary.password(pwd_label).ask()) is None:
-                        raise KeyboardInterrupt
+                    if password_val is None:
+                        pwd_label = "Authorization Code:" if "Authorization Code" in provider_info["hint"] else "Email Password (or App Password):"
+                        if (password_val := questionary.password(pwd_label).ask()) is None:
+                            raise KeyboardInterrupt
                     
                     auth_details = {
                         "username": username,
                         "password": encrypt_data(password_val, encryption_password, salt_val) if encrypt_enabled else password_val
                     }
                 case "OAuth2":
-                    if (client_id := questionary.text("OAuth2 Client ID:").ask()) is None or (client_secret := questionary.password("OAuth2 Client Secret:").ask()) is None:
-                        raise KeyboardInterrupt
+                    if client_id is None or client_secret is None:
+                        if (client_id := questionary.text("OAuth2 Client ID:", default=client_id or "").ask()) is None or \
+                           (client_secret := questionary.password("OAuth2 Client Secret:").ask()) is None:
+                            raise KeyboardInterrupt
                     
-                    auth_url = questionary.text("OAuth2 Authorization URL:", default=provider_info.get("auth_url", "")).ask()
-                    token_url = questionary.text("OAuth2 Token URL:", default=provider_info.get("token_url", "")).ask()
-                    scopes_input = questionary.text("OAuth2 Scopes (comma separated):", default=",".join(provider_info.get("scopes", []))).ask()
-                    if scopes_input is None: raise KeyboardInterrupt
-                    scopes = [s.strip() for s in scopes_input.split(",") if s.strip()]
-                    redirect_uri = questionary.text("Redirect URI:", default="http://localhost:5000/").ask()
+                    if auth_url is None:
+                        auth_url = questionary.text("OAuth2 Authorization URL:", default=provider_info.get("auth_url", "")).ask()
+                    if token_url is None:
+                        token_url = questionary.text("OAuth2 Token URL:", default=provider_info.get("token_url", "")).ask()
+                    if scopes is None:
+                        scopes_input = questionary.text("OAuth2 Scopes (comma separated):", default=",".join(provider_info.get("scopes", []))).ask()
+                        if scopes_input is None: raise KeyboardInterrupt
+                        scopes = [s.strip() for s in scopes_input.split(",") if s.strip()]
+                    if redirect_uri is None:
+                        redirect_uri = questionary.text("Redirect URI:", default="http://localhost:5000/").ask()
                     
                     if any(v is None for v in [auth_url, token_url, scopes, redirect_uri]):
                         raise KeyboardInterrupt
                         
-                    refresh_token_val = ""
-                    if (auto_auth := questionary.confirm("Start local server to automatically fetch tokens?").ask()) is None:
-                        raise KeyboardInterrupt
-                    
-                    if auto_auth:
-                        if (token_data := start_oauth_flow(client_id, client_secret, auth_url, token_url, scopes, redirect_uri)) and (token := token_data.get('token')):
-                            refresh_token_val = token.get('refresh_token', '')
-                            access_token = token.get('access_token', '')
-                            if (detected_email := token_data.get('user_email')) and detected_email != username:
-                                if (use_detected := questionary.confirm(f"Detected email '{detected_email}' differs from '{username}'. Use detected email?").ask()) is None:
-                                    raise KeyboardInterrupt
-                                if use_detected:
-                                    username = detected_email
-                            print(f"\nSuccessfully obtained tokens!")
-                        else:
-                            print("Failed to obtain tokens automatically. You can enter them manually.")
-                    
+                    refresh_token_val = password_val or ""
                     if not refresh_token_val:
-                        if (refresh_token_val := questionary.text("OAuth2 Refresh Token (optional):").ask()) is None:
+                        if (auto_auth := questionary.confirm("Start local server to automatically fetch tokens?").ask()) is None:
                             raise KeyboardInterrupt
+                        
+                        if auto_auth:
+                            if (token_data := start_oauth_flow(client_id, client_secret, auth_url, token_url, scopes, redirect_uri)) and (token := token_data.get('token')):
+                                refresh_token_val = token.get('refresh_token', '')
+                                access_token = token.get('access_token', '')
+                                if (detected_email := token_data.get('user_email')) and detected_email != username:
+                                    if (use_detected := questionary.confirm(f"Detected email '{detected_email}' differs from '{username}'. Use detected email?").ask()) is None:
+                                        raise KeyboardInterrupt
+                                    if use_detected:
+                                        username = detected_email
+                                print(f"\nSuccessfully obtained tokens!")
+                            else:
+                                print("Failed to obtain tokens automatically. You can enter them manually.")
+                        
+                        if not refresh_token_val:
+                            if (refresh_token_val := questionary.text("OAuth2 Refresh Token (optional):").ask()) is None:
+                                raise KeyboardInterrupt
                     
                     if encrypt_enabled:
                         auth_details = {
@@ -374,14 +394,20 @@ def account_add_wizard(
                 if (retry := questionary.confirm("Do you want to re-enter credentials?").ask()) is None:
                     raise KeyboardInterrupt
                 if retry:
+                    # Reset variables for retry
+                    friendly_name, provider, login_method, username, imap_server, imap_port, imap_tls_method, smtp_server, smtp_port, smtp_tls_method, password_val = \
+                        None, None, None, None, None, None, None, None, None, None, None
                     continue
                 print("Account not added.")
             else:
                 print("✅ Connection test successful!")
 
-                if (sync_limit_input := questionary.text(f"Number of latest emails to download during initial sync for '{friendly_name}' (e.g., 20, 50. Enter 'all' for everything):", default="20").ask()) is None:
-                    raise KeyboardInterrupt
-                limit = -1 if sync_limit_input.lower() == "all" else int(sync_limit_input) if sync_limit_input.isdigit() else 20
+                if sync_limit is None:
+                    if (sync_limit_input := questionary.text(f"Number of latest emails to download during initial sync for '{friendly_name}' (e.g., 20, 50. Enter 'all' for everything):", default="20").ask()) is None:
+                        raise KeyboardInterrupt
+                    limit = -1 if sync_limit_input.lower() == "all" else int(sync_limit_input) if sync_limit_input.isdigit() else 20
+                else:
+                    limit = -1 if str(sync_limit).lower() == "all" else int(sync_limit) if str(sync_limit).isdigit() else 20
 
                 account["sync_limit"] = limit
                 newly_added.append((account, limit))
@@ -489,8 +515,11 @@ def handle_account(args: argparse.Namespace, manager: MailManager, account_parse
                             progress.update(task, completed=current, total=total)
                         
                         try:
-                            manager.syncer.sync_emails(acc, encryption_password, limit=limit, is_initial_sync=True, progress_callback=update_progress)
-                            console.print(f"[green]✅ {account_name}: Successfully synced emails.[/green]")
+                            emails, metadata = manager.syncer.sync_emails(acc, encryption_password, limit=limit, is_initial_sync=True, progress_callback=update_progress)
+                            if metadata.get("is_offline", False):
+                                console.print(f"[red]❌ {account_name}: Initial sync failed: {metadata.get('error') or 'Connection failed'}[/red]")
+                            else:
+                                console.print(f"[green]✅ {account_name}: Successfully synced emails.[/green]")
                         except Exception as e:
                             console.print(f"[red]❌ {account_name}: Initial sync failed: {e}[/red]")
             

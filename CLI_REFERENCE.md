@@ -6,6 +6,12 @@ This document provides a detailed overview of all available commands, parameters
 
 These options can be used **before or after** any subcommand.
 
+### Flexible Interaction
+Wugong Email's wizards (`init`, `account add`, `configure`) support **partial interaction**:
+- If you provide a parameter via the command line (e.g., `--friendly-name "MyQQ"`), the wizard will **skip** that question.
+- If you don't provide a parameter, the wizard will ask you interactively.
+- This is perfect for combining the ease of a GUI-like wizard with the speed of a CLI.
+
 | Option | Shorthand | Description |
 | :--- | :--- | :--- |
 | `--version` | `-v` | Show the version of Wugong Email. |
