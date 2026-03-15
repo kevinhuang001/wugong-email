@@ -27,7 +27,10 @@ uv pip install -r requirements.txt
 - `mail/`: Core email handling logic (IMAP/SMTP, storage, encryption).
 - `tests/`: Test suite, divided into `unit` and `integration` tests.
 - `main.py`: Entry point for the CLI.
-- `wizard.py`: Interactive setup wizard for accounts and configuration.
+- `configure.py`: Interactive setup wizard for configuration and initial setup.
+- `account.py`: Account management logic and account add wizard.
+- `oauth2.py`: OAuth2 authentication flow handling.
+- `schedule.py`: Periodic sync scheduling (Cron/Task Scheduler).
 
 ---
 

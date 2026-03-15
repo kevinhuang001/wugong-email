@@ -5,7 +5,7 @@ REM This script determines its own location and runs the CLI using the local ven
 SET "INSTALL_DIR=%~dp0"
 SET "INSTALL_DIR=%INSTALL_DIR:~0,-1%"
 
-REM Configuration paths (consistent with install.ps1/update.ps1)
+REM Configuration paths (consistent with install.ps1/upgrade.ps1)
 SET "CONFIG_DIR=%USERPROFILE%\.config\wugong"
 SET "CONFIG_FILE=%CONFIG_DIR%\config.toml"
 
@@ -22,4 +22,4 @@ SET "WUGONG_CONFIG=%CONFIG_FILE%"
 SET "PYTHONPATH=%INSTALL_DIR%;%PYTHONPATH%"
 
 REM Run the CLI
-"%PYTHON_EXE%" "%INSTALL_DIR%\cli.py" %*
+"%PYTHON_EXE%" "%INSTALL_DIR%\main.py" %*

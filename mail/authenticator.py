@@ -1,18 +1,17 @@
-import imaplib
-import smtplib
-import base64
+from typing import Any
 import requests
 from crypto_utils import decrypt_data, encrypt_data
 
-class AuthManager:
-    def __init__(self, encryption_enabled, salt):
+class MailAuthenticator:
+    def __init__(self, encryption_enabled: bool, salt: str):
         self.encryption_enabled = encryption_enabled
         self.salt = salt
 
-    def decrypt_account_auth(self, account, password):
+    def decrypt_account_auth(self, account: dict[str, Any], password: str) -> dict[str, Any]:
+        """Decrypts sensitive fields in the account's authentication details."""
         auth = account.get("auth", {})
         decrypted_auth = {}
-        sensitive_keys = ["password", "client_id", "client_secret", "refresh_token", "access_token"]
+        sensitive_keys = {"password", "client_id", "client_secret", "refresh_token", "access_token"}
         
         for k, v in auth.items():
             if self.encryption_enabled and k in sensitive_keys and isinstance(v, str) and v:
@@ -24,29 +23,23 @@ class AuthManager:
                 decrypted_auth[k] = v
         return decrypted_auth
 
-    def refresh_oauth2_token(self, account, auth, password, config):
+    def refresh_oauth2_token(self, account: dict[str, Any], auth: dict[str, Any], password: str, config_obj: dict[str, Any]) -> str | None:
         """Refreshes the OAuth2 access token and updates config."""
-        refresh_token = auth.get("refresh_token")
-        token_url = auth.get("token_url")
-        if not refresh_token or not token_url:
+        if not (refresh_token := auth.get("refresh_token")) or not (token_url := auth.get("token_url")):
             return None
 
         print(f"🔄 Refreshing OAuth2 token for '{account.get('friendly_name')}'...")
         
-        scopes = auth.get('scopes')
-        if scopes is None:
-            scopes = []
-            
         payload = {
             'client_id': auth.get('client_id'),
             'client_secret': auth.get('client_secret'),
             'refresh_token': refresh_token,
             'grant_type': 'refresh_token',
-            'scope': " ".join(scopes)
+            'scope': " ".join(auth.get('scopes') or [])
         }
         
         try:
-            response = requests.post(token_url, data=payload)
+            response = requests.post(token_url, data=payload, timeout=30)
             response.raise_for_status()
             token_data = response.json()
             
@@ -54,14 +47,15 @@ class AuthManager:
             new_refresh_token = token_data.get('refresh_token', refresh_token)
             
             # Update the account in the config object
-            for acc in config.get("accounts", []):
+            for acc in config_obj.get("accounts", []):
                 if acc.get("friendly_name") == account.get("friendly_name"):
+                    auth_ref = acc.setdefault("auth", {})
                     if self.encryption_enabled:
-                        acc["auth"]["access_token"] = encrypt_data(new_access_token, password, self.salt)
-                        acc["auth"]["refresh_token"] = encrypt_data(new_refresh_token, password, self.salt)
+                        auth_ref["access_token"] = encrypt_data(new_access_token, password, self.salt)
+                        auth_ref["refresh_token"] = encrypt_data(new_refresh_token, password, self.salt)
                     else:
-                        acc["auth"]["access_token"] = new_access_token
-                        acc["auth"]["refresh_token"] = new_refresh_token
+                        auth_ref["access_token"] = new_access_token
+                        auth_ref["refresh_token"] = new_refresh_token
             return new_access_token
         except Exception as e:
             print(f"Error refreshing token: {e}")

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# --- Wrapper to avoid script corruption during self-update ---
+# --- Wrapper to avoid script corruption during self-upgrade ---
 {
 # --- Configuration ---
 INSTALL_DIR="$HOME/.wugong"
@@ -25,7 +25,7 @@ for arg in "$@"; do
 done
 
 if [ "$FORCE_YES" = false ]; then
-    echo -e "${BLUE}🔄 Checking for updates for Wugong Email...${NC}"
+    echo -e "${BLUE}🔄 Checking for upgrades for Wugong Email...${NC}"
 fi
 
 # 1. Check if it's a git repository or needs to be cloned
@@ -48,10 +48,10 @@ if [ ! -d "$REPO_DIR/.git" ]; then
         exit 0
     fi
 
-    # Clone only if update needed, and hide git output
+    # Clone only if upgrade needed, and hide git output
     git clone --depth 1 "$REPO_URL" "$TEMP_DIR" &>/dev/null || { echo -e "${RED}❌ Error: Failed to clone repository.${NC}"; exit 1; }
     SOURCE_DIR="$TEMP_DIR"
-    UPDATE_NEEDED=true
+    UPGRADE_NEEDED=true
     NEW_VERSION="$REMOTE_VERSION"
 else
     echo -e "${BLUE}📡 Fetching remote changes...${NC}"
@@ -68,12 +68,12 @@ else
         exit 0
     fi
     SOURCE_DIR="$REPO_DIR"
-    UPDATE_NEEDED=true
+    UPGRADE_NEEDED=true
     NEW_VERSION="$REMOTE_VERSION"
 fi
 
 # 2. Ask for confirmation
-if [ "$UPDATE_NEEDED" = true ] && [ "$FORCE_YES" = false ]; then
+if [ "$UPGRADE_NEEDED" = true ] && [ "$FORCE_YES" = false ]; then
     echo -e "${YELLOW}🔔 A new version of Wugong Email is available! (v$LOCAL_VERSION -> v$NEW_VERSION)${NC}"
     
     # 2a. Show changelog between versions
@@ -106,16 +106,16 @@ if [ "$UPDATE_NEEDED" = true ] && [ "$FORCE_YES" = false ]; then
         echo -e "${BLUE}----------------------------------------${NC}"
     fi
 
-    read -p "Do you want to update to the latest version? (y/N) " confirm
+    read -p "Do you want to upgrade to the latest version? (y/N) " confirm
 
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-        echo -e "${BLUE}❌ Update cancelled.${NC}"
+        echo -e "${BLUE}❌ Upgrade cancelled.${NC}"
         [ -n "$TEMP_DIR" ] && rm -rf "$TEMP_DIR"
         exit 0
     fi
 fi
 
-# 3. Perform Update
+# 3. Perform Upgrade
 if [ -n "$TEMP_DIR" ]; then
     echo -e "${BLUE}🚀 Using files from cloned repository...${NC}"
 else
@@ -123,16 +123,16 @@ else
     git pull origin main || git pull origin master
 fi
 
-# 4. Update Installation
+# 4. Upgrade Installation
 if [ -d "$INSTALL_DIR" ]; then
-    echo -e "${BLUE}📦 Updating files...${NC}"
+    echo -e "${BLUE}📦 Upgrading files...${NC}"
     
-    # Custom sync logic: copy ALL files and directories except hidden ones, venv, pycache, and the update script itself
+    # Custom sync logic: copy ALL files and directories except hidden ones, venv, pycache, and the upgrade script itself
     # Use rsync if available for cleaner directory syncing, otherwise fallback to cp -R
     if command -v rsync &> /dev/null; then
         # Use --delete but EXCLUDE config, database, and venv/cache
         # Ensure it overwrites by using -a (archive, which includes -r and -p etc)
-        rsync -av --delete --ignore-errors --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='update.sh' --exclude='*.db' --exclude='config.toml' "$SOURCE_DIR/" "$INSTALL_DIR/" &>/dev/null
+        rsync -av --delete --ignore-errors --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='upgrade.sh' --exclude='*.db' --exclude='config.toml' "$SOURCE_DIR/" "$INSTALL_DIR/" &>/dev/null
     else
         # Fallback to cp -R, but we need to be careful with exclusions
         echo -e "${BLUE}⚠️  rsync not found, using cp -Rf (files will be forced to overwrite)...${NC}"
@@ -143,7 +143,7 @@ if [ -d "$INSTALL_DIR" ]; then
             [ -e "$item" ] || continue
             name=$(basename "$item")
             case "$name" in
-                .git|.venv|__pycache__|update.sh|*.db|config.toml) continue ;;
+                .git|.venv|__pycache__|upgrade.sh|*.db|config.toml) continue ;;
             esac
             # Use -f to force overwrite
             cp -Rf "$item" "$INSTALL_DIR/" &>/dev/null
@@ -161,10 +161,10 @@ if [ -d "$INSTALL_DIR" ]; then
         fi
     fi
     
-    # Finally, update the update script itself
-    # Use rm + cp to avoid shell file corruption during self-update
-    rm -f "$INSTALL_DIR/update.sh"
-    cp "$SOURCE_DIR/update.sh" "$INSTALL_DIR/update.sh"
+    # Finally, update the upgrade script itself
+    # Use rm + cp to avoid shell file corruption during self-upgrade
+    rm -f "$INSTALL_DIR/upgrade.sh"
+    cp "$SOURCE_DIR/upgrade.sh" "$INSTALL_DIR/upgrade.sh"
     
     # Ensure wugong wrapper script is executable
     chmod +x "$INSTALL_DIR/wugong"
@@ -174,9 +174,9 @@ if [ -d "$INSTALL_DIR" ]; then
         echo "$NEW_VERSION" > "$INSTALL_DIR/.version"
     fi
     
-    echo -e "${GREEN}✅ Update completed.${NC}"
+    echo -e "${GREEN}✅ Upgrade completed.${NC}"
 else
-    echo -e "${YELLOW}ℹ️  Installation directory $INSTALL_DIR not found, update only applied to source.${NC}"
+    echo -e "${YELLOW}ℹ️  Installation directory $INSTALL_DIR not found, upgrade only applied to source.${NC}"
 fi
 
 # 5. Cleanup
@@ -184,6 +184,6 @@ if [ -n "$TEMP_DIR" ]; then
     rm -rf "$TEMP_DIR"
 fi
 
-echo -e "\n${GREEN}🎉 Wugong Email has been updated successfully!${NC}"
+echo -e "\n${GREEN}🎉 Wugong Email has been upgraded successfully!${NC}"
     exit 0
 }

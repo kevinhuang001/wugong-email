@@ -8,11 +8,11 @@ $RepoUrl = "https://github.com/kevinhuang001/wugong-email.git"
 $ScriptDir = if ($MyInvocation.MyCommand.Path) { Split-Path $MyInvocation.MyCommand.Path -Parent } else { (Get-Location).Path }
 
 if (-not $yes) {
-    Write-Host "🔄 Checking for updates for Wugong Email..." -ForegroundColor Blue
+    Write-Host "🔄 Checking for upgrades for Wugong Email..." -ForegroundColor Blue
 }
 
 # 1. Check if running from a git repository or needs to be cloned
-$UpdateNeeded = $false
+$UpgradeNeeded = $false
 $NewVersion = ""
 if (-not (Test-Path (Join-Path $ScriptDir ".git"))) {
     Write-Host "ℹ️  Using GitHub as source." -ForegroundColor Yellow
@@ -43,7 +43,7 @@ if (-not (Test-Path (Join-Path $ScriptDir ".git"))) {
     }
     
     $SourceDir = $TempDir
-    $UpdateNeeded = $true
+    $UpgradeNeeded = $true
     $NewVersion = $RemoteVersion
 } else {
     Write-Host "📡 Fetching remote changes..." -ForegroundColor Blue
@@ -59,12 +59,12 @@ if (-not (Test-Path (Join-Path $ScriptDir ".git"))) {
         exit 0
     }
     $SourceDir = $ScriptDir
-    $UpdateNeeded = $true
+    $UpgradeNeeded = $true
     $NewVersion = $RemoteVersion
 }
 
 # 2. Ask for confirmation
-if ($UpdateNeeded -and -not $yes) {
+if ($UpgradeNeeded -and -not $yes) {
     Write-Host "🔔 A new version of Wugong Email is available! (v$LocalVersion -> v$RemoteVersion)" -ForegroundColor Yellow
     
     # 2a. Show changelog between versions
@@ -93,15 +93,15 @@ if ($UpdateNeeded -and -not $yes) {
         Write-Host "----------------------------------------" -ForegroundColor Blue
     }
 
-    $Confirm = Read-Host "Do you want to update to the latest version? (y/N)"
+    $Confirm = Read-Host "Do you want to upgrade to the latest version? (y/N)"
     if ($Confirm -notmatch '^[Yy]$') {
-        Write-Host "❌ Update cancelled." -ForegroundColor Blue
+        Write-Host "❌ Upgrade cancelled." -ForegroundColor Blue
         if ($TempDir) { Remove-Item -Recurse -Force $TempDir }
         exit 0
     }
 }
 
-# 3. Perform Update
+# 3. Perform Upgrade
 if ($TempDir) {
     Write-Host "🚀 Using files from cloned repository..." -ForegroundColor Blue
 } else {
@@ -109,13 +109,13 @@ if ($TempDir) {
     git pull origin main
 }
 
-# 4. Update Installation
+# 4. Upgrade Installation
 if (Test-Path $InstallDir) {
-    Write-Host "📦 Updating files..." -ForegroundColor Blue
+    Write-Host "📦 Upgrading files..." -ForegroundColor Blue
     
-    # Custom sync logic: copy ALL files and directories except hidden/venv/pycache/db and the update script itself
+    # Custom sync logic: copy ALL files and directories except hidden/venv/pycache/db and the upgrade script itself
     $ItemsToSync = Get-ChildItem -Path $SourceDir | Where-Object { 
-        $_.Name -ne "update.ps1" -and 
+        $_.Name -ne "upgrade.ps1" -and 
         $_.Name -notmatch "^\." -and # No hidden files/dirs
         $_.Name -ne "venv" -and 
         $_.Name -ne "__pycache__" -and
@@ -149,23 +149,23 @@ if (Test-Path $InstallDir) {
         }
     }
     
-    # Finally, update the update script itself
-    # Use Remove-Item + Copy-Item to avoid script file corruption during self-update
-    $DestUpdateScript = Join-Path $InstallDir "update.ps1"
-    if (Test-Path $DestUpdateScript) { Remove-Item $DestUpdateScript -Force }
-    Copy-Item -Path (Join-Path $SourceDir "update.ps1") -Destination $DestUpdateScript -Force
+    # Finally, update the upgrade script itself
+    # Use Remove-Item + Copy-Item to avoid script file corruption during self-upgrade
+    $DestUpgradeScript = Join-Path $InstallDir "upgrade.ps1"
+    if (Test-Path $DestUpgradeScript) { Remove-Item $DestUpgradeScript -Force }
+    Copy-Item -Path (Join-Path $SourceDir "upgrade.ps1") -Destination $DestUpgradeScript -Force
     
     # Save the current version if we cloned it
     if ($NewVersion -ne "") {
         $NewVersion | Out-File -FilePath (Join-Path $InstallDir ".version") -Encoding utf8
     }
     
-    Write-Host "✅ Update completed." -ForegroundColor Green
+    Write-Host "✅ Upgrade completed." -ForegroundColor Green
 } else {
-    Write-Host "ℹ️  Installation directory not found, update only applied to source." -ForegroundColor Yellow
+    Write-Host "ℹ️  Installation directory not found, upgrade only applied to source." -ForegroundColor Yellow
 }
 
 # 5. Cleanup
 if ($TempDir) { Remove-Item -Recurse -Force $TempDir }
 
-Write-Host "`n🎉 Wugong Email has been updated successfully!" -ForegroundColor Green
+Write-Host "`n🎉 Wugong Email has been upgraded successfully!" -ForegroundColor Green

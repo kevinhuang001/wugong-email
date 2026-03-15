@@ -4,13 +4,14 @@ This document provides a detailed overview of all available commands, parameters
 
 ## Global Options
 
-These options can be used before any subcommand.
+These options can be used **before or after** any subcommand.
 
 | Option | Shorthand | Description |
 | :--- | :--- | :--- |
 | `--version` | `-v` | Show the version of Wugong Email. |
-| `--password` | `-p` | Specify the encryption password (can also be set via `WUGONG_PASSWORD` environment variable). |
+| `--encryption-password` | `-p` | Specify the encryption password (can also be set via `WUGONG_PASSWORD` environment variable). |
 | `--log-level` | `-L` | Override the console log level (DEBUG, INFO, WARNING, ERROR, CRITICAL). |
+| `--non-interactive` | | Run in non-interactive mode. |
 
 ---
 
@@ -19,11 +20,25 @@ These options can be used before any subcommand.
 ### `init`
 Initialize Wugong Email, set encryption options, and configure background sync schedules.
 - **Usage**: `wugong init`
+- **Parameters**:
+    - `--encrypt-creds`: Enable credential encryption.
+    - `--no-encrypt-creds`: Disable credential encryption.
+    - `--encrypt-emails`: Encrypt locally cached emails.
+    - `--no-encrypt-emails`: Disable email encryption.
+    - `--console-log-level`: Set console log level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+    - `--file-log-level`: Set file log level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+    - `--sync-interval`: Sync interval in minutes (0 to disable).
+    - `--non-interactive`: Run in non-interactive mode.
 - **Note**: This must be run before using the tool for the first time.
 
 ### `configure`
 Modify existing sync settings, intervals, or log levels.
 - **Usage**: `wugong configure`
+- **Parameters**:
+    - `--console-log-level`: Set console log level.
+    - `--file-log-level`: Set file log level.
+    - `--sync-interval`: Sync interval in minutes.
+    - `--non-interactive`: Run in non-interactive mode.
 
 ---
 
@@ -36,8 +51,31 @@ List all configured accounts.
 - **Usage**: `wugong account list`
 
 ### `account add`
-Add a new email account (interactive wizard).
-- **Usage**: `wugong account add`
+Add a new email account (interactive wizard or non-interactive).
+- **Usage**: `wugong account add [options]`
+- **Parameters**:
+    - `--friendly-name`, `-n`: Friendly name for the account.
+    - `--provider`: Email provider (`gmail`, `outlook`, `qq`, `163`, `other`).
+    - `--login-method`: Login method (`Account/Password`, `OAuth2`).
+    - `--username`, `-u`: Email address.
+    - `--password`, `-P`: Email password or OAuth2 refresh token.
+    - `--imap-server`: IMAP server address.
+    - `--imap-port`: IMAP server port.
+    - `--imap-tls`: IMAP TLS method (`SSL/TLS`, `STARTTLS`, `Plain`).
+    - `--smtp-server`: SMTP server address.
+    - `--smtp-port`: SMTP server port.
+    - `--smtp-tls`: SMTP TLS method (`SSL/TLS`, `STARTTLS`, `Plain`).
+    - `--client-id`: OAuth2 Client ID.
+    - `--client-secret`: OAuth2 Client Secret.
+    - `--auth-url`: OAuth2 Authorization URL.
+    - `--token-url`: OAuth2 Token URL.
+    - `--scopes`: OAuth2 Scopes (comma separated).
+    - `--redirect-uri`: OAuth2 Redirect URI.
+    - `--sync-limit`: Number of emails to download initially (e.g., 20, 50 or 'all').
+    - `--non-interactive`: Run in non-interactive mode.
+- **Example**:
+    - `wugong account add` (interactive wizard)
+    - `wugong account add -n "My Gmail" --provider gmail -u user@gmail.com -P "app-password" --non-interactive`
 
 ### `account delete`
 Delete a specific email account.
@@ -155,8 +193,16 @@ Move an email to a specified folder.
 
 ### `upgrade`
 Check and update Wugong Email to the latest version.
-- **Usage**: `wugong upgrade`
+- **Usage**: `wugong upgrade [options]`
+- **Parameters**:
+    - `--force`, `-f`: Force upgrade even if up-to-date.
+    - `--non-interactive`: Run in non-interactive mode.
+- **Example**: `wugong upgrade --force`
 
 ### `uninstall`
 Uninstall Wugong Email and its related configurations.
-- **Usage**: `wugong uninstall`
+- **Usage**: `wugong uninstall [options]`
+- **Parameters**:
+    - `--keep-data`: Keep local email cache and database.
+    - `--non-interactive`: Run in non-interactive mode.
+- **Example**: `wugong uninstall --keep-data --non-interactive`

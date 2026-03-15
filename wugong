@@ -5,7 +5,7 @@
 # Get the directory where this script is located
 INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Configuration paths (consistent with install.sh/update.sh)
+# Configuration paths (consistent with install.sh/upgrade.sh)
 CONFIG_DIR="${HOME}/.config/wugong"
 CONFIG_FILE="${CONFIG_DIR}/config.toml"
 
@@ -22,4 +22,4 @@ export WUGONG_CONFIG="$CONFIG_FILE"
 export PYTHONPATH="$INSTALL_DIR:$PYTHONPATH"
 
 # Run the CLI
-python3 "$INSTALL_DIR/cli.py" "$@"
+python3 "$INSTALL_DIR/main.py" "$@"

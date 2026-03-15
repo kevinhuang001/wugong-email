@@ -9,8 +9,8 @@ import html
 from rich.console import Console
 import questionary
 from mail import MailManager
-from mail.storage import Email
-from cli.renderer import CLIRenderer
+from mail.storage_manager import Email
+from cli.render import CLIRenderer
 import config
 
 logger = logging.getLogger("cli.read")
@@ -22,8 +22,10 @@ def handle_read(args: argparse.Namespace, manager: MailManager) -> None:
         return
 
     account_name = account.get("friendly_name", "default")
-    password = ""
-    if (manager.encryption_enabled or manager.config.get("general", {}).get("encrypt_emails", False)) and not (password := config.get_encryption_password(args, f"Enter encryption password for '{account_name}':")):
+    try:
+        password = config.get_verified_password(manager.config, args, f"Enter encryption password for '{account_name}':")
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
         return
 
     folder = getattr(args, "folder", "INBOX") or "INBOX"

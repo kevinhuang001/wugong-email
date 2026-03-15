@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.5] - 2026-03-15
+
+### Features
+- **Unified Global Parameters**: Integrated `--encryption-password`, `--log-level`, and `--non-interactive` into a common parser, allowing them to be placed either before or after subcommands for improved CLI flexibility.
+- **Enhanced Automation**: Implemented `argparse.SUPPRESS` for shared arguments to ensure global flags are not overridden by subcommand defaults, ensuring stable non-interactive behavior.
+- **Code Modularization**: Refactored the monolithic `wizard.py` into specialized modules: `oauth2.py`, `configure.py`, `account.py`, and `schedule.py` for better maintainability.
+- **Simplified Provider Names**: Streamlined email provider selection to use short identifiers: `qq`, `163`, `gmail`, `outlook`, and `other`.
+
+### Fixed
+- **Subcommand Recognition**: Fixed an issue where `--non-interactive` and `--encryption-password` were not recognized when placed after subcommands (e.g., `wugong list --non-interactive`).
+- **Redundant Prompts**: Fixed password prompts appearing even when a valid password was provided via CLI or environment variables.
+- **Encryption Fix**: Resolved "name 'encrypt_data' is not defined" error during account setup by correctly handling base64 salt decoding.
+- **Validation**: Added mandatory input validation for non-interactive mode to prevent silent failures.
+
 ## [1.0.4] - 2026-03-14
 
 ### Features

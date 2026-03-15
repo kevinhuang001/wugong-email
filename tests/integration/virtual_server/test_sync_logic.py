@@ -2,9 +2,9 @@ import pytest
 import imaplib
 from unittest.mock import MagicMock, patch, call
 from mail.reader import MailReader
-from mail.syncer import MailSyncer
+from mail.synchronizer import MailSynchronizer
 from mail.connector import MailConnector
-from mail.storage import Email
+from mail.storage_manager import Email
 from datetime import datetime
 
 @pytest.fixture
@@ -30,7 +30,7 @@ def mail_syncer(mock_managers):
     connector, storage_manager = mock_managers
     config = {"general": {"encrypt_emails": False}}
     save_config_callback = MagicMock()
-    return MailSyncer(connector, storage_manager, config, save_config_callback)
+    return MailSynchronizer(connector, storage_manager, config, save_config_callback)
 
 @pytest.fixture
 def mock_imap(mail_reader):
@@ -412,7 +412,7 @@ def test_sync_search_non_ascii_keyword(mail_syncer, mock_managers, mock_imap):
         ("OK", [(b"UID 1 (RFC822)", b"Content")]), # fetch RFC822
     ]
     
-    with patch('mail.email_parser.EmailParser.parse_full_email') as mock_parse:
+    with patch('mail.parser.MailParser.parse_full_email') as mock_parse:
         mock_parse.return_value = Email("test_acc", "INBOX", "1", "s", "s@e.com", "sub", "2023-01-01", False, "text/plain", "...", [])
         mail_syncer.sync_emails(account, "pw", search_criteria=search_criteria)
     
@@ -448,8 +448,7 @@ def test_sync_malformed_sync_info(mail_syncer, mock_managers, mock_imap):
     mail_syncer.sync_emails(account, "pw")
     assert storage_manager.save_emails_to_cache.called
 
-from mail.email_parser import EmailParser
-from mail.storage import Email
+from mail.parser import MailParser
 import email
 
 def test_parse_multipart_mixed_with_attachments(mail_reader):
@@ -470,7 +469,7 @@ def test_parse_multipart_mixed_with_attachments(mail_reader):
     ).encode()
     
     msg = email.message_from_bytes(raw_email)
-    email_obj = EmailParser.parse_full_email("test_acc", "123", msg, "(FLAGS ())", "INBOX")
+    email_obj = MailParser.parse_full_email("test_acc", "123", msg, "(FLAGS ())", "INBOX")
     
     assert email_obj.content == "This is the body."
     assert len(email_obj.attachments) == 1
@@ -485,7 +484,7 @@ def test_parse_html_only_email(mail_reader):
     ).encode()
     
     msg = email.message_from_bytes(raw_email)
-    email_obj = EmailParser.parse_full_email("test_acc", "124", msg, "(FLAGS ())", "INBOX")
+    email_obj = MailParser.parse_full_email("test_acc", "124", msg, "(FLAGS ())", "INBOX")
     
     assert "<html>" in email_obj.content
     assert email_obj.content_type == "html_only"
@@ -496,7 +495,7 @@ def test_parse_malformed_headers(mail_reader):
     
     # Should not crash, should provide sensible defaults
     msg = email.message_from_bytes(raw_email)
-    email_obj = EmailParser.parse_full_email("test_acc", "125", msg, "(FLAGS ())", "INBOX")
+    email_obj = MailParser.parse_full_email("test_acc", "125", msg, "(FLAGS ())", "INBOX")
     
     assert email_obj.subject == "No Subject"
     assert email_obj.sender == "Unknown"
@@ -518,10 +517,10 @@ def test_parse_multipart_alternative_email(mail_reader):
     ).encode()
     
     msg = email.message_from_bytes(raw_email)
-    email_obj = EmailParser.parse_full_email("test_acc", "126", msg, "(FLAGS ())", "INBOX")
+    email_obj = MailParser.parse_full_email("test_acc", "126", msg, "(FLAGS ())", "INBOX")
     
     # Usually we prefer HTML if available, but it depends on implementation.
-    # Wugong's EmailParser usually extracts both or prefers one.
+    # Wugong's MailParser usually extracts both or prefers one.
     assert "HTML version" in email_obj.content or "Plain text version" in email_obj.content
 
 def test_parse_non_ascii_email(mail_reader):
@@ -537,7 +536,7 @@ def test_parse_non_ascii_email(mail_reader):
     ).encode("utf-8")
     
     msg = email.message_from_bytes(raw_email)
-    email_obj = EmailParser.parse_full_email("test_acc", "127", msg, "(FLAGS ())", "INBOX")
+    email_obj = MailParser.parse_full_email("test_acc", "127", msg, "(FLAGS ())", "INBOX")
     
     assert email_obj.subject == "Test Email"
     assert "This is a test email" in email_obj.content
@@ -547,7 +546,7 @@ def test_parse_empty_body_email(mail_reader):
     raw_email = b"Subject: No body\n\n"
     
     msg = email.message_from_bytes(raw_email)
-    email_obj = EmailParser.parse_full_email("test_acc", "128", msg, "(FLAGS ())", "INBOX")
+    email_obj = MailParser.parse_full_email("test_acc", "128", msg, "(FLAGS ())", "INBOX")
     
     assert email_obj.subject == "No body"
     assert email_obj.content == "" or email_obj.content is None
@@ -570,7 +569,7 @@ def test_parse_encoded_attachment_filename(mail_reader):
     ).encode()
     
     msg = email.message_from_bytes(raw_email)
-    email_obj = EmailParser.parse_full_email("test_acc", "129", msg, "(FLAGS ())", "INBOX")
+    email_obj = MailParser.parse_full_email("test_acc", "129", msg, "(FLAGS ())", "INBOX")
     
     assert email_obj.attachments[0] == "attachment.txt"
 
@@ -638,7 +637,7 @@ def test_sync_malformed_sync_info_retry(mail_syncer, mock_managers, mock_imap):
         ("OK", [(b"UID 1 (RFC822 {10})", b"Content")]), # fetch RFC822
     ]
     
-    with patch('mail.email_parser.EmailParser.parse_full_email') as mock_parse:
+    with patch('mail.parser.MailParser.parse_full_email') as mock_parse:
         mock_parse.return_value = Email("test_acc", "INBOX", "1", "s", "s@e.com", "sub", "2023-01-01", False, "text/plain", "...", [])
         mail_syncer.sync_emails(account, "pw")
     
@@ -657,7 +656,7 @@ def test_sync_initial_with_limit(mail_syncer, mock_managers, mock_imap):
         ("OK", [(f"UID {i} (FLAGS ())".encode(), b"") for i in range(6, 11)]), # fetch FLAGS for last 5
     ] + [("OK", [(b"UID 1 (RFC822)", b"Content")])] * 5 # fetch RFC822 for 5 emails
     
-    with patch('mail.email_parser.EmailParser.parse_full_email') as mock_parse:
+    with patch('mail.parser.MailParser.parse_full_email') as mock_parse:
         mock_parse.return_value = Email("test_acc", "INBOX", "1", "s", "s@e.com", "sub", "2023-01-01", False, "text/plain", "...", [])
         mail_syncer.sync_emails(account, "pw", limit=5, is_initial_sync=True)
     
@@ -683,9 +682,10 @@ def test_sync_with_complex_search_criteria(mail_syncer, mock_managers, mock_imap
         ("OK", [(b"UID 100 (RFC822)", b"Content")]), # fetch RFC822
     ]
     
-    with patch('mail.email_parser.EmailParser.parse_full_email') as mock_parse:
+    with patch('mail.parser.MailParser.parse_full_email') as mock_parse:
         mock_parse.return_value = Email("test_acc", "INBOX", "100", "s", "s@e.com", "sub", "2023-01-01", False, "text/plain", "...", [])
         mail_syncer.sync_emails(account, "pw", search_criteria=search_criteria)
+
     
     # Verify search parameters
     search_call = [c for c in mock_imap.uid.call_args_list if c[0][0] == 'search'][0]

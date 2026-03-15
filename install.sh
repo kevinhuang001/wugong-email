@@ -29,7 +29,7 @@ fi
 echo -e "${GREEN}✅ Python $PYTHON_VERSION found.${NC}"
 
 # 2. Check if running via curl or local
-if [ -f "main.py" ] && [ -f "wizard.py" ]; then
+if [ -f "main.py" ] && [ -f "cli/configurer.py" ]; then
     echo -e "${BLUE}📂 Local source files found. Using current directory.${NC}"
     SOURCE_DIR=$(pwd)
 else
