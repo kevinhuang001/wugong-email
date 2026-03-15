@@ -202,9 +202,9 @@ def main() -> None:
         case "init":
             handle_init(args, manager)
         case "upgrade":
-            handle_upgrade()
+            handle_upgrade(args, manager)
         case "uninstall":
-            handle_uninstall()
+            handle_uninstall(args, manager)
         case _:
             parser.print_help()
 

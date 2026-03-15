@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.9] - 2026-03-15
+
+### Features
+- **Integrated Maintenance CLI**: Merged `upgrade` and `uninstall` logic directly into the `maintain.py` module. All maintenance tasks are now handled natively via the Python CLI (`wugong upgrade` and `wugong uninstall`), eliminating the need for external shell scripts.
+- **Improved Upgrade UX**: Added a confirmation step before upgrading and implemented rich Markdown rendering for remote changelogs to show "What's new" during the upgrade process.
+- **Git Availability Check**: Added proactive checks for `git` availability before attempting source-based upgrades.
+- **Dependency Update Automation**: Integrated automatic dependency updates (using `uv` or `pip`) into the upgrade flow to ensure the environment is always up-to-date.
+
+### Fixed
+- **Code Cleanup**: Removed all legacy `.sh` and `.ps1` upgrade/uninstall scripts to reduce project clutter and potential security risks.
+- **Command Routing**: Fixed CLI command routing in `main.py` to correctly pass arguments and the mail manager to maintenance handlers.
+- **Dependency Synchronization**: Synchronized `requirements.txt` with missing `requests` and `werkzeug` libraries.
+
 ## [1.0.8] - 2026-03-15
 
 ### Features
