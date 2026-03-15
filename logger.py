@@ -3,6 +3,7 @@ import sys
 import os
 from pathlib import Path
 from typing import Optional, Union
+from rich.logging import RichHandler
 
 def setup_logger(
     name: str = "wugong", 
@@ -28,19 +29,24 @@ def setup_logger(
     if logger.handlers:
         # Update existing handlers if needed
         for handler in logger.handlers:
-            if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
+            if isinstance(handler, RichHandler):
                 handler.setLevel(console_level)
             elif isinstance(handler, logging.FileHandler):
                 handler.setLevel(file_level)
         return logger
 
     formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+        "%(message)s",
+        datefmt="[%X]"
     )
 
-    # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
+    # Console handler using RichHandler
+    console_handler = RichHandler(
+        rich_tracebacks=True,
+        show_time=False,
+        show_path=False,
+        markup=True
+    )
     console_handler.setFormatter(formatter)
     console_handler.setLevel(console_level)
     logger.addHandler(console_handler)
@@ -73,7 +79,7 @@ def update_console_level(level: Union[int, str]) -> None:
     """Updates the console log level for the root 'wugong' logger."""
     root_logger = logging.getLogger("wugong")
     for handler in root_logger.handlers:
-        if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
+        if isinstance(handler, RichHandler) or (isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler)):
             handler.setLevel(level)
 
 # Default root logger instance

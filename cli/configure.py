@@ -54,14 +54,14 @@ def configure_wizard(
             return True
 
         # === Interactive Flow ===
-        print("\n=== Wugong Email Configuration ===")
+        console.print("\n[bold cyan]=== Wugong Email Configuration ===[/bold cyan]")
 
         if not current_config.get("general", {}).get("salt"):
-            print("\n❌ Wugong is not initialized yet. Please run 'wugong init' first.")
+            console.print("\n[red]❌ Wugong is not initialized yet. Please run 'wugong init' first.[/red]")
             return False
 
-        print("\nℹ️  Encryption password cannot be modified.")
-        print("⚠️  If you need to change your encryption password, please uninstall and reinstall Wugong.")
+        console.print("\n[info]ℹ️  Encryption password cannot be modified.[/info]")
+        console.print("[warning]⚠️  If you need to change your encryption password, please uninstall and reinstall Wugong.[/warning]")
 
         # Logging Setup
         log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -107,16 +107,16 @@ def configure_wizard(
             general["file_log_level"] = file_log_level
             
             config.save_config(current_config, config_path)
-            print(f"\n✅ Configuration updated: interval={interval}m, console={console_log_level}, file={file_log_level}.")
+            console.print(f"\n[green]✅ Configuration updated:[/green] interval=[cyan]{interval}m[/cyan], console=[cyan]{console_log_level}[/cyan], file=[cyan]{file_log_level}[/cyan].")
         else:
-            print("\nNo changes made to configuration.")
+            console.print("\n[yellow]No changes made to configuration.[/yellow]")
 
         return True
     except KeyboardInterrupt:
-        print("\nConfiguration cancelled.")
+        console.print("\n[yellow]Configuration cancelled.[/yellow]")
         return False
     except Exception as e:
-        print(f"\n❌ Error during configuration: {e}")
+        console.print(f"\n[red]❌ Error during configuration: {e}[/red]")
         return False
 
 def init_wizard(
@@ -179,13 +179,13 @@ def init_wizard(
             return True, encryption_password
 
         # === Interactive Flow ===
-        print("\n=== Wugong Email Initialization ===")
+        console.print("\n[bold cyan]=== Wugong Email Initialization ===[/bold cyan]")
 
         # Check if already initialized
         if current_config.get("general", {}).get("salt"):
-            print("\n❌ Wugong is already initialized.")
-            print("⚠️  If you need to change your encryption password, please uninstall and reinstall Wugong.")
-            print("💡 Use 'wugong configure' to modify settings like the sync interval.")
+            console.print("\n[red]❌ Wugong is already initialized.[/red]")
+            console.print("[warning]⚠️  If you need to change your encryption password, please uninstall and reinstall Wugong.[/warning]")
+            console.print("[info]💡 Use 'wugong configure' to modify settings like the sync interval.[/info]")
             return False, None
 
         # 1. Encryption Setup
@@ -208,13 +208,13 @@ def init_wizard(
                 raise KeyboardInterrupt
             
             if not encryption_password:
-                print("❌ Encryption password cannot be empty when encryption is enabled. Initialization aborted.")
+                console.print("[red]❌ Encryption password cannot be empty when encryption is enabled. Initialization aborted.[/red]")
                 return False, None
             salt_raw = generate_salt()
             salt_val = base64.b64encode(salt_raw).decode()
             canary = encrypt_data("wugong", encryption_password, salt_raw)
         else:
-            print("\n[Warning] Encryption is disabled. Your credentials and data will be stored in plain text.")
+            console.print("\n[warning]⚠️  Encryption is disabled. Your credentials and data will be stored in plain text.[/warning]")
 
         # 2. Logging Setup
         log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -260,20 +260,20 @@ def init_wizard(
         config.save_config(current_config, config_path)
 
         # 5. Success Message
-        print(f"\n✅ Configuration initialized and saved to {config_path}")
-        print(f"ℹ️  Sync interval: {interval} minutes.")
-        print(f"ℹ️  Console log level: {console_log_level}")
-        print(f"ℹ️  File log level: {file_log_level} (logged to ~/.wugong/wugong.log)")
+        console.print(f"\n[green]✅ Configuration initialized and saved to[/green] [cyan]{config_path}[/cyan]")
+        console.print(f"[info]ℹ️  Sync interval:[/info] [cyan]{interval}[/cyan] minutes.")
+        console.print(f"[info]ℹ️  Console log level:[/info] [cyan]{console_log_level}[/cyan]")
+        console.print(f"[info]ℹ️  File log level:[/info] [cyan]{file_log_level}[/cyan] (logged to [cyan]~/.wugong/wugong.log[/cyan])")
 
         if not current_config.get("accounts"):
-            print("\n💡 Tip: No accounts found. Use 'wugong account add' to add your first email account.")
+            console.print("\n[info]💡 Tip: No accounts found. Use 'wugong account add' to add your first email account.[/info]")
 
         return True, encryption_password
     except KeyboardInterrupt:
-        print("\nInitialization cancelled.")
+        console.print("\n[yellow]Initialization cancelled.[/yellow]")
         return False, None
     except Exception as e:
-        print(f"\n❌ Error during initialization: {e}")
+        console.print(f"\n[red]❌ Error during initialization: {e}[/red]")
         return False, None
 
 def handle_init(args: argparse.Namespace, manager: MailManager) -> None:

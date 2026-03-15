@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.7] - 2026-03-15
+
+### Features
+- **Strict Non-Interactive Mode**: Enforced a single-account limit in non-interactive mode to prevent accidental bulk account additions without proper verification.
+- **Immediate Connection Testing**: The `account add` wizard now performs a connection test immediately after credentials are provided ("Fill one, Test one").
+- **Batch Operations**: Refactored account management to support batch saving of verified accounts and sequential batch initial syncing, reducing configuration file writes and improving efficiency.
+- **Enhanced UI/UX**: Replaced all standard `print` statements with `rich.console.print`, introducing color-coded status messages (Success, Error, Warning, Info) and a more modern CLI aesthetic.
+- **Connection Retry Logic**: Added an interactive retry loop for failed connection tests during account setup, allowing users to correct credentials without restarting the wizard.
+
+### Fixed
+- **Error Handling**: Non-interactive connection test failures now correctly raise a `ValueError` instead of silently returning an empty list, ensuring better CI/CD integration.
+- **Credential Privacy**: Removed redundant plain-text printing of connection status in favor of secure `console.status` indicators.
+
 ## [1.0.6] - 2026-03-15
 
 ### Features

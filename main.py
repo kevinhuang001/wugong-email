@@ -18,11 +18,14 @@ from cli.configure import handle_init, handle_configure
 from cli.maintain import handle_upgrade, handle_uninstall
 from logger import setup_logger, update_console_level
 
+from rich.console import Console
+
 # Set global timeout for all network operations
 socket.setdefaulttimeout(30)
 
 # Pre-initialize logger with defaults
 logger = setup_logger("cli")
+console = Console()
 
 def main() -> None:
     # Common arguments for all commands
@@ -161,7 +164,7 @@ def main() -> None:
     if args.version:
         v_file = Path(__file__).parent / ".version"
         version = v_file.read_text().strip() if v_file.exists() else "Unknown"
-        print(f"Wugong Email v{version}")
+        console.print(f"[bold blue]Wugong Email[/bold blue] [cyan]v{version}[/cyan]")
         return
 
     log_level = getattr(args, "log_level", None)
@@ -206,9 +209,9 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n[blue]Operation cancelled by user.[/blue]")
+        console.print("\n[yellow]Operation cancelled by user.[/yellow]")
         sys.exit(0)
     except Exception as e:
         logger.critical(f"Unhandled exception: {e}", exc_info=True)
-        print(f"\n[red]Fatal Error: {e}[/red]")
+        console.print(f"\n[bold red]Fatal Error:[/bold red] {e}")
         sys.exit(1)

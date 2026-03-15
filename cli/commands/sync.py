@@ -4,6 +4,7 @@ import logging
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 from mail import MailManager
+from cli.render import CLIRenderer
 import config
 
 logger = logging.getLogger("cli.sync")
@@ -59,5 +60,9 @@ def handle_sync(args: argparse.Namespace, manager: MailManager) -> None:
         if metadata.get("is_offline", False):
             console.print(f"[red]❌ Sync failed for {account_name} ({folder}): {metadata.get('error') or 'Connection failed'}.[/red]")
         else:
-            console.print(f"[green]✅ {account_name}: Sync complete ({len(metadata.get('new_emails', []))} new emails fetched from {folder}).[/green]")
-        console.print("-" * (console.width or 80))
+            new_emails = metadata.get('new_emails', [])
+            num_new = len(new_emails)
+            console.print(f"[green]✅ {account_name}: Sync complete ({num_new} new emails fetched from {folder}).[/green]")
+            if num_new > 0:
+                CLIRenderer.render_email_table(new_emails, show_folder=True)
+                console.print("-" * (console.width or 80))
