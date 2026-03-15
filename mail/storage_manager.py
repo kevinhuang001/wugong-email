@@ -313,6 +313,23 @@ class MailStorageManager:
             "folder": folder
         }
 
+    def get_email_count(self, account_name: str, folder: Optional[str] = None, only_unseen: bool = False) -> int:
+        """Get the number of cached emails for an account (optionally filtered by folder or seen status)."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            query = "SELECT COUNT(*) FROM emails WHERE account_name = ?"
+            params = [account_name]
+            
+            if folder:
+                query += " AND folder = ?"
+                params.append(folder)
+            
+            if only_unseen:
+                query += " AND seen = 0"
+                
+            cursor.execute(query, params)
+            return cursor.fetchone()[0]
+
     def get_all_cached_uids(self, account_name: str, folder: str = "INBOX") -> List[str]:
         with self._get_connection() as conn:
             cursor = conn.cursor()

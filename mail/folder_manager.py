@@ -16,11 +16,6 @@ class MailFolderManager:
         if res == "OK":
             for item in data:
                 if isinstance(item, bytes):
-                    # Format: (FLAGS) "DELIMITER" "NAME"
-                    # Regex explanation:
-                    # ^\([^)]*\)\s+   - match flags: (flags) followed by space
-                    # "[^"]*"\s+      - match delimiter: "delimiter" followed by space
-                    # ("[^"]+"|\S+)   - match folder name: "folder name" or unquoted name
                     decoded = item.decode()
                     # Try to match the quoted name at the end
                     match = re.search(r'"([^"]+)"$', decoded)
@@ -32,6 +27,23 @@ class MailFolderManager:
                         if parts:
                             folders.append(parts[-1])
         return folders
+
+    def get_folder_status(self, mail: imaplib.IMAP4, folder_name: str) -> dict[str, int]:
+        """Get status of a specific folder (messages, unseen)."""
+        # Ensure folder name is quoted if it contains spaces
+        quoted_folder = f'"{folder_name}"' if " " in folder_name else folder_name
+        res, data = mail.status(quoted_folder, "(MESSAGES UNSEEN)")
+        status = {"messages": 0, "unseen": 0}
+        if res == "OK" and data:
+            # Format: * STATUS "INBOX" (MESSAGES 10 UNSEEN 2)
+            content = data[0].decode()
+            msg_match = re.search(r"MESSAGES\s+(\d+)", content)
+            unseen_match = re.search(r"UNSEEN\s+(\d+)", content)
+            if msg_match:
+                status["messages"] = int(msg_match.group(1))
+            if unseen_match:
+                status["unseen"] = int(unseen_match.group(1))
+        return status
 
     def create_folder(self, mail: imaplib.IMAP4, folder_name: str) -> bool:
         """Create a new folder."""

@@ -28,15 +28,20 @@ class CLIRenderer:
             console.print(st)
 
     @staticmethod
-    def render_email_table(emails: list[Email | dict[str, Any]], show_folder: bool = True) -> None:
+    def render_email_table(emails: list[Email | dict[str, Any]], show_folder: bool = True, show_header: bool = True, verbose: bool = False) -> None:
         """Renders a list of emails in a formatted table."""
-        table = Table(show_lines=False, box=None, expand=True)
+        table = Table(show_lines=False, box=None, expand=True, show_header=show_header, header_style="bold white")
         table.add_column("", justify="center", width=1) # Status
         table.add_column("ID", style="cyan", justify="right", width=6)
-        if show_folder:
+        
+        if verbose and show_folder:
             table.add_column("Folder", style="yellow", width=15)
+            
         table.add_column("From", style="magenta", width=20)
-        table.add_column("Email", style="blue", width=25)
+        
+        if verbose:
+            table.add_column("Email", style="blue", width=25)
+            
         table.add_column("Subject", style="white", ratio=1)
         table.add_column("Time", style="green", width=19)
 
@@ -63,9 +68,15 @@ class CLIRenderer:
                 pass
             
             row_data = [status_mark, str(eid)]
-            if show_folder:
+            if verbose and show_folder:
                 row_data.append(folder)
-            row_data.extend([from_user, from_email, subject, display_time])
+            
+            row_data.append(from_user)
+            
+            if verbose:
+                row_data.append(from_email)
+                
+            row_data.extend([subject, display_time])
             table.add_row(*row_data)
         
         console.print(table)

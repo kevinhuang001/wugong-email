@@ -64,5 +64,8 @@ def handle_sync(args: argparse.Namespace, manager: MailManager) -> None:
             num_new = len(new_emails)
             console.print(f"[green]✅ {account_name}: Sync complete ({num_new} new emails fetched from {folder}).[/green]")
             if num_new > 0:
+                title = f"New Emails for [bold cyan]{account_name}[/bold cyan]"
+                if folder != "INBOX":
+                    title += f" in folder [bold yellow]{folder}[/bold yellow]"
+                CLIRenderer.render_header(title)
                 CLIRenderer.render_email_table(new_emails, show_folder=True)
-                console.print("-" * (console.width or 80))

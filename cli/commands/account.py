@@ -478,8 +478,7 @@ def account_add_wizard(
                         "smtp_server": curr_smtp_server,
                         "smtp_port": curr_smtp_port,
                         "smtp_tls_method": curr_smtp_tls_method,
-                        "auth": auth_details,
-                        "sync_limit": limit
+                        "auth": auth_details
                     }
                     newly_added.append((account, limit))
 
@@ -510,19 +509,94 @@ def handle_account(args: argparse.Namespace, manager: MailManager, account_parse
                 console.print("[yellow]No accounts configured yet. Run 'wugong account add' to get started.[/yellow]")
                 return
                 
-            table = Table(title="Configured Email Accounts")
+            verbose = getattr(args, "verbose", False)
+            
+            table = Table(title="Configured Email Accounts", show_footer=True)
             table.add_column("ID", style="cyan", no_wrap=True)
             table.add_column("Friendly Name", style="magenta")
-            table.add_column("Method", style="green")
-            table.add_column("IMAP Server", style="yellow")
+            table.add_column("Email Address", style="blue")
+            table.add_column("Cached", style="green", justify="right")
+            table.add_column("Unseen", style="bold yellow", justify="right")
+            
+            if verbose:
+                table.add_column("Server Total", style="blue", justify="right")
+                table.add_column("Server Unseen", style="bold red", justify="right")
+                table.add_column("Method", style="green")
+                table.add_column("IMAP Server", style="yellow")
 
-            for idx, acc in enumerate(manager.accounts, 1):
-                table.add_row(
-                    str(idx),
-                    acc.get("friendly_name", "N/A"),
-                    acc.get("login_method", "N/A"),
-                    f"{acc.get('imap_server')}:{acc.get('imap_port')}"
-                )
+            total_all_cached = 0
+            total_all_unseen = 0
+            total_server_msg = 0
+            total_server_unseen = 0
+
+            # Only fetch server stats if verbose mode is enabled
+            password = None
+            if verbose and manager.accounts:
+                try:
+                    prompt = "Enter encryption password to fetch server stats (or Ctrl+C to skip):"
+                    password = config.get_verified_password(manager.config, args, prompt)
+                except (ValueError, KeyboardInterrupt):
+                    console.print("[yellow]Skipping server stats due to missing password.[/yellow]")
+
+            with console.status("[bold green]Fetching account statistics...") as status:
+                for idx, acc in enumerate(manager.accounts, 1):
+                    account_name = acc.get("friendly_name", "N/A")
+                    
+                    # Local stats
+                    cached_count = manager.storage_manager.get_email_count(account_name)
+                    unseen_count = manager.storage_manager.get_email_count(account_name, only_unseen=True)
+                    total_all_cached += cached_count
+                    total_all_unseen += unseen_count
+
+                    # Server stats (only if verbose and password provided)
+                    srv_total = "0"
+                    srv_unseen = "0"
+                    if verbose and password:
+                        status.update(f"[bold green]Connecting to {account_name}...")
+                        try:
+                            mail = manager.connector.get_imap_connection(acc, password)
+                            if mail:
+                                acc_msg_sum = 0
+                                acc_unseen_sum = 0
+                                folders = manager.folder_manager.list_folders(mail)
+                                for f in folders:
+                                    f_status = manager.folder_manager.get_folder_status(mail, f)
+                                    acc_msg_sum += f_status.get("messages", 0)
+                                    acc_unseen_sum += f_status.get("unseen", 0)
+                                
+                                srv_total = str(acc_msg_sum)
+                                srv_unseen = str(acc_unseen_sum)
+                                
+                                total_server_msg += acc_msg_sum
+                                total_server_unseen += acc_unseen_sum
+                                mail.logout()
+                        except Exception as e:
+                            logger.debug(f"Failed to fetch server stats for {account_name}: {e}")
+                            srv_total = "[red]Error[/red]"
+                            srv_unseen = "[red]Error[/red]"
+
+                    row = [
+                        str(idx),
+                        account_name,
+                        acc.get("auth", {}).get("username", "N/A"),
+                        str(cached_count),
+                        str(unseen_count)
+                    ]
+                    if verbose:
+                        row.append(srv_total)
+                        row.append(srv_unseen)
+                        row.append(acc.get("login_method", "N/A"))
+                        row.append(f"{acc.get('imap_server')}:{acc.get('imap_port')}")
+                    table.add_row(*row)
+            
+            # Update footer with totals
+            table.columns[0].footer = "Total"
+            table.columns[3].footer = str(total_all_cached)
+            table.columns[4].footer = str(total_all_unseen)
+            if verbose:
+                table.columns[5].footer = str(total_server_msg) if password else "0"
+                table.columns[6].footer = str(total_server_unseen) if password else "0"
+            
             console.print(table)
             
         case "add":

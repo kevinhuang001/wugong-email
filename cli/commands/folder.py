@@ -33,8 +33,37 @@ def handle_folder(args: argparse.Namespace, manager: MailManager) -> None:
                     folders = manager.folder_manager.list_folders(mail)
                     table = Table(title=f"Folders for {account_name}")
                     table.add_column("Folder Name", style="cyan")
-                    for folder in folders:
-                        table.add_row(folder)
+                    table.add_column("Cached", justify="right", style="green")
+                    table.add_column("Unseen", justify="right", style="bold yellow")
+                    
+                    verbose = getattr(args, "verbose", False)
+                    if verbose:
+                        table.add_column("Total (Server)", justify="right", style="blue")
+                        table.add_column("Unseen (Server)", justify="right", style="bold yellow")
+                        
+                        with console.status(f"[bold green]Fetching folder stats for {account_name}..."):
+                            for folder in folders:
+                                status = manager.folder_manager.get_folder_status(mail, folder)
+                                cached_count = manager.storage_manager.get_email_count(account_name, folder)
+                                cached_unseen = manager.storage_manager.get_email_count(account_name, folder, only_unseen=True)
+                                
+                                table.add_row(
+                                    folder, 
+                                    str(cached_count),
+                                    str(cached_unseen),
+                                    str(status["messages"]), 
+                                    str(status["unseen"])
+                                )
+                    else:
+                        for folder in folders:
+                            cached_count = manager.storage_manager.get_email_count(account_name, folder)
+                            cached_unseen = manager.storage_manager.get_email_count(account_name, folder, only_unseen=True)
+                            table.add_row(
+                                folder, 
+                                str(cached_count),
+                                str(cached_unseen)
+                            )
+                    
                     console.print(table)
 
                 case "create":

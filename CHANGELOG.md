@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.8] - 2026-03-15
+
+### Features
+- **Verbose List Mode**: Added `--verbose` flag to `account list` and `list` commands. In `account list`, it shows server-side statistics (total and unseen messages) and connection details. In `list`, it reveals additional columns like folder names and sender email addresses.
+- **Global Account Summary**: `account list` now includes a summary footer displaying the total number of cached and unseen emails across all configured accounts.
+- **Enhanced Rendering**: Updated `CLIRenderer` to support dynamic column visibility and optional headers in email tables.
+
+### Fixed
+- **Dependency Management**: Synchronized `requirements.txt` with the actual project usage. Added missing `requests` and `werkzeug` libraries to ensure stable installation.
+- **Import Audit**: Conducted a full codebase audit of import statements to verify all third-party dependencies are correctly listed.
+
 ## [1.0.7] - 2026-03-15
 
 ### Features

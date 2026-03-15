@@ -92,7 +92,7 @@ def handle_list(args: argparse.Namespace, manager: MailManager) -> None:
             filters.append(f"[dim]Sort:[/dim] [bold]{sort_by}[/bold] ([bold]{order}[/bold])")
             
             CLIRenderer.render_header(title, " | ".join(filters))
-            CLIRenderer.render_email_table(emails or [], show_folder=(folder == "all"))
+            CLIRenderer.render_email_table(emails or [], show_folder=(folder == "all"), verbose=getattr(args, "verbose", False))
         except Exception as e:
             logger.error(f"Error listing {account_name}: {e}")
             console.print(f"[red]Error listing {account_name}: {e}[/red]")

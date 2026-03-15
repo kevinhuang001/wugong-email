@@ -55,6 +55,8 @@ Manage your connected email accounts.
 ### `account list`
 List all configured accounts.
 - **Usage**: `wugong account list`
+- **Parameters**:
+    - `--verbose`, `-v`: Show detailed account statistics (total/unseen) and server settings.
 
 ### `account add`
 Add a new email account (interactive wizard or non-interactive).
@@ -98,6 +100,7 @@ List emails from local cache or the remote server.
     - `[account]`: Optional. Specify account name; uses the default account if omitted. Use `all` to list emails from all accounts.
     - `--limit`, `-l`: Limit the number of emails displayed.
     - `--all`: List all available emails.
+    - `--verbose`, `-v`: Show more details (folder name and sender email address).
     - `--keyword`, `-k`: Search for keywords in the subject or body.
     - `--from-user`, `-f`: Filter by sender email or name.
     - `--since`: Search emails since a specific date (e.g., `01-Jan-2024`).

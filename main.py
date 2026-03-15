@@ -43,6 +43,7 @@ def main() -> None:
     list_parser = subparsers.add_parser("list", parents=[common_parser], help="List accounts or emails")
     list_parser.add_argument("account", nargs="?", help="Friendly name of the account to list emails from (use 'all' for all accounts)")
     list_parser.add_argument("--limit", "-l", type=int, help="Number of emails to list per account (default from config)")
+    list_parser.add_argument("--verbose", "-v", action="store_true", help="Show more information (e.g., email addresses and folders)")
     list_parser.add_argument("--all", action="store_true", help="List all available emails")
     list_parser.add_argument("--keyword", "-k", help="Search by keyword in subject or body")
     list_parser.add_argument("--from-user", "-f", help="Search by sender's email or name")
@@ -96,7 +97,8 @@ def main() -> None:
     # Account management
     account_parser = subparsers.add_parser("account", parents=[common_parser], help="Manage email accounts")
     account_subparsers = account_parser.add_subparsers(dest="account_command", help="Account subcommands")
-    account_subparsers.add_parser("list", parents=[common_parser], help="List configured accounts")
+    acc_list_parser = account_subparsers.add_parser("list", parents=[common_parser], help="List configured accounts")
+    acc_list_parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed account settings (login method, servers)")
     
     acc_add_parser = account_subparsers.add_parser("add", parents=[common_parser], help="Add a new email account")
     acc_add_parser.add_argument("--friendly-name", "-n", help="Friendly name for the account")
@@ -127,6 +129,7 @@ def main() -> None:
     # List folders
     folder_list_parser = folder_subparsers.add_parser("list", parents=[common_parser], help="List folders for an account")
     folder_list_parser.add_argument("account", nargs="?", help="Account name (uses default if not specified)")
+    folder_list_parser.add_argument("--verbose", "-v", action="store_true", help="Show more information (e.g., email counts)")
     
     # Create folder
     folder_create_parser = folder_subparsers.add_parser("create", parents=[common_parser], help="Create a new folder")

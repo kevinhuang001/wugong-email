@@ -78,8 +78,7 @@ Display emails from your local cache or fetch them directly from the server:
 wugong list                       # Show latest emails (default account)
 wugong list work --limit 20       # Show 20 emails from 'work' account
 wugong list --keyword "invoice"   # Search subject/body for keywords
-wugong list --from "boss"         # Filter by sender
-wugong list --since 2024-01-01    # Search by date range
+wugong list --verbose             # Show more details (folder, sender email)
 wugong list --local               # Offline mode (cache only)
 ```
 
