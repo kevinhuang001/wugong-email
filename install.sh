@@ -86,16 +86,14 @@ fi
 # 6. Setup Virtual Environment and Install Dependencies
 cd "$INSTALL_DIR" || exit
 if command -v uv &> /dev/null; then
-    echo -e "${GREEN}✨ uv found! Using uv for faster installation...${NC}"
+    echo -e "${GREEN}✨ uv found! Using uv for installation...${NC}"
     uv venv &> /dev/null
     source .venv/bin/activate
     uv pip install --quiet -r requirements.txt
 else
-    echo -e "${BLUE}🐍 uv not found, using standard venv and pip...${NC}"
-    python3 -m venv .venv
-    source .venv/bin/activate
-    pip install --quiet --upgrade pip
-    pip install --quiet -r requirements.txt
+    echo -e "${RED}❌ Error: uv not found. uv is required for installation.${NC}"
+    echo -e "${BLUE}💡 Please install uv first: https://github.com/astral-sh/uv${NC}"
+    exit 1
 fi
 
 # 7. Create Wrapper Scripts

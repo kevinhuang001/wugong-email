@@ -680,7 +680,7 @@ def handle_account(args: argparse.Namespace, manager: MailManager, account_parse
 
                 status_messages.append(f"{len(newly_added)} account(s) configured and saved successfully.")
                 if not json_out:
-                    CLIRenderer.render_message(status_messages[-1], type="success")
+                    CLIRenderer.render_message(status_messages[-1], type="success", json_output=json_out)
 
                 # 2. BATCH INITIAL SYNC
                 if not json_out:
@@ -695,7 +695,7 @@ def handle_account(args: argparse.Namespace, manager: MailManager, account_parse
                             status_type = "error"
                             CLIRenderer.render_message(". ".join(status_messages), type=status_type, json_output=True)
                         else:
-                            CLIRenderer.render_message(f"Error: {e}", type="error")
+                            CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
                         return
 
                 for acc, limit in newly_added:
@@ -704,7 +704,7 @@ def handle_account(args: argparse.Namespace, manager: MailManager, account_parse
                         msg = f"Initial sync for '{account_name}' skipped (limit 0)."
                         status_messages.append(msg)
                         if not json_out:
-                            CLIRenderer.render_message(msg, type="warning")
+                            CLIRenderer.render_message(msg, type="warning", json_output=json_out)
                         continue
 
                     sync_result = None
@@ -733,19 +733,19 @@ def handle_account(args: argparse.Namespace, manager: MailManager, account_parse
                                 msg = f"Initial sync for '{account_name}' failed: {sync_result.get('error', 'Connection failed')}."
                                 status_messages.append(msg)
                                 if not json_out:
-                                    CLIRenderer.render_message(msg, type="warning")
+                                    CLIRenderer.render_message(msg, type="warning", json_output=json_out)
                             else:
                                 msg = f"Initial sync for '{account_name}' complete ({len(sync_result.get('new_emails', []))} new emails)."
                                 status_messages.append(msg)
                                 if not json_out:
-                                    CLIRenderer.render_message(msg, type="success")
+                                    CLIRenderer.render_message(msg, type="success", json_output=json_out)
                         
                     except Exception as e:
                         msg = f"Error during initial sync for '{account_name}': {e}"
                         status_messages.append(msg)
                         status_type = "error"
                         if not json_out:
-                            CLIRenderer.render_message(msg, type="error")
+                            CLIRenderer.render_message(msg, type="error", json_output=json_out)
                 
                 # Final merged JSON output
                 if json_out:

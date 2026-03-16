@@ -73,8 +73,8 @@ def test_handle_list_success_json(mock_header, mock_render, mock_manager):
     
     # Verify lister.query_emails was called
     mock_manager.lister.query_emails.assert_called_once()
-    # Verify table was rendered with json_output=True
-    mock_render.assert_called_once_with(ANY, show_folder=False, verbose=False, json_output=True)
+    # Verify table was rendered with json_output=True and data=None
+    mock_render.assert_called_once_with(ANY, show_folder=False, verbose=False, json_output=True, data=None)
 
 @patch('cli.commands.list.console')
 def test_handle_list_with_sorting(mock_console, mock_manager):

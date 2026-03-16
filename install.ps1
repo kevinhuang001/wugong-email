@@ -86,9 +86,16 @@ foreach ($Item in $ItemsToCopy) {
 # 6. Setup Virtual Environment
 Set-Location $InstallDir
 Write-Host "🐍 Setting up virtual environment..." -ForegroundColor Blue
-python -m venv .venv
-& "$InstallDir\.venv\Scripts\python.exe" -m pip install --quiet --upgrade pip
-& "$InstallDir\.venv\Scripts\pip.exe" install --quiet -r requirements.txt
+
+if (Get-Command uv -ErrorAction SilentlyContinue) {
+    Write-Host "✨ uv found! Using uv for faster installation..." -ForegroundColor Green
+    & uv venv --quiet
+    & uv pip install --quiet --python (Join-Path $InstallDir ".venv\Scripts\python.exe") -r requirements.txt
+} else {
+    Write-Error "❌ Error: uv not found. uv is required for installation."
+    Write-Host "💡 Please install uv first: https://github.com/astral-sh/uv" -ForegroundColor Yellow
+    exit 1
+}
 
 # 7. Setup Wrapper Scripts
 Write-Host "🔨 Setting up executable wrapper..." -ForegroundColor Blue

@@ -63,6 +63,9 @@ def handle_sync(args: argparse.Namespace, manager: MailManager) -> None:
                     folder=folder
                 )
                 if json_out:
+                    if metadata.get("is_offline", False):
+                        errors.append({"account": account_name, "error": metadata.get('error') or 'Connection failed', "offline": True})
+                    
                     if emails:
                         for em in emails:
                             if isinstance(em, Email):

@@ -182,12 +182,27 @@ def handle_upgrade(args: Optional[argparse.Namespace] = None, manager: Any = Non
             if venv_python.exists():
                 if not json_out:
                     console.print("[blue]🐍 Updating dependencies...[/blue]")
+                
+                # Try to use uv if available in PATH (more reliable than python -m uv)
+                uv_path = shutil.which("uv")
                 try:
-                    # Try uv if present
-                    subprocess.run([str(venv_python), "-m", "uv", "pip", "install", "-r", str(install_dir / "requirements.txt")], check=True, capture_output=True)
-                except Exception:
-                    # Fallback to pip
-                    subprocess.run([str(venv_python), "-m", "pip", "install", "-r", str(install_dir / "requirements.txt")], check=True, capture_output=True)
+                    if uv_path:
+                        if not json_out:
+                            console.print("[blue]✨ Using uv for dependency update...[/blue]")
+                        subprocess.run([uv_path, "pip", "install", "--python", str(venv_python), "-r", str(install_dir / "requirements.txt")], check=True, capture_output=True)
+                    else:
+                        # No fallback to pip as requested
+                        error_msg = "uv not found in PATH. uv is required for dependency management."
+                        if not json_out:
+                            console.print(f"[red]❌ {error_msg}[/red]")
+                            console.print("[yellow]Please install uv: https://github.com/astral-sh/uv[/yellow]")
+                        raise Exception(error_msg)
+                except subprocess.CalledProcessError as e:
+                    error_msg = e.stderr.decode() if e.stderr else str(e)
+                    logger.error(f"Dependency update failed: {error_msg}")
+                    # If uv failed, we don't blindly fallback to pip here because the user
+                    # wants to know why uv failed or stay consistent.
+                    raise Exception(f"Dependency update failed: {error_msg}")
 
         # Upgrade success
         CLIRenderer.render_message(f"Successfully upgraded to v{remote_version}.", type="success", json_output=json_out, data={"new_version": remote_version})

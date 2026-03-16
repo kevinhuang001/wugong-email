@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - 2026-03-16
+
+### Features
+- **Strict uv Dependency Management**: Standardized on `uv` as the mandatory dependency manager across all platforms.
+    - Updated `install.ps1` and `install.sh` to require `uv` and removed the legacy `pip` fallback to ensure consistent, high-performance environments.
+    - Refactored `maintain.py` upgrade logic to strictly use system-level `uv` for dependency updates, preventing silent and potentially broken `pip` fallbacks.
+- **Improved Installation UX**: Installation scripts now provide a direct link to install `uv` if it's missing, ensuring users can quickly set up the required environment.
+
+### Fixed
+- **Unit Test Stability**: Resolved multiple unit test failures in `test_account.py`, `test_sync.py`, and `test_list.py` by correctly aligning test assertions with the new JSON aggregation and `CLIRenderer` patterns.
+- **JSON Rendering Consistency**: Ensured `CLIRenderer.render_message` correctly handles the `json_output` flag across all account management operations, preventing malformed or missing JSON blocks in automated environments.
+- **Upgrade Failure Fix**: Resolved an issue where the `upgrade` command would incorrectly attempt `python -m uv` and fall back to a failing `pip` command.
+
 ## [1.1.0] - 2026-03-16
 
 ### Features

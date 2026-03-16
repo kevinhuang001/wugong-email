@@ -48,7 +48,7 @@ def test_handle_sync_success_json(mock_table, mock_render, mock_manager):
     
     # Verify syncer.sync_emails was called
     mock_manager.syncer.sync_emails.assert_called_once()
-    mock_table.assert_called_once_with(ANY, show_folder=True, json_output=True)
+    mock_table.assert_called_once_with(ANY, show_folder=True, json_output=True, data=None)
 
 @patch('cli.render.CLIRenderer.render_message')
 def test_handle_sync_account_not_found(mock_render, mock_manager):
@@ -105,7 +105,8 @@ def test_handle_sync_offline_failure(mock_render, mock_manager):
     mock_render.assert_called_with(ANY, type="error", json_output=False)
 
 @patch('cli.render.CLIRenderer.render_message')
-def test_handle_sync_offline_failure_json(mock_render, mock_manager):
+@patch('cli.render.CLIRenderer.render_email_table')
+def test_handle_sync_offline_failure_json(mock_table, mock_render, mock_manager):
     args = argparse.Namespace(
         account="test_acc",
         limit=20,
@@ -118,7 +119,8 @@ def test_handle_sync_offline_failure_json(mock_render, mock_manager):
     
     handle_sync(args, mock_manager)
     
-    mock_render.assert_called_with(ANY, type="error", json_output=True)
+    # Should call render_message with the error summary because all_emails is empty
+    mock_render.assert_called_with(ANY, type="error", data={'errors': [{'account': 'test_acc', 'error': 'Connection Timeout', 'offline': True}]}, json_output=True)
 
 @patch('cli.render.CLIRenderer.render_message')
 def test_handle_sync_with_progress_callback(mock_render, mock_manager):
