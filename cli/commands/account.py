@@ -625,7 +625,9 @@ def handle_account(args: argparse.Namespace, manager: MailManager, account_parse
                         "server_unseen": srv_unseen,
                         "login_method": acc.get("login_method", "N/A"),
                         "imap_server": acc.get("imap_server"),
-                        "imap_port": acc.get("imap_port")
+                        "imap_port": acc.get("imap_port"),
+                        "smtp_server": acc.get("smtp_server"),
+                        "smtp_port": acc.get("smtp_port")
                     })
             
             CLIRenderer.render_accounts_table(accounts_data, verbose=verbose, json_output=json_out)

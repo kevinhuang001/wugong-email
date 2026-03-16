@@ -228,13 +228,15 @@ class MailStorageManager:
             db_field = field_map.get(sort_by, "date")
             order = "DESC" if sort_order.lower() == "desc" else "ASC"
             
-            # We need to fetch all if there's a search criteria or if sorting by something that requires decryption
-            # Actually, let's just fetch all and handle search/sort in Python for simplicity with encryption
-            # or if it's just basic listing, we can do it in SQL if not searching.
+            # If encryption is enabled and we're sorting by an encrypted field (subject or sender),
+            # we MUST sort in Python after decryption.
+            is_encrypted_sort = (self.encrypt_emails and self.encryption_enabled and db_field in ["subject", "sender"])
             
-            query += f" ORDER BY {db_field} {order}"
+            if not is_encrypted_sort:
+                query += f" ORDER BY {db_field} {order}"
             
-            if not search_criteria or not any(search_criteria.values()):
+            # If we're searching OR sorting by an encrypted field, we fetch all rows and handle in Python.
+            if not search_criteria and not is_encrypted_sort:
                 if limit != -1:
                     query += " LIMIT ?"
                     params.append(limit)
@@ -276,11 +278,27 @@ class MailStorageManager:
                 "date": date, 
                 "seen": bool(seen)
             })
-            if limit != -1 and not search_criteria and len(email_list) >= limit:
-                # If we didn't use LIMIT in SQL (because of search), we break here
+            
+            # If we used SQL LIMIT, we don't need to break here (but it doesn't hurt)
+            if not search_criteria and not is_encrypted_sort and limit != -1 and len(email_list) >= limit:
                 break
-            if limit != -1 and search_criteria and len(email_list) >= limit:
-                break
+        
+        # Handle Python-side sorting if needed
+        if is_encrypted_sort:
+            reverse = (order == "DESC")
+            sort_key_map = {
+                "subject": lambda x: x["subject"].lower(),
+                "sender": lambda x: x["from"].lower()
+            }
+            email_list.sort(key=sort_key_map.get(db_field, lambda x: x["date"]), reverse=reverse)
+            
+            # Apply limit after sorting
+            if limit != -1:
+                email_list = email_list[:limit]
+        elif search_criteria:
+            # If we were searching, we also need to apply limit here because we fetched all
+            if limit != -1:
+                email_list = email_list[:limit]
                 
         return email_list
 

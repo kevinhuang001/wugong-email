@@ -64,7 +64,7 @@ These tests use a Greenmail Docker container to simulate IMAP/SMTP servers. This
 1. Start the Greenmail container with pre-configured users (required by tests):
    ```bash
    docker run -it --rm \
-     -e GREENMAIL_OPTS="-Dgreenmail.setup.test.all -Dgreenmail.users=user1:password,user2:password" \
+     -e GREENMAIL_OPTS="-Dgreenmail.setup.test.all -Dgreenmail.users=user1:password,user2:password,workflow_user:password" \
      -p 3025:3025 -p 3143:3143 \
      greenmail/standalone:2.0.0
    ```

@@ -2,46 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.1] - 2026-03-16
-
-### Features
-- **Strict uv Dependency Management**: Standardized on `uv` as the mandatory dependency manager across all platforms.
-    - Updated `install.ps1` and `install.sh` to require `uv` and removed the legacy `pip` fallback to ensure consistent, high-performance environments.
-    - Refactored `maintain.py` upgrade logic to strictly use system-level `uv` for dependency updates, preventing silent and potentially broken `pip` fallbacks.
-- **Improved Installation UX**: Installation scripts now provide a direct link to install `uv` if it's missing, ensuring users can quickly set up the required environment.
-
-### Fixed
-- **Unit Test Stability**: Resolved multiple unit test failures in `test_account.py`, `test_sync.py`, and `test_list.py` by correctly aligning test assertions with the new JSON aggregation and `CLIRenderer` patterns.
-- **JSON Rendering Consistency**: Ensured `CLIRenderer.render_message` correctly handles the `json_output` flag across all account management operations, preventing malformed or missing JSON blocks in automated environments.
-- **Upgrade Failure Fix**: Resolved an issue where the `upgrade` command would incorrectly attempt `python -m uv` and fall back to a failing `pip` command.
-
-## [1.1.0] - 2026-03-16
+## [1.0.9] - 2026-03-16
 
 ### Features
 - **JSON Output Standardization**: All CLI commands now produce a single, valid JSON block when the `--json` flag is used, facilitating easier parsing for AI agents and automated scripts.
 - **Result Aggregation**: Multi-account operations (such as `sync all`, `list all`, and `account list`) now aggregate results from all target accounts into a single JSON object or array.
 - **Unified Error Handling in JSON**: Errors encountered during multi-account operations are collected and returned within the final JSON block, providing a comprehensive status report.
 - **Improved Account Wizard**: The `account add` wizard now collects and reports all interactive status messages in a single JSON response when running in JSON mode.
-- **Test Infrastructure Enhancements**: 
-    - Standardized all integration tests to verify JSON output consistency.
-    - Implemented a robust, stack-based JSON extraction helper in `conftest.py` to identify the first valid JSON block in command output.
-
-### Fixed
-- **AttributeError in Tests**: Resolved a critical issue where `CLIRenderer` was returning JSON strings instead of dictionaries, causing attribute errors in test assertions.
-- **ID Type Mismatches**: Fixed comparison failures in `test_delete.py` and `test_read.py` by adopting string-based ID comparisons across the test suite.
-- **Send Parameter Fix**: Corrected recipient handling in `test_send.py` to use friendly names instead of full email addresses for better compatibility with test mailbox setups.
-- **JSON Output Cleanliness**: Eliminated redundant or malformed JSON blocks across all CLI commands to ensure strict compliance with JSON standards.
-
-## [1.0.9] - 2026-03-15
-
-### Features
 - **Integrated Maintenance CLI**: Merged `upgrade` and `uninstall` logic directly into the `maintain.py` module. All maintenance tasks are now handled natively via the Python CLI (`wugong upgrade` and `wugong uninstall`), eliminating the need for external shell scripts.
+- **Strict uv Dependency Management**: Standardized on `uv` as the mandatory dependency manager across all platforms.
+    - Updated `install.ps1` and `install.sh` to require `uv` and removed the legacy `pip` fallback.
+    - Refactored `maintain.py` upgrade logic to strictly use system-level `uv`.
+- **Enhanced Encrypted Search and Sorting**: Implemented Python-side sorting and filtering for encrypted fields in `MailStorageManager` to ensure correct results when local cache encryption is enabled.
 - **Improved Upgrade UX**: Added a confirmation step before upgrading and implemented rich Markdown rendering for remote changelogs to show "What's new" during the upgrade process.
 - **Git Availability Check**: Added proactive checks for `git` availability before attempting source-based upgrades.
 - **Dependency Update Automation**: Integrated automatic dependency updates (using `uv` or `pip`) into the upgrade flow to ensure the environment is always up-to-date.
 
 ### Fixed
-- **Code Cleanup**: Removed all legacy `.sh` and `.ps1` upgrade/uninstall scripts to reduce project clutter and potential security risks.
+- **IMAP UID Command Syntax**: Added parentheses around `\\Seen` flag in `reader.py` to comply with RFC 3501.
+- **Test Infrastructure Enhancements**: 
+    - Standardized all integration tests to verify JSON output consistency.
+    - Resolved multiple unit test failures in `test_account.py`, `test_sync.py`, and `test_list.py` by aligning assertions with new patterns.
+    - Updated `conftest.py` to include `user2` in the default test environment and improved JSON extraction.
+    - Resolved naming conflicts in `test_workflow.py` by using unique account names.
+- **AttributeError in Tests**: Resolved a critical issue where `CLIRenderer` was returning JSON strings instead of dictionaries.
+- **ID Type Mismatches**: Fixed comparison failures in `test_delete.py` and `test_read.py` by adopting string-based ID comparisons.
+- **Send Parameter Fix**: Corrected recipient handling in `test_send.py` to use friendly names.
+- **Upgrade Failure Fix**: Resolved an issue where the `upgrade` command would incorrectly attempt `python -m uv`.
+- **JSON Output Cleanliness**: Eliminated redundant or malformed JSON blocks across all CLI commands.
+- **Code Cleanup**: Removed all legacy `.sh` and `.ps1` upgrade/uninstall scripts.
 - **Command Routing**: Fixed CLI command routing in `main.py` to correctly pass arguments and the mail manager to maintenance handlers.
 - **Dependency Synchronization**: Synchronized `requirements.txt` with missing `requests` and `werkzeug` libraries.
 

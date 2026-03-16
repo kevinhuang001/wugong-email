@@ -79,10 +79,20 @@ def run_wugong_command(args, config_path, password):
             i += 1
             
     # If no JSON found, return the raw output (it might be an error or empty)
-    with open("test_output_debug.log", "a") as f:
-        f.write(f"\nCOMMAND: {args}\n")
-        f.write(f"RAW OUTPUT: {raw_output}\n")
-        f.write(f"JSON BLOCKS: {json_blocks}\n")
+    # with open("test_output_debug.log", "a") as f:
+    #     f.write(f"\nCOMMAND: {args}\n")
+    #     f.write(f"RAW OUTPUT: {raw_output}\n")
+    #     f.write(f"JSON BLOCKS: {json_blocks}\n")
+    
+    # Concatenate multiple JSON blocks if they exist (rare, but for safety)
+    if len(json_blocks) > 1:
+        # If it's a list of dicts, we might want to merge them, but for tests,
+        # usually the first one is the main result.
+        # Let's return the first one but log a warning.
+        pass
+
+    if not json_blocks:
+        print(f"DEBUG: No JSON found in output. RAW: {raw_output}")
     return json_blocks[0] if json_blocks else raw_output
 
 def is_port_open(port):
@@ -159,7 +169,7 @@ database_path = "{db_path}"
     username = "user1"
     password = "{encrypted_pw1}"
 
-    [[accounts]]
+[[accounts]]
     friendly_name = "user2"
     email = "user2@example.com"
     imap_server = "127.0.0.1"

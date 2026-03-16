@@ -35,7 +35,7 @@ class MailReader:
             try:
                 mail = self.connector.get_imap_connection(account, auth_password)
                 mail.select(folder)
-                mail.uid('store', email_id, '+FLAGS', '\\Seen')
+                mail.uid('STORE', email_id, '+FLAGS', '(\\Seen)')
                 mail.logout()
             except Exception as e:
                 logger.debug(f"Failed to mark as seen on server for {email_id}: {e}")
@@ -58,7 +58,7 @@ class MailReader:
         try:
             mail = self.connector.get_imap_connection(account, auth_password)
             mail.select(folder)
-            mail.uid('store', email_id, '+FLAGS', '\\Seen')
+            mail.uid('STORE', email_id, '+FLAGS', '(\\Seen)')
             res, msg_data = mail.uid('fetch', email_id, "(RFC822)")
             
             parsed: Email | None = None
