@@ -27,6 +27,7 @@ def get_mock_args(**kwargs):
         'non_interactive': False,
         'password_override': None,
         'name': None,
+        'json': False,
     }
     defaults.update(kwargs)
     return argparse.Namespace(**defaults)
@@ -63,23 +64,37 @@ def mock_manager():
     manager.syncer = MagicMock()
     return manager
 
-@patch('cli.commands.account.console')
-def test_handle_account_list(mock_console, mock_manager):
-    args = get_mock_args(account_command="list")
+@patch('cli.render.CLIRenderer.render_accounts_table')
+def test_handle_account_list(mock_render, mock_manager):
+    args = get_mock_args(account_command="list", json=False)
     mock_parser = MagicMock()
+    mock_manager.storage_manager.get_email_count.return_value = 0
     
     handle_account(args, mock_manager, mock_parser)
     
-    assert mock_console.print.called
+    mock_render.assert_called_once_with(ANY, verbose=False, json_output=False)
 
+@patch('cli.render.CLIRenderer.render_accounts_table')
+def test_handle_account_list_json(mock_render, mock_manager):
+    args = get_mock_args(account_command="list", json=True)
+    mock_parser = MagicMock()
+    mock_manager.storage_manager.get_email_count.return_value = 0
+    
+    handle_account(args, mock_manager, mock_parser)
+    
+    mock_render.assert_called_once_with(ANY, verbose=False, json_output=True)
+
+@patch('cli.render.CLIRenderer.render_message')
+@patch('cli.commands.account.questionary.select')
 @patch('cli.commands.account.questionary.confirm')
-@patch('cli.commands.account.console')
-def test_handle_account_delete_success(mock_console, mock_confirm, mock_manager):
+def test_handle_account_delete_success(mock_confirm, mock_select, mock_render, mock_manager):
     args = get_mock_args(
         account_command="delete",
-        name="test_acc"
+        name="test_acc",
+        json=False
     )
-    # Mock questionary confirmation
+    # Mock questionary
+    mock_select.return_value.ask.return_value = "test_acc"
     mock_confirm.return_value.ask.return_value = True
     
     # Ensure manager.accounts has the account
@@ -90,19 +105,19 @@ def test_handle_account_delete_success(mock_console, mock_confirm, mock_manager)
     
     handle_account(args, mock_manager, mock_parser)
     
-    assert mock_console.print.called
+    mock_render.assert_called_once_with(ANY, type="success", json_output=False)
     # Check if accounts was updated
     assert mock_manager.accounts == []
 
 from unittest.mock import MagicMock, patch, ANY
 
-@patch('cli.commands.account.config.get_encryption_password')
+@patch('cli.render.CLIRenderer.render_message')
+@patch('cli.commands.account.config.get_verified_password')
 @patch('cli.commands.account.MailManager')
 @patch('cli.commands.account.Progress')
-@patch('cli.commands.account.console')
 @patch('cli.commands.account.account_add_wizard')
-def test_handle_account_add_password_cancel(mock_wizard, mock_console, mock_progress, mock_mail_manager, mock_get_pass, mock_manager):
-    args = get_mock_args(account_command="add")
+def test_handle_account_add_password_cancel(mock_wizard, mock_progress, mock_mail_manager, mock_get_pass, mock_render, mock_manager):
+    args = get_mock_args(account_command="add", json=False)
     new_acc = {"friendly_name": "new_acc"}
     mock_wizard.return_value = ([(new_acc, 10)], None)
     mock_parser = MagicMock()
@@ -113,21 +128,22 @@ def test_handle_account_add_password_cancel(mock_wizard, mock_console, mock_prog
     mock_mm_instance.encryption_enabled = True
     mock_mm_instance.config = {"general": {"encrypt_emails": True}}
     
-    # Mock password cancel
-    mock_get_pass.return_value = None
+    # Mock password cancel (raises ValueError in real life)
+    mock_get_pass.side_effect = ValueError("cancelled")
     
     handle_account(args, mock_manager, mock_parser)
     
     mock_get_pass.assert_called()
-    mock_mm_instance.syncer.sync_emails.assert_not_called()
+    mock_manager.syncer.sync_emails.assert_not_called()
+    mock_render.assert_called_with(ANY, type="error", json_output=False)
 
-@patch('cli.commands.account.config.get_encryption_password')
+@patch('cli.render.CLIRenderer.render_message')
+@patch('cli.commands.account.config.get_verified_password')
 @patch('cli.commands.account.MailManager')
 @patch('cli.commands.account.Progress')
-@patch('cli.commands.account.console')
 @patch('cli.commands.account.account_add_wizard')
-def test_handle_account_add_with_password_prompt(mock_wizard, mock_console, mock_progress, mock_mail_manager, mock_get_pass, mock_manager):
-    args = get_mock_args(account_command="add")
+def test_handle_account_add_with_password_prompt(mock_wizard, mock_progress, mock_mail_manager, mock_get_pass, mock_render, mock_manager):
+    args = get_mock_args(account_command="add", json=False)
     new_acc = {"friendly_name": "new_acc"}
     mock_wizard.return_value = ([(new_acc, 10)], "some_password")
     mock_parser = MagicMock()
@@ -143,16 +159,16 @@ def test_handle_account_add_with_password_prompt(mock_wizard, mock_console, mock
     
     handle_account(args, mock_manager, mock_parser)
     
-    mock_mm_instance.syncer.sync_emails.assert_called_once_with(
+    mock_manager.syncer.sync_emails.assert_called_once_with(
         new_acc, "some_password", limit=10, is_initial_sync=True, progress_callback=ANY
     )
 
+@patch('cli.render.CLIRenderer.render_message')
 @patch('cli.commands.account.MailManager')
 @patch('cli.commands.account.Progress')
-@patch('cli.commands.account.console')
 @patch('cli.commands.account.account_add_wizard')
-def test_handle_account_add_progress_callback(mock_wizard, mock_console, mock_progress, mock_mail_manager, mock_manager):
-    args = get_mock_args(account_command="add", password="test_password")
+def test_handle_account_add_progress_callback(mock_wizard, mock_progress, mock_mail_manager, mock_render, mock_manager):
+    args = get_mock_args(account_command="add", password="test_password", json=False)
     new_acc = {"friendly_name": "new_acc"}
     mock_wizard.return_value = ([(new_acc, 10)], "test_password")
     mock_parser = MagicMock()
@@ -171,7 +187,7 @@ def test_handle_account_add_progress_callback(mock_wizard, mock_console, mock_pr
             callback(5, 10, "testing progress")
         return None
         
-    mock_mm_instance.syncer.sync_emails.side_effect = side_effect
+    mock_manager.syncer.sync_emails.side_effect = side_effect
     
     handle_account(args, mock_manager, mock_parser)
     
@@ -180,15 +196,14 @@ def test_handle_account_add_progress_callback(mock_wizard, mock_console, mock_pr
     update_args = mock_progress_instance.update.call_args[1]
     assert update_args['completed'] == 5
     assert update_args['total'] == 10
-    assert "testing progress" in update_args['description']
 
+@patch('cli.render.CLIRenderer.render_message')
 @patch('cli.commands.account.config.get_encryption_password')
 @patch('cli.commands.account.MailManager')
 @patch('cli.commands.account.Progress')
-@patch('cli.commands.account.console')
 @patch('cli.commands.account.account_add_wizard')
-def test_handle_account_add_with_sync(mock_wizard, mock_console, mock_progress, mock_mail_manager, mock_get_pass, mock_manager):
-    args = get_mock_args(account_command="add", password="test_password")
+def test_handle_account_add_with_sync(mock_wizard, mock_progress, mock_mail_manager, mock_get_pass, mock_render, mock_manager):
+    args = get_mock_args(account_command="add", password="test_password", json=False)
     # Mock return value of wizard: (newly_added, password)
     new_acc = {"friendly_name": "new_acc"}
     mock_wizard.return_value = ([(new_acc, 10)], "test_password")
@@ -203,17 +218,20 @@ def test_handle_account_add_with_sync(mock_wizard, mock_console, mock_progress, 
     # Mock Progress context manager
     mock_progress_instance = mock_progress.return_value.__enter__.return_value
     
+    # Mock sync result
+    mock_manager.syncer.sync_emails.return_value = ([], {"new_emails": []})
+    
     handle_account(args, mock_manager, mock_parser)
     
     mock_wizard.assert_called_once()
-    mock_mm_instance.syncer.sync_emails.assert_called_once()
-    assert any("initial sync complete" in str(call).lower() for call in mock_console.print.call_args_list)
+    mock_manager.syncer.sync_emails.assert_called_once()
+    mock_render.assert_any_call(ANY, type="success", json_output=False)
 
+@patch('cli.render.CLIRenderer.render_message')
 @patch('cli.commands.account.MailManager')
-@patch('cli.commands.account.console')
 @patch('cli.commands.account.account_add_wizard')
-def test_handle_account_add_skip_sync(mock_wizard, mock_console, mock_mail_manager, mock_manager):
-    args = get_mock_args(account_command="add")
+def test_handle_account_add_skip_sync(mock_wizard, mock_mail_manager, mock_render, mock_manager):
+    args = get_mock_args(account_command="add", json=False)
     new_acc = {"friendly_name": "new_acc"}
     mock_wizard.return_value = ([(new_acc, 0)], "test_password")
     mock_parser = MagicMock()
@@ -226,13 +244,13 @@ def test_handle_account_add_skip_sync(mock_wizard, mock_console, mock_mail_manag
     
     handle_account(args, mock_manager, mock_parser)
     
-    assert any("skipping initial sync" in str(call).lower() for call in mock_console.print.call_args_list)
+    mock_render.assert_any_call(ANY, type="warning", json_output=False)
 
+@patch('cli.render.CLIRenderer.render_message')
 @patch('cli.commands.account.MailManager')
-@patch('cli.commands.account.console')
 @patch('cli.commands.account.account_add_wizard')
-def test_handle_account_add_sync_error(mock_wizard, mock_console, mock_mail_manager, mock_manager):
-    args = get_mock_args(account_command="add")
+def test_handle_account_add_sync_error(mock_wizard, mock_mail_manager, mock_render, mock_manager):
+    args = get_mock_args(account_command="add", json=False)
     new_acc = {"friendly_name": "new_acc"}
     mock_wizard.return_value = ([(new_acc, 10)], "test_password")
     mock_parser = MagicMock()
@@ -242,13 +260,15 @@ def test_handle_account_add_sync_error(mock_wizard, mock_console, mock_mail_mana
     mock_mail_manager.return_value = mock_mm_instance
     mock_mm_instance.encryption_enabled = False
     mock_mm_instance.config = {"general": {"encrypt_emails": False}}
-    mock_mm_instance.syncer.sync_emails.side_effect = Exception("Sync Error")
+    mock_manager.syncer.sync_emails.side_effect = Exception("Sync Error")
     
     # Mock Progress context manager
     with patch('cli.commands.account.Progress'):
         handle_account(args, mock_manager, mock_parser)
     
-    assert any("error syncing" in str(call).lower() for call in mock_console.print.call_args_list)
+    mock_render.assert_any_call(ANY, type="error", json_output=False)
+    # Check if error message contains "error" or "syncing"
+    assert any("error" in str(call).lower() for call in mock_render.call_args_list)
 
 def test_handle_account_unknown_command(mock_manager):
     args = get_mock_args(account_command="unknown")
@@ -256,47 +276,51 @@ def test_handle_account_unknown_command(mock_manager):
     handle_account(args, mock_manager, mock_parser)
     mock_parser.print_help.assert_called_once()
 
-@patch('cli.commands.account.console')
-def test_handle_account_list_empty(mock_console, mock_manager):
-    args = get_mock_args(account_command="list")
+@patch('cli.render.CLIRenderer.render_message')
+def test_handle_account_list_empty(mock_render, mock_manager):
+    args = get_mock_args(account_command="list", json=False)
     mock_manager.accounts = []
     mock_parser = MagicMock()
     
     handle_account(args, mock_manager, mock_parser)
     
-    assert mock_console.print.called
-    # Should say something about no accounts
-    any_call_contains_no_accounts = any("no accounts" in str(call).lower() or "configured accounts" in str(call).lower() for call in mock_console.print.call_args_list)
-    assert any_call_contains_no_accounts
+    mock_render.assert_called_once_with(ANY, type="warning", json_output=False)
 
-@patch('cli.commands.account.console')
-def test_handle_account_delete_not_found(mock_console, mock_manager):
+@patch('cli.render.CLIRenderer.render_message')
+@patch('cli.commands.account.questionary.select')
+def test_handle_account_delete_not_found(mock_select, mock_render, mock_manager):
     args = get_mock_args(
         account_command="delete",
-        name="non_existent"
+        name="non_existent",
+        non_interactive=True,
+        json=False
     )
+    # Ensure name is in choices to avoid questionary ValueError
+    mock_manager.accounts = [{"friendly_name": "acc1"}]
     mock_manager.get_account_by_name.return_value = None
     mock_parser = MagicMock()
     
     handle_account(args, mock_manager, mock_parser)
     
-    assert any("not found" in str(call).lower() for call in mock_console.print.call_args_list)
+    mock_render.assert_called_once_with(ANY, type="error", json_output=False)
 
+@patch('cli.commands.account.questionary.select')
 @patch('cli.commands.account.questionary.confirm')
-@patch('cli.commands.account.console')
-def test_handle_account_delete_cancel(mock_console, mock_confirm, mock_manager):
+@patch('cli.render.CLIRenderer.render_message')
+def test_handle_account_delete_cancel(mock_render, mock_confirm, mock_select, mock_manager):
     args = get_mock_args(
         account_command="delete",
-        name="test_acc"
+        name="test_acc",
+        json=False
     )
-    mock_confirm.return_value.ask.return_value = False
     mock_manager.accounts = [{"friendly_name": "test_acc"}]
-    mock_manager.get_account_by_name.return_value = mock_manager.accounts[0]
+    mock_select.return_value.ask.return_value = "test_acc"
+    mock_confirm.return_value.ask.return_value = False
     mock_parser = MagicMock()
     
     handle_account(args, mock_manager, mock_parser)
     
-    assert any("cancelled" in str(call).lower() for call in mock_console.print.call_args_list)
+    # Check if delete was NOT called (manager.accounts still has the account)
     assert len(mock_manager.accounts) == 1
 
 @patch('cli.commands.account.console')

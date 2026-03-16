@@ -1,6 +1,6 @@
 import pytest
 import argparse
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, ANY
 from cli.commands.list import handle_list
 
 @pytest.fixture
@@ -12,9 +12,9 @@ def mock_manager():
     manager.config = {"general": {"encrypt_emails": False}}
     return manager
 
-@patch('cli.commands.list.console')
 @patch('cli.render.CLIRenderer.render_email_table')
-def test_handle_list_success(mock_render, mock_console, mock_manager):
+@patch('cli.render.CLIRenderer.render_header')
+def test_handle_list_success(mock_header, mock_render, mock_manager):
     args = argparse.Namespace(
         account="test_acc",
         keyword=None,
@@ -27,7 +27,8 @@ def test_handle_list_success(mock_render, mock_console, mock_manager):
         password="test_password",
         folder="INBOX",
         sort="date",
-        order="desc"
+        order="desc",
+        json=False
     )
     
     # Mock lister.query_emails
@@ -40,8 +41,40 @@ def test_handle_list_success(mock_render, mock_console, mock_manager):
     
     # Verify lister.query_emails was called
     mock_manager.lister.query_emails.assert_called_once()
-    # Verify table was rendered
-    assert mock_render.called
+    # Verify table was rendered with json_output=False
+    mock_render.assert_called_once_with(ANY, show_folder=False, verbose=False, json_output=False)
+
+@patch('cli.render.CLIRenderer.render_email_table')
+@patch('cli.render.CLIRenderer.render_header')
+def test_handle_list_success_json(mock_header, mock_render, mock_manager):
+    args = argparse.Namespace(
+        account="test_acc",
+        keyword=None,
+        from_user=None,
+        since=None,
+        before=None,
+        all=False,
+        limit=10,
+        local=False,
+        password="test_password",
+        folder="INBOX",
+        sort="date",
+        order="desc",
+        json=True
+    )
+    
+    # Mock lister.query_emails
+    mock_manager.lister.query_emails.return_value = (
+        [{"id": "1", "from": "sender", "subject": "test", "date": "2024-01-01", "seen": True}],
+        {"is_offline": False}
+    )
+    
+    handle_list(args, mock_manager)
+    
+    # Verify lister.query_emails was called
+    mock_manager.lister.query_emails.assert_called_once()
+    # Verify table was rendered with json_output=True
+    mock_render.assert_called_once_with(ANY, show_folder=False, verbose=False, json_output=True)
 
 @patch('cli.commands.list.console')
 def test_handle_list_with_sorting(mock_console, mock_manager):
@@ -70,27 +103,26 @@ def test_handle_list_with_sorting(mock_console, mock_manager):
     assert call_args['sort_by'] == "subject"
     assert call_args['order'] == "asc"
 
-@patch('cli.commands.list.console')
-def test_handle_list_no_accounts(mock_console, mock_manager):
+@patch('cli.render.CLIRenderer.render_message')
+def test_handle_list_no_accounts(mock_render, mock_manager):
     mock_manager.accounts = []
-    args = argparse.Namespace(account="test_acc")
+    args = argparse.Namespace(account="test_acc", json=False)
     
     handle_list(args, mock_manager)
     
-    assert mock_console.print.called
+    mock_render.assert_called_once_with(ANY, type="warning", json_output=False)
 
-@patch('cli.commands.list.console')
-def test_handle_list_account_not_found(mock_console, mock_manager):
-    args = argparse.Namespace(account="non_existent")
+@patch('cli.render.CLIRenderer.render_message')
+def test_handle_list_account_not_found(mock_render, mock_manager):
+    args = argparse.Namespace(account="non_existent", json=False)
     mock_manager.get_account_by_name.return_value = None
     
     handle_list(args, mock_manager)
     
-    assert any("not found" in str(call).lower() for call in mock_console.print.call_args_list)
+    mock_render.assert_called_once_with(ANY, type="error", json_output=False)
 
-@patch('cli.commands.list.console')
-@patch('cli.render.console')
-def test_handle_list_query_error(mock_renderer_console, mock_console, mock_manager):
+@patch('cli.render.CLIRenderer.render_message')
+def test_handle_list_query_error(mock_render, mock_manager):
     args = argparse.Namespace(
         account="test_acc",
         keyword=None,
@@ -100,14 +132,14 @@ def test_handle_list_query_error(mock_renderer_console, mock_console, mock_manag
         all=False,
         limit=10,
         local=False,
-        password="test_password"
+        password="test_password",
+        json=False
     )
     mock_manager.lister.query_emails.side_effect = Exception("Query Failed")
     
     handle_list(args, mock_manager)
     
-    # Error is printed to cli.commands.list.console
-    assert any("error listing" in str(call).lower() for call in mock_console.print.call_args_list)
+    mock_render.assert_called_once_with(ANY, type="error", json_output=False)
 
 @patch('cli.commands.list.console')
 @patch('cli.render.console')
@@ -180,12 +212,12 @@ def test_handle_list_utf8_not_supported(mock_render_header, mock_console, mock_m
     title = args[0]
     assert "utf-8 not supported" in title.lower()
 
-@patch('cli.commands.list.config.get_encryption_password')
+@patch('cli.commands.list.config.get_verified_password')
 @patch('cli.commands.list.console')
 def test_handle_list_password_cancel(mock_console, mock_get_pass, mock_manager):
-    args = argparse.Namespace(account="test_acc", keyword=None, from_user=None, since=None, before=None, all=False, limit=10, local=False)
+    args = argparse.Namespace(account="test_acc", keyword=None, from_user=None, since=None, before=None, all=False, limit=10, local=False, json=False)
     mock_manager.encryption_enabled = True
-    mock_get_pass.return_value = None
+    mock_get_pass.side_effect = ValueError("cancelled")
     
     handle_list(args, mock_manager)
     

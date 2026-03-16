@@ -28,23 +28,43 @@ if [[ $(echo -e "$PYTHON_VERSION\n$MIN_PYTHON_VERSION" | sort -V | head -n1) != 
 fi
 echo -e "${GREEN}✅ Python $PYTHON_VERSION found.${NC}"
 
-# 2. Check if running via curl or local
-if [ -f "main.py" ] && [ -f "cli/configurer.py" ]; then
-    echo -e "${BLUE}📂 Local source files found. Using current directory.${NC}"
-    SOURCE_DIR=$(pwd)
-else
-    echo -e "${BLUE}📡 Source files not found locally. Cloning from GitHub...${NC}"
-    TEMP_DIR=$(mktemp -d)
-    git clone --quiet --depth 1 "$REPO_URL" "$TEMP_DIR" || { echo -e "${RED}❌ Error: Failed to clone repository.${NC}"; exit 1; }
-    SOURCE_DIR="$TEMP_DIR"
+# 2. Check for existing installation
+if [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/main.py" ] && [ -f "$INSTALL_DIR/.venv/bin/python3" ]; then
+    echo -e "${BLUE}💡 Wugong Email is already installed at $INSTALL_DIR.${NC}"
+    echo -e "${BLUE}🔄 Switching to upgrade mode...${NC}"
+    # Run the existing installation's upgrade command
+    # Pass all original arguments (though install.sh usually doesn't have many)
+    "$INSTALL_DIR/.venv/bin/python3" "$INSTALL_DIR/main.py" upgrade "$@"
+    exit 0
 fi
 
-# 3. Create Directories
+# 3. Check if running via local file or piped (remote)
+ if [ -f "$0" ]; then
+     # Script is being executed as a local file (e.g., ./install.sh or bash install.sh)
+     SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+     if [ -f "$SCRIPT_DIR/main.py" ] && [ -f "$SCRIPT_DIR/cli/configure.py" ]; then
+         echo -e "${BLUE}📂 Local source files found at $SCRIPT_DIR. Using local version.${NC}"
+         SOURCE_DIR="$SCRIPT_DIR"
+     else
+         echo -e "${BLUE}📡 Local script found but source files missing at $SCRIPT_DIR. Cloning from GitHub...${NC}"
+         TEMP_DIR=$(mktemp -d)
+         git clone --quiet --depth 1 "$REPO_URL" "$TEMP_DIR" || { echo -e "${RED}❌ Error: Failed to clone repository.${NC}"; exit 1; }
+         SOURCE_DIR="$TEMP_DIR"
+     fi
+ else
+     # Script is likely being piped (e.g., curl ... | bash)
+     echo -e "${BLUE}📡 Remote execution detected. Cloning from GitHub...${NC}"
+     TEMP_DIR=$(mktemp -d)
+     git clone --quiet --depth 1 "$REPO_URL" "$TEMP_DIR" || { echo -e "${RED}❌ Error: Failed to clone repository.${NC}"; exit 1; }
+     SOURCE_DIR="$TEMP_DIR"
+ fi
+
+# 4. Create Directories
 echo -e "${BLUE}📁 Creating directories...${NC}"
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$CONFIG_DIR"
 
-# 4. Copy Files
+# 5. Copy Files
 echo -e "${BLUE}📦 Copying files...${NC}"
 if command -v rsync &> /dev/null; then
     # Use --delete but EXCLUDE config, database, and venv/cache
@@ -52,8 +72,6 @@ if command -v rsync &> /dev/null; then
 else
     # Fallback to cp -R
     echo -e "${BLUE}⚠️  rsync not found, using cp -R (files will be overwritten)...${NC}"
-    # Manually remove old core files to simulate --delete for critical files
-    rm -f "$INSTALL_DIR/read_config.py"
     # Using a loop to avoid copying excluded dirs/files
     for item in "$SOURCE_DIR"/*; do
         [ -e "$item" ] || continue
@@ -65,7 +83,7 @@ else
     done
 fi
 
-# 5. Setup Virtual Environment and Install Dependencies
+# 6. Setup Virtual Environment and Install Dependencies
 cd "$INSTALL_DIR" || exit
 if command -v uv &> /dev/null; then
     echo -e "${GREEN}✨ uv found! Using uv for faster installation...${NC}"
@@ -80,18 +98,18 @@ else
     pip install --quiet -r requirements.txt
 fi
 
-# 6. Create Wrapper Scripts
+# 7. Create Wrapper Scripts
 echo -e "${BLUE}🔨 Setting up executable wrappers...${NC}"
 
 # Ensure 'wugong' CLI wrapper is executable
 chmod +x "$INSTALL_DIR/wugong"
 
-# 7. Cleanup temp dir if created
+# 8. Cleanup temp dir if created
 if [ -n "$TEMP_DIR" ]; then
     rm -rf "$TEMP_DIR"
 fi
 
-# 8. Final Instructions
+# 9. Final Instructions
 echo -e "\n${GREEN}🎉 Installation Complete!${NC}"
 echo -e "--------------------------------------------------"
 echo -e "Location: $INSTALL_DIR"

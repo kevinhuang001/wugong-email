@@ -4,32 +4,40 @@ from rich.console import Console
 import questionary
 from mail import MailManager
 import config
+from cli.render import CLIRenderer
 
 logger = logging.getLogger("cli.delete")
 console = Console()
 
 def handle_delete(args: argparse.Namespace, manager: MailManager) -> None:
+    json_out = getattr(args, "json", False)
     if not (account := manager.get_account_by_name(args.account or "default")):
-        console.print(f"[red]Error: Account '{args.account or 'default'}' not found.[/red]")
+        CLIRenderer.render_message(f"Account '{args.account or 'default'}' not found.", type="error", json_output=json_out)
         return
 
     account_name = account.get("friendly_name", "default")
     try:
         password = config.get_verified_password(manager.config, args, f"Enter encryption password for '{account_name}':")
     except ValueError as e:
-        console.print(f"[red]Error: {e}[/red]")
+        CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
         return
 
     folder = getattr(args, "folder", "INBOX") or "INBOX"
 
     if not getattr(args, "non_interactive", False) and not questionary.confirm(f"Are you sure you want to delete email {args.id} from {account_name} ({folder})?").ask():
+        CLIRenderer.render_message("Deletion cancelled.", type="warning", json_output=json_out)
         return
 
-    with console.status(f"[bold red]Deleting email {args.id} from {account_name} ({folder})...") as status:
+    if json_out:
         try:
             success, message = manager.deleter.delete_email(account, password, args.id, folder=folder)
-            status_mark = "✅" if success else "⚠️"
-            color = "green" if success else "yellow"
-            console.print(f"[{color}]{status_mark} {message}[/{color}]")
+            CLIRenderer.render_message(message, type="success" if success else "warning", json_output=json_out)
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
+            CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
+    else:
+        with console.status(f"[bold red]Deleting email {args.id} from {account_name} ({folder})...") as status:
+            try:
+                success, message = manager.deleter.delete_email(account, password, args.id, folder=folder)
+                CLIRenderer.render_message(message, type="success" if success else "warning", json_output=json_out)
+            except Exception as e:
+                CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)

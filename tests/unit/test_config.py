@@ -42,6 +42,7 @@ def test_get_salt_default():
 @patch('questionary.password')
 @patch('sys.stdin.isatty', return_value=True)
 def test_get_encryption_password_prompt(mock_isatty, mock_password):
-    mock_password.return_value.ask.return_value = "secret"
-    pwd = config.get_encryption_password()
-    assert pwd == "secret"
+    with patch.dict(os.environ, {}, clear=True):
+        mock_password.return_value.ask.return_value = "secret"
+        pwd = config.get_encryption_password()
+        assert pwd == "secret"

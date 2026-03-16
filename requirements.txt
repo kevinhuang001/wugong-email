@@ -8,3 +8,5 @@ requests
 werkzeug
 pytest
 pytest-mock
+aiosmtpd
+localmail

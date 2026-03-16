@@ -49,15 +49,39 @@ Unit tests focus on individual components and use mocks for external dependencie
 ```bash
 pytest tests/unit
 ```
+All unit tests for CLI commands now include scenarios for both standard output and `--json` output.
 
 ### 3. Integration Tests
 Integration tests are divided into two categories:
 
-#### Virtual Server Tests
-These tests use local mocks for IMAP/SMTP servers and are environment-agnostic.
-```bash
-pytest tests/integration/virtual_server
-```
+#### Greenmail Server Tests (Recommended)
+These tests use a Greenmail Docker container to simulate IMAP/SMTP servers. This provides a more robust and feature-complete testing environment than local mocks.
+
+**Prerequisites:**
+- Docker Desktop must be installed and running.
+
+**Steps to run:**
+1. Start the Greenmail container with pre-configured users (required by tests):
+   ```bash
+   docker run -it --rm \
+     -e GREENMAIL_OPTS="-Dgreenmail.setup.test.all -Dgreenmail.users=user1:password,user2:password" \
+     -p 3025:3025 -p 3143:3143 \
+     greenmail/standalone:2.0.0
+   ```
+2. Run the tests:
+   ```bash
+   # Ensure PYTHONPATH is set to the current directory
+   export PYTHONPATH=$PYTHONPATH:.
+   pytest tests/integration/
+   ```
+
+**What these tests do:**
+- Automatically detect the Greenmail server on ports 3025 (SMTP) and 3143 (IMAP).
+- Initialize the mailboxes with rich test data (folders like `Archive`, `Personal`, `Shopping`, etc., and multiple seeded emails) before each test run.
+- Mimic user CLI workflows (e.g., `account add`, `sync`, `list`, `read`, `send`, `delete`, `folder`).
+- Verify both standard and JSON outputs for all commands.
+- Standardize JSON output by extracting the first valid JSON block from the output.
+- Automatically clear the mailboxes after each test to ensure isolation.
 
 #### Real Account Tests (Optional)
 These tests interact with real email servers and require a valid configuration. By default, they are skipped if no configuration is found.

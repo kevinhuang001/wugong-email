@@ -4,100 +4,114 @@ from rich.console import Console
 from rich.table import Table
 from mail import MailManager
 import config
+from cli.render import CLIRenderer
 
 logger = logging.getLogger("cli.folder")
 console = Console()
 
 def handle_folder(args: argparse.Namespace, manager: MailManager) -> None:
+    json_out = getattr(args, "json", False)
     if not (account := manager.get_account_by_name(args.account or "default")):
-        console.print(f"[red]Error: Account '{args.account or 'default'}' not found.[/red]")
+        CLIRenderer.render_message(f"Account '{args.account or 'default'}' not found.", type="error", json_output=json_out)
         return
 
     account_name = account.get("friendly_name", "default")
     try:
         password = config.get_verified_password(manager.config, args, f"Enter encryption password for '{account_name}':")
     except ValueError as e:
-        console.print(f"[red]Error: {e}[/red]")
+        CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
         return
 
     try:
         # Connect to IMAP
         mail = manager.connector.get_imap_connection(account, password)
         if not mail:
-            console.print(f"[red]Error: Failed to connect to IMAP server for {account_name}.[/red]")
+            CLIRenderer.render_message(f"Failed to connect to IMAP server for {account_name}.", type="error", json_output=json_out)
             return
 
         try:
             match args.folder_command:
                 case "list":
                     folders = manager.folder_manager.list_folders(mail)
-                    table = Table(title=f"Folders for {account_name}")
-                    table.add_column("Folder Name", style="cyan")
-                    table.add_column("Cached", justify="right", style="green")
-                    table.add_column("Unseen", justify="right", style="bold yellow")
+                    folders_data = []
                     
                     verbose = getattr(args, "verbose", False)
                     if verbose:
-                        table.add_column("Total (Server)", justify="right", style="blue")
-                        table.add_column("Unseen (Server)", justify="right", style="bold yellow")
-                        
-                        with console.status(f"[bold green]Fetching folder stats for {account_name}..."):
+                        if json_out:
                             for folder in folders:
                                 status = manager.folder_manager.get_folder_status(mail, folder)
                                 cached_count = manager.storage_manager.get_email_count(account_name, folder)
                                 cached_unseen = manager.storage_manager.get_email_count(account_name, folder, only_unseen=True)
                                 
-                                table.add_row(
-                                    folder, 
-                                    str(cached_count),
-                                    str(cached_unseen),
-                                    str(status["messages"]), 
-                                    str(status["unseen"])
-                                )
+                                folders_data.append({
+                                    "name": folder,
+                                    "cached_count": cached_count,
+                                    "cached_unseen": cached_unseen,
+                                    "server_total": status["messages"],
+                                    "server_unseen": status["unseen"]
+                                })
+                        else:
+                            with console.status(f"[bold green]Fetching folder stats for {account_name}..."):
+                                for folder in folders:
+                                    status = manager.folder_manager.get_folder_status(mail, folder)
+                                    cached_count = manager.storage_manager.get_email_count(account_name, folder)
+                                    cached_unseen = manager.storage_manager.get_email_count(account_name, folder, only_unseen=True)
+                                    
+                                    folders_data.append({
+                                        "name": folder,
+                                        "cached_count": cached_count,
+                                        "cached_unseen": cached_unseen,
+                                        "server_total": status["messages"],
+                                        "server_unseen": status["unseen"]
+                                    })
                     else:
                         for folder in folders:
                             cached_count = manager.storage_manager.get_email_count(account_name, folder)
                             cached_unseen = manager.storage_manager.get_email_count(account_name, folder, only_unseen=True)
-                            table.add_row(
-                                folder, 
-                                str(cached_count),
-                                str(cached_unseen)
-                            )
+                            folders_data.append({
+                                "name": folder,
+                                "cached_count": cached_count,
+                                "cached_unseen": cached_unseen
+                            })
                     
-                    console.print(table)
+                    CLIRenderer.render_folders_table(folders_data, account_name, verbose=verbose, json_output=json_out)
 
                 case "create":
                     if not args.name:
-                        console.print("[red]Error: Folder name is required.[/red]")
+                        CLIRenderer.render_message("Folder name is required.", type="error", json_output=json_out)
                         return
                     if manager.folder_manager.create_folder(mail, args.name):
-                        console.print(f"[green]Successfully created folder '{args.name}'.[/green]")
+                        CLIRenderer.render_message(f"Successfully created folder '{args.name}'.", type="success", json_output=json_out)
                     else:
-                        console.print(f"[red]Failed to create folder '{args.name}'.[/red]")
+                        CLIRenderer.render_message(f"Failed to create folder '{args.name}'.", type="error", json_output=json_out)
 
                 case "delete":
                     if not args.name:
-                        console.print("[red]Error: Folder name is required.[/red]")
+                        CLIRenderer.render_message("Folder name is required.", type="error", json_output=json_out)
                         return
+                    
+                    non_interactive = getattr(args, "non_interactive", False)
                     import questionary
-                    if questionary.confirm(f"Are you sure you want to delete folder '{args.name}'?").ask():
+                    if non_interactive or questionary.confirm(f"Are you sure you want to delete folder '{args.name}'?").ask():
                         if manager.folder_manager.delete_folder(mail, args.name):
-                            console.print(f"[green]Successfully deleted folder '{args.name}'.[/green]")
+                            CLIRenderer.render_message(f"Successfully deleted folder '{args.name}'.", type="success", json_output=json_out)
                         else:
-                            console.print(f"[red]Failed to delete folder '{args.name}'.[/red]")
+                            CLIRenderer.render_message(f"Failed to delete folder '{args.name}'.", type="error", json_output=json_out)
+                    else:
+                        CLIRenderer.render_message("Deletion cancelled.", type="warning", json_output=json_out)
 
                 case "move":
                     if not args.id or not args.dest:
-                        console.print("[red]Error: ID and destination folder are required.[/red]")
+                        CLIRenderer.render_message("ID and destination folder are required.", type="error", json_output=json_out)
                         return
                     source = getattr(args, "src", "INBOX") or "INBOX"
                     uids = args.id.split(",")
                     if manager.folder_manager.move_emails(mail, uids, source, args.dest):
-                        console.print(f"[green]Successfully moved {len(uids)} emails from '{source}' to '{args.dest}'.[/green]")
+                        CLIRenderer.render_message(f"Successfully moved {len(uids)} emails from '{source}' to '{args.dest}'.", type="success", json_output=json_out)
                     else:
-                        console.print(f"[red]Failed to move emails.[/red]")
+                        CLIRenderer.render_message("Failed to move emails.", type="error", json_output=json_out)
                 case _:
-                    console.print("[yellow]Unknown folder command.[/yellow]")
+                    CLIRenderer.render_message("Unknown folder command.", type="warning", json_output=json_out)
         finally:
             try:
                 mail.logout()
@@ -105,4 +119,4 @@ def handle_folder(args: argparse.Namespace, manager: MailManager) -> None:
                 pass
     except Exception as e:
         logger.error(f"Error handling folder command: {e}")
-        console.print(f"[red]Error: {e}[/red]")
+        CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)

@@ -1,6 +1,9 @@
+import logging
 from typing import Any
 import requests
 from crypto_utils import decrypt_data, encrypt_data
+
+logger = logging.getLogger("wugong.mail.authenticator")
 
 class MailAuthenticator:
     def __init__(self, encryption_enabled: bool, salt: str):
@@ -28,7 +31,7 @@ class MailAuthenticator:
         if not (refresh_token := auth.get("refresh_token")) or not (token_url := auth.get("token_url")):
             return None
 
-        print(f"🔄 Refreshing OAuth2 token for '{account.get('friendly_name')}'...")
+        logger.info(f"🔄 Refreshing OAuth2 token for '{account.get('friendly_name')}'...")
         
         payload = {
             'client_id': auth.get('client_id'),
@@ -58,5 +61,5 @@ class MailAuthenticator:
                         auth_ref["refresh_token"] = new_refresh_token
             return new_access_token
         except Exception as e:
-            print(f"Error refreshing token: {e}")
+            logger.error(f"Error refreshing token: {e}")
             return None

@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from typing import Optional, Union
 from rich.logging import RichHandler
+from rich.console import Console
 
 def setup_logger(
     name: str = "wugong", 
@@ -40,8 +41,9 @@ def setup_logger(
         datefmt="[%X]"
     )
 
-    # Console handler using RichHandler
+    # Console handler using RichHandler - Default to stderr to avoid breaking JSON output
     console_handler = RichHandler(
+        console=Console(stderr=True),
         rich_tracebacks=True,
         show_time=False,
         show_path=False,
@@ -71,7 +73,7 @@ def setup_logger(
         file_handler.setLevel(file_level)
         logger.addHandler(file_handler)
     except Exception as e:
-        print(f"Warning: Could not setup file logging: {e}")
+        logger.warning(f"Could not setup file logging: {e}")
 
     return logger
 
@@ -81,6 +83,23 @@ def update_console_level(level: Union[int, str]) -> None:
     for handler in root_logger.handlers:
         if isinstance(handler, RichHandler) or (isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler)):
             handler.setLevel(level)
+
+def disable_logging() -> None:
+    """Disables all logging for the 'wugong' hierarchy."""
+    root_logger = logging.getLogger("wugong")
+    root_logger.setLevel(logging.CRITICAL + 1)
+    for handler in root_logger.handlers:
+        handler.setLevel(logging.CRITICAL + 1)
+    
+    # Also disable at the library level
+    logging.disable(logging.CRITICAL)
+
+def enable_logging() -> None:
+    """Enables logging back to default levels."""
+    logging.disable(logging.NOTSET)
+    root_logger = logging.getLogger("wugong")
+    root_logger.setLevel(logging.DEBUG)
+    # Note: this doesn't restore original handler levels, but it's enough for tests
 
 # Default root logger instance
 logger = setup_logger("wugong")

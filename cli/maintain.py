@@ -12,6 +12,8 @@ from rich.markdown import Markdown
 
 from typing import Any, Optional
 
+from cli.render import CLIRenderer
+
 logger = logging.getLogger("cli.maintainer")
 console = Console()
 
@@ -29,17 +31,20 @@ def get_install_dir() -> Path:
 def handle_upgrade(args: Optional[argparse.Namespace] = None, manager: Any = None) -> None:
     """Handles the 'upgrade' command to update Wugong Email code directly in Python."""
     import questionary
+    json_out = getattr(args, "json", False)
+    non_interactive = getattr(args, "non_interactive", False)
     install_dir = get_install_dir()
     version_file = install_dir / ".version"
     raw_url_base = "https://raw.githubusercontent.com/kevinhuang001/wugong-email/main"
     repo_url = "https://github.com/kevinhuang001/wugong-email.git"
     
     if not install_dir.exists():
-        console.print(f"[red]❌ Installation directory {install_dir} not found. Upgrade aborted.[/red]")
+        CLIRenderer.render_message(f"Installation directory {install_dir} not found. Upgrade aborted.", type="error", json_output=json_out)
         return
 
     current_version = version_file.read_text().strip() if version_file.exists() else "Unknown"
-    console.print(f"[blue]🔄 Checking for updates... (Current version: {current_version})[/blue]")
+    if not json_out:
+        console.print(f"[blue]🔄 Checking for updates... (Current version: {current_version})[/blue]")
     
     try:
         # Check remote version
@@ -47,88 +52,124 @@ def handle_upgrade(args: Optional[argparse.Namespace] = None, manager: Any = Non
             remote_version = response.read().decode().strip()
             
         if remote_version == current_version and not getattr(args, "force", False):
-            console.print(f"[green]✅ Wugong Email is already up to date ({current_version}).[/green]")
+            CLIRenderer.render_message(f"Wugong Email is already up to date ({current_version}).", type="success", json_output=json_out, data={"current_version": current_version})
             return
             
-        console.print(f"[yellow]🔔 A new version of Wugong Email is available! (v{current_version} -> v{remote_version})[/yellow]")
+        if not json_out:
+            console.print(f"[yellow]🔔 A new version of Wugong Email is available! (v{current_version} -> v{remote_version})[/yellow]")
         
         # Show changelog
-        try:
-            with urllib.request.urlopen(f"{raw_url_base}/CHANGELOG.md") as response:
-                changelog_text = response.read().decode()
-                lines = changelog_text.splitlines()
-                relevant_lines = []
-                found_latest = False
-                for line in lines:
-                    if line.startswith("## ["):
-                        if current_version != "Unknown" and f"[{current_version}]" in line:
-                            break
-                        if not found_latest:
-                            found_latest = True
-                        elif current_version == "Unknown":
-                            break
-                    if found_latest:
-                        relevant_lines.append(line)
-                if relevant_lines:
-                    console.print("\n[blue]📄 What's new:[/blue]")
-                    console.print(Markdown("\n".join(relevant_lines)))
-                    console.print("-" * 40 + "\n")
-        except Exception:
-            pass
+        if not json_out:
+            try:
+                with urllib.request.urlopen(f"{raw_url_base}/CHANGELOG.md") as response:
+                    changelog_text = response.read().decode()
+                    lines = changelog_text.splitlines()
+                    relevant_lines = []
+                    found_latest = False
+                    for line in lines:
+                        if line.startswith("## ["):
+                            if current_version != "Unknown" and f"[{current_version}]" in line:
+                                break
+                            if not found_latest:
+                                found_latest = True
+                            elif current_version == "Unknown":
+                                break
+                        if found_latest:
+                            relevant_lines.append(line)
+                    if relevant_lines:
+                        console.print("\n[blue]📄 What's new:[/blue]")
+                        console.print(Markdown("\n".join(relevant_lines)))
+                        console.print("-" * 40 + "\n")
+            except Exception:
+                pass
 
-        if not getattr(args, "yes", False):
+        if not getattr(args, "yes", False) and not non_interactive:
+            if not json_out:
+                console.print("\n[bold cyan]=== Wugong Upgrade ===[/bold cyan]")
             if not questionary.confirm("Do you want to upgrade to the latest version?").ask():
-                console.print("[blue]❌ Upgrade cancelled.[/blue]")
+                if not json_out:
+                    console.print("[yellow]Upgrade aborted by user.[/yellow]")
                 return
 
-        console.print("[yellow]🚀 Upgrading...[/yellow]")
+        if not json_out:
+            console.print("[yellow]🚀 Upgrading...[/yellow]")
         
         # Check if git is available
         if shutil.which("git") is None:
-            console.print("[red]❌ Error: 'git' is not installed. Upgrade requires git.[/red]")
+            CLIRenderer.render_message("'git' is not installed. Upgrade requires git.", type="error", json_output=json_out)
             return
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             
             # Clone repo
-            console.print("[blue]📡 Fetching latest source code...[/blue]")
+            if not json_out:
+                console.print("[blue]📡 Fetching latest source code...[/blue]")
             subprocess.run(["git", "clone", "--depth", "1", repo_url, str(temp_path)], check=True, capture_output=True)
             
             # Sync files
-            console.print("[blue]📦 Syncing files...[/blue]")
+            if not json_out:
+                console.print("[blue]📦 Syncing files...[/blue]")
             
+            def cleanup_obsolete(src_dir: Path, dst_dir: Path, root_dst: Path):
+                """Recursively remove files in dst_dir that are not in src_dir, except protected ones."""
+                if not dst_dir.exists():
+                    return
+                
+                for item in os.listdir(dst_dir):
+                    d_item = dst_dir / item
+                    s_item = src_dir / item
+                    
+                    # 1. Protected items (global)
+                    if item in [".git", ".venv", "__pycache__"] or item.endswith(".db"):
+                        continue
+                        
+                    # 2. Protected items (root level only)
+                    if item == "config.toml" and dst_dir == root_dst:
+                        continue
+                        
+                    # 3. If it doesn't exist in source, delete it
+                    if not s_item.exists():
+                        try:
+                            if d_item.is_dir():
+                                shutil.rmtree(d_item)
+                            else:
+                                os.remove(d_item)
+                        except Exception as e:
+                            logger.warning(f"Could not remove obsolete {d_item}: {e}")
+                    
+                    # 4. If it's a directory and exists in both, recurse
+                    elif d_item.is_dir() and s_item.is_dir():
+                        cleanup_obsolete(s_item, d_item, root_dst)
+
             def ignore_files(dir_path, contents):
                 ignored = []
+                # dir_path is absolute, temp_path is Path object
+                rel_path = Path(dir_path).relative_to(temp_path)
+                
                 for item in contents:
-                    if item == ".git" or item == ".venv" or item == "__pycache__":
+                    # Global ignores
+                    if item in [".git", ".venv", "__pycache__"] or item.endswith(".db"):
                         ignored.append(item)
-                    elif item.endswith(".db"):
-                        ignored.append(item)
-                    elif item == "config.toml" and (Path(dir_path) / item).parent == temp_path:
-                        # Only ignore top-level config.toml to avoid overwriting user config
-                        ignored.append(item)
-                    elif item.startswith("upgrade.") or item.startswith("uninstall."):
-                        # Ignore the old scripts as we are moving logic to Python
+                        continue
+                    
+                    # Do not overwrite config.toml in the root directory
+                    if item == "config.toml" and rel_path == Path("."):
                         ignored.append(item)
                 return ignored
 
-            # Copy files from temp_path to install_dir
-            for item in os.listdir(temp_path):
-                s = temp_path / item
-                d = install_dir / item
+            try:
+                # 1. Cleanup obsolete files first
+                cleanup_obsolete(temp_path, install_dir, install_dir)
                 
-                if item in [".git", ".venv", "__pycache__", "config.toml"] or item.endswith(".db"):
-                    continue
-                if item.startswith("upgrade.") or item.startswith("uninstall."):
-                    continue
-                
-                if s.is_dir():
-                    if d.exists():
-                        shutil.rmtree(d)
-                    shutil.copytree(s, d, ignore=ignore_files)
-                else:
-                    shutil.copy2(s, d)
+                # 2. Directly copy with overwrite (dirs_exist_ok=True)
+                # This works on Windows because Python doesn't lock .py files after reading
+                shutil.copytree(temp_path, install_dir, ignore=ignore_files, dirs_exist_ok=True)
+                if not json_out:
+                    console.print("[green]✅ Files synchronized successfully.[/green]")
+            except Exception as e:
+                logger.warning(f"Sync failed: {e}")
+                raise e
             
             # Update .version
             (install_dir / ".version").write_text(remote_version)
@@ -139,7 +180,8 @@ def handle_upgrade(args: Optional[argparse.Namespace] = None, manager: Any = Non
                 venv_python = install_dir / ".venv" / "Scripts" / "python.exe"
             
             if venv_python.exists():
-                console.print("[blue]🐍 Updating dependencies...[/blue]")
+                if not json_out:
+                    console.print("[blue]🐍 Updating dependencies...[/blue]")
                 try:
                     # Try uv if present
                     subprocess.run([str(venv_python), "-m", "uv", "pip", "install", "-r", str(install_dir / "requirements.txt")], check=True, capture_output=True)
@@ -147,19 +189,20 @@ def handle_upgrade(args: Optional[argparse.Namespace] = None, manager: Any = Non
                     # Fallback to pip
                     subprocess.run([str(venv_python), "-m", "pip", "install", "-r", str(install_dir / "requirements.txt")], check=True, capture_output=True)
 
-        console.print(f"[green]✨ Successfully upgraded to version {remote_version}![/green]")
+        # Upgrade success
+        CLIRenderer.render_message(f"Successfully upgraded to v{remote_version}.", type="success", json_output=json_out, data={"new_version": remote_version})
         
     except Exception as e:
-        console.print(f"[red]❌ Upgrade failed: {e}[/red]")
-        logger.error(f"Upgrade error: {e}")
+        CLIRenderer.render_message(f"Error during upgrade: {e}", type="error", json_output=json_out)
 
 def handle_uninstall(args: Optional[argparse.Namespace] = None, manager: Any = None) -> None:
     """Handles the 'uninstall' command directly in Python."""
     import questionary
+    json_out = getattr(args, "json", False)
     non_interactive = getattr(args, 'non_interactive', False)
     keep_data_arg = getattr(args, 'keep_data', False)
 
-    if not non_interactive:
+    if not getattr(args, "yes", False) and not non_interactive and not json_out:
         if not questionary.confirm("Are you sure you want to uninstall Wugong Email? This will remove all code and configuration.").ask():
             return
         keep_data = questionary.confirm("Keep local email cache and database?").ask()
@@ -171,7 +214,8 @@ def handle_uninstall(args: Optional[argparse.Namespace] = None, manager: Any = N
     
     try:
         # 1. Remove Crontab entries
-        console.print("[blue]⏰ Removing scheduled sync tasks from Crontab...[/blue]")
+        if not json_out:
+            console.print("[blue]⏰ Removing scheduled sync tasks from Crontab...[/blue]")
         if os.name != 'nt':
             try:
                 result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
@@ -181,24 +225,40 @@ def handle_uninstall(args: Optional[argparse.Namespace] = None, manager: Any = N
                     if len(lines) != len(new_lines):
                         new_cron = "\n".join(new_lines) + "\n"
                         subprocess.run(["crontab", "-"], input=new_cron, text=True)
-                        console.print("[green]✅ Crontab entries removed.[/green]")
+                        if not json_out:
+                            console.print("[green]✅ Crontab entries removed.[/green]")
             except Exception as e:
-                console.print(f"[yellow]⚠️  Could not update crontab: {e}[/yellow]")
+                if not json_out:
+                    console.print(f"[yellow]⚠️  Could not update crontab: {e}[/yellow]")
 
         # 2. Remove Installation Directory
         if install_dir.exists():
-            console.print(f"[blue]📁 Removing installation directory: {install_dir}...[/blue]")
-            shutil.rmtree(install_dir)
-            console.print("[green]✅ Installation directory removed.[/green]")
+            if not json_out:
+                console.print(f"[blue]📁 Removing installation directory: {install_dir}...[/blue]")
+            try:
+                shutil.rmtree(install_dir)
+                if not json_out:
+                    console.print("[green]✅ Installation directory removed.[/green]")
+            except Exception as e:
+                if os.name == 'nt':
+                    if not json_out:
+                        console.print(f"[yellow]⚠️  Could not remove some files in {install_dir} (likely because they are in use).[/yellow]")
+                        console.print(f"[yellow]Please remove the directory manually after the program exits.[/yellow]")
+                else:
+                    raise e
         
         # 3. Remove Configuration Directory
         if not keep_data and config_dir.exists():
-            console.print(f"[blue]📁 Removing configuration directory: {config_dir}...[/blue]")
+            if not json_out:
+                console.print(f"[blue]📁 Removing configuration directory: {config_dir}...[/blue]")
             shutil.rmtree(config_dir)
-            console.print("[green]✅ Configuration directory removed.[/green]")
+            if not json_out:
+                console.print("[green]✅ Configuration directory removed.[/green]")
             
-        console.print("[green]👋 Wugong Email has been uninstalled.[/green]")
-        console.print(f"Note: If you added {install_dir} to your PATH, please remove it manually.")
+        CLIRenderer.render_message("Wugong Email has been uninstalled.", type="success", json_output=json_out)
+        if not json_out:
+            console.print(f"Note: If you added {install_dir} to your PATH, please remove it manually.")
         
     except Exception as e:
-        console.print(f"[red]❌ Uninstall failed: {e}[/red]")
+        CLIRenderer.render_message(f"Uninstall failed: {e}", type="error", json_output=json_out)
+

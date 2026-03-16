@@ -10,6 +10,8 @@ from mail import MailManager
 from crypto_utils import generate_salt, encrypt_data
 from schedule import setup_scheduling
 
+from cli.render import CLIRenderer
+
 logger = logging.getLogger("cli.configure")
 console = Console()
 
@@ -18,7 +20,8 @@ def configure_wizard(
     console_log_level: str | None = None,
     file_log_level: str | None = None,
     sync_interval: int | None = None,
-    non_interactive: bool = False
+    non_interactive: bool = False,
+    json_output: bool = False
 ) -> bool:
     """Allows modifying the sync interval and displays a message about password changes."""
     config_path = config.get_config_path()
@@ -28,6 +31,7 @@ def configure_wizard(
         if non_interactive:
             # === Non-Interactive Flow ===
             if not current_config.get("general", {}).get("salt"):
+                CLIRenderer.render_message("Wugong is not initialized yet. Please run 'wugong init' first.", type="error", json_output=json_output)
                 return False
 
             # Logging Setup
@@ -44,24 +48,31 @@ def configure_wizard(
             if interval != current_interval or console_log_level != current_console_level or file_log_level != current_file_level:
                 encryption_password = config.get_verified_password(current_config, args)
 
-                setup_scheduling(interval, encryption_password)
+                if not setup_scheduling(interval, encryption_password, json_output=json_output):
+                    CLIRenderer.render_message("Failed to update scheduled sync task. Local configuration was still updated.", type="warning", json_output=json_output)
+
                 general = current_config.setdefault("general", {})
                 general["sync_interval"] = interval
                 general["console_log_level"] = console_log_level
                 general["file_log_level"] = file_log_level
                 config.save_config(current_config, config_path)
             
+            CLIRenderer.render_message("Configuration updated successfully.", type="success", json_output=json_output, data={
+                "interval": interval,
+                "console_log_level": console_log_level,
+                "file_log_level": file_log_level
+            })
             return True
 
         # === Interactive Flow ===
-        console.print("\n[bold cyan]=== Wugong Email Configuration ===[/bold cyan]")
-
         if not current_config.get("general", {}).get("salt"):
-            console.print("\n[red]❌ Wugong is not initialized yet. Please run 'wugong init' first.[/red]")
+            CLIRenderer.render_message("Wugong is not initialized yet. Please run 'wugong init' first.", type="error", json_output=json_output)
             return False
 
-        console.print("\n[info]ℹ️  Encryption password cannot be modified.[/info]")
-        console.print("[warning]⚠️  If you need to change your encryption password, please uninstall and reinstall Wugong.[/warning]")
+        if not json_output:
+            console.print("\n[bold cyan]=== Wugong Email Configuration ===[/bold cyan]")
+            console.print("\n[info]ℹ️  Encryption password cannot be modified.[/info]")
+            console.print("[warning]⚠️  If you need to change your encryption password, please uninstall and reinstall Wugong.[/warning]")
 
         # Logging Setup
         log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -100,23 +111,29 @@ def configure_wizard(
         if interval != current_interval or console_log_level != current_console_level or file_log_level != current_file_level:
             encryption_password = config.get_verified_password(current_config, args, prompt_text="Enter your encryption password to update the scheduled task:")
 
-            setup_scheduling(interval, encryption_password)
+            if not setup_scheduling(interval, encryption_password, json_output=json_output):
+                CLIRenderer.render_message("Failed to update scheduled sync task. Local configuration was still updated.", type="warning", json_output=json_output)
+
             general = current_config.setdefault("general", {})
             general["sync_interval"] = interval
             general["console_log_level"] = console_log_level
             general["file_log_level"] = file_log_level
             
             config.save_config(current_config, config_path)
-            console.print(f"\n[green]✅ Configuration updated:[/green] interval=[cyan]{interval}m[/cyan], console=[cyan]{console_log_level}[/cyan], file=[cyan]{file_log_level}[/cyan].")
+            CLIRenderer.render_message(f"Configuration updated: interval={interval}m, console={console_log_level}, file={file_log_level}.", type="success", json_output=json_output, data={
+                "interval": interval,
+                "console_log_level": console_log_level,
+                "file_log_level": file_log_level
+            })
         else:
-            console.print("\n[yellow]No changes made to configuration.[/yellow]")
+            CLIRenderer.render_message("No changes made to configuration.", type="warning", json_output=json_output)
 
         return True
     except KeyboardInterrupt:
-        console.print("\n[yellow]Configuration cancelled.[/yellow]")
+        CLIRenderer.render_message("Configuration cancelled.", type="warning", json_output=json_output)
         return False
     except Exception as e:
-        console.print(f"\n[red]❌ Error during configuration: {e}[/red]")
+        CLIRenderer.render_message(f"Error during configuration: {e}", type="error", json_output=json_output)
         return False
 
 def init_wizard(
@@ -126,7 +143,8 @@ def init_wizard(
     console_log_level: str | None = None,
     file_log_level: str | None = None,
     sync_interval: int | None = None,
-    non_interactive: bool = False
+    non_interactive: bool = False,
+    json_output: bool = False
 ) -> tuple[bool, str | None]:
     """Initializes the configuration, sets up encryption, and schedules periodic sync."""
     config_path = config.get_config_path()
@@ -136,7 +154,8 @@ def init_wizard(
         if non_interactive:
             # === Non-Interactive Flow ===
             if current_config.get("general", {}).get("salt"):
-                raise ValueError("Wugong is already initialized. Please use 'wugong configure' to modify settings or delete the config file to reset.")
+                CLIRenderer.render_message("Wugong is already initialized. Please use 'wugong configure' to modify settings or delete the config file to reset.", type="warning", json_output=json_output)
+                return True, None
 
             # 1. Encryption Setup
             encrypt_creds = encrypt_creds if encrypt_creds is not None else True
@@ -162,7 +181,7 @@ def init_wizard(
             interval = sync_interval if sync_interval is not None else 10
 
             if interval > 0:
-                setup_scheduling(interval, encryption_password)
+                setup_scheduling(interval, encryption_password, json_output=json_output)
 
             # 3. Save initial config
             general = current_config.setdefault("general", {})
@@ -176,27 +195,31 @@ def init_wizard(
             general["file_log_level"] = file_log_level
 
             config.save_config(current_config, config_path)
+            CLIRenderer.render_message("Wugong initialized successfully.", type="success", json_output=json_output, data={
+                "config_path": str(config_path),
+                "interval": interval,
+                "console_log_level": console_log_level,
+                "file_log_level": file_log_level
+            })
             return True, encryption_password
 
         # === Interactive Flow ===
-        console.print("\n[bold cyan]=== Wugong Email Initialization ===[/bold cyan]")
+        if not json_output:
+            console.print("\n[bold cyan]=== Wugong Email Initialization ===[/bold cyan]")
 
         # Check if already initialized
         if current_config.get("general", {}).get("salt"):
-            console.print("\n[red]❌ Wugong is already initialized.[/red]")
-            console.print("[warning]⚠️  If you need to change your encryption password, please uninstall and reinstall Wugong.[/warning]")
-            console.print("[info]💡 Use 'wugong configure' to modify settings like the sync interval.[/info]")
+            CLIRenderer.render_message("Wugong is already initialized. Use 'wugong configure' to modify settings.", type="warning", json_output=json_output)
             return False, None
 
-        # 1. Encryption Setup
+        # 1. Encryption Choice
         if encrypt_creds is None:
-            if (encrypt_creds := questionary.confirm("Enable credential encryption? (Highly Recommended)", default=True).ask()) is None:
+            encryption_enabled = questionary.confirm("Enable encryption? (Recommended)", default=True).ask()
+            if encryption_enabled is None:
                 raise KeyboardInterrupt
-
-        if encrypt_emails is None:
-            if (encrypt_emails := questionary.confirm("Encrypt locally cached email bodies?", default=True).ask()) is None:
-                raise KeyboardInterrupt
-
+            encrypt_creds = encryption_enabled
+            encrypt_emails = encryption_enabled
+        
         encrypt_enabled = encrypt_creds or encrypt_emails
         salt_val = ""
         canary = ""
@@ -208,12 +231,12 @@ def init_wizard(
                 raise KeyboardInterrupt
             
             if not encryption_password:
-                console.print("[red]❌ Encryption password cannot be empty when encryption is enabled. Initialization aborted.[/red]")
+                CLIRenderer.render_message("Encryption password cannot be empty when encryption is enabled. Initialization aborted.", type="error", json_output=json_output)
                 return False, None
             salt_raw = generate_salt()
             salt_val = base64.b64encode(salt_raw).decode()
             canary = encrypt_data("wugong", encryption_password, salt_raw)
-        else:
+        elif not json_output:
             console.print("\n[warning]⚠️  Encryption is disabled. Your credentials and data will be stored in plain text.[/warning]")
 
         # 2. Logging Setup
@@ -244,7 +267,7 @@ def init_wizard(
             interval = sync_interval
 
         if interval > 0:
-            setup_scheduling(interval, encryption_password)
+            setup_scheduling(interval, encryption_password, json_output=json_output)
 
         # 4. Save initial config
         general = current_config.setdefault("general", {})
@@ -260,25 +283,31 @@ def init_wizard(
         config.save_config(current_config, config_path)
 
         # 5. Success Message
-        console.print(f"\n[green]✅ Configuration initialized and saved to[/green] [cyan]{config_path}[/cyan]")
-        console.print(f"[info]ℹ️  Sync interval:[/info] [cyan]{interval}[/cyan] minutes.")
-        console.print(f"[info]ℹ️  Console log level:[/info] [cyan]{console_log_level}[/cyan]")
-        console.print(f"[info]ℹ️  File log level:[/info] [cyan]{file_log_level}[/cyan] (logged to [cyan]~/.wugong/wugong.log[/cyan])")
+        CLIRenderer.render_message("Wugong initialized successfully.", type="success", json_output=json_output, data={
+            "config_path": str(config_path),
+            "interval": interval,
+            "console_log_level": console_log_level,
+            "file_log_level": file_log_level
+        })
 
-        if not current_config.get("accounts"):
+        if not current_config.get("accounts") and not json_output:
             console.print("\n[info]💡 Tip: No accounts found. Use 'wugong account add' to add your first email account.[/info]")
+            if questionary.confirm("Do you want to add an account now?").ask():
+                from cli.commands.account import account_add_wizard
+                account_add_wizard(current_config, args, json_output=json_output)
 
         return True, encryption_password
     except KeyboardInterrupt:
-        console.print("\n[yellow]Initialization cancelled.[/yellow]")
+        CLIRenderer.render_message("Initialization cancelled.", type="warning", json_output=json_output)
         return False, None
     except Exception as e:
-        console.print(f"\n[red]❌ Error during initialization: {e}[/red]")
+        CLIRenderer.render_message(f"Error during initialization: {e}", type="error", json_output=json_output)
         return False, None
 
 def handle_init(args: argparse.Namespace, manager: MailManager) -> None:
     """Handles the 'init' command to setup encryption and sync schedule."""
-    if os.name == 'nt':
+    json_out = getattr(args, "json", False)
+    if os.name == 'nt' and not json_out:
         import ctypes
         if not ctypes.windll.shell32.IsUserAnAdmin():
             console.print("[yellow]Warning: You are not running as administrator. Scheduling may fail.[/yellow]")
@@ -291,15 +320,19 @@ def handle_init(args: argparse.Namespace, manager: MailManager) -> None:
         console_log_level=args.console_log_level,
         file_log_level=args.file_log_level,
         sync_interval=args.sync_interval,
-        non_interactive=getattr(args, "non_interactive", False)
+        non_interactive=getattr(args, "non_interactive", False),
+        json_output=json_out
     )
 
 def handle_configure(args: argparse.Namespace, manager: MailManager) -> None:
     """Handles the 'configure' command to modify sync settings."""
+    json_out = getattr(args, "json", False)
     configure_wizard(
         args=args,
         console_log_level=args.console_log_level,
         file_log_level=args.file_log_level,
         sync_interval=args.sync_interval,
-        non_interactive=getattr(args, "non_interactive", False)
+        non_interactive=getattr(args, "non_interactive", False),
+        json_output=json_out
     )
+

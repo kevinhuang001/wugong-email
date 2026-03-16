@@ -42,14 +42,16 @@ def get_mock_args(**kwargs):
         'console_log_level': None,
         'file_log_level': None,
         'sync_interval': None,
-        'non_interactive': False
+        'non_interactive': False,
+        'json': False
     }
     defaults.update(kwargs)
     return argparse.Namespace(**defaults)
 
+@patch('cli.configure.CLIRenderer.render_message')
 @patch('cli.configure.console')
 @patch('cli.configure.init_wizard')
-def test_handle_init_windows_no_admin(mock_init_wizard, mock_console, mock_manager):
+def test_handle_init_windows_no_admin(mock_init_wizard, mock_console, mock_render_message, mock_manager):
     args = get_mock_args()
     with patch('os.name', 'nt'):
         # Mock ctypes
@@ -61,9 +63,10 @@ def test_handle_init_windows_no_admin(mock_init_wizard, mock_console, mock_manag
             assert any("not running as administrator" in str(call).lower() for call in mock_console.print.call_args_list)
     mock_init_wizard.assert_called_once()
 
+@patch('cli.configure.CLIRenderer.render_message')
 @patch('cli.configure.console')
 @patch('cli.configure.init_wizard')
-def test_handle_init_unix(mock_init_wizard, mock_console, mock_manager):
+def test_handle_init_unix(mock_init_wizard, mock_console, mock_render_message, mock_manager):
     args = get_mock_args()
     with patch('os.name', 'posix'):
         handle_init(args, mock_manager)
@@ -71,9 +74,26 @@ def test_handle_init_unix(mock_init_wizard, mock_console, mock_manager):
     # Should not print admin warning on posix
     assert not any("administrator" in str(call).lower() for call in mock_console.print.call_args_list)
 
+@patch('cli.configure.CLIRenderer.render_message')
 @patch('cli.configure.console')
 @patch('cli.configure.configure_wizard')
-def test_handle_configure(mock_configure_wizard, mock_console, mock_manager):
+def test_handle_configure(mock_configure_wizard, mock_console, mock_render_message, mock_manager):
     args = get_mock_args()
     handle_configure(args, mock_manager)
     mock_configure_wizard.assert_called_once()
+
+@patch('cli.configure.CLIRenderer.render_message')
+@patch('cli.configure.init_wizard')
+def test_handle_init_json(mock_init_wizard, mock_render_message, mock_manager):
+    args = get_mock_args(json=True)
+    handle_init(args, mock_manager)
+    mock_init_wizard.assert_called_once()
+    assert mock_init_wizard.call_args[1]['json_output'] is True
+
+@patch('cli.configure.CLIRenderer.render_message')
+@patch('cli.configure.configure_wizard')
+def test_handle_configure_json(mock_configure_wizard, mock_render_message, mock_manager):
+    args = get_mock_args(json=True)
+    handle_configure(args, mock_manager)
+    mock_configure_wizard.assert_called_once()
+    assert mock_configure_wizard.call_args[1]['json_output'] is True

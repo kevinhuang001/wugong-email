@@ -3,6 +3,7 @@ import base64
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
+from email.utils import formatdate
 from pathlib import Path
 from typing import Any, Callable
 from .connector import MailConnector
@@ -24,6 +25,7 @@ class MailSender:
         msg['From'] = f"{friendly_name} <{sender_email}>" if friendly_name else sender_email
         msg['To'] = to
         msg['Subject'] = subject
+        msg['Date'] = formatdate(localtime=True)
         msg.attach(MIMEText(body, 'plain'))
 
         if attachments:

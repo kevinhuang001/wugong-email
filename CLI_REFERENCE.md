@@ -18,6 +18,7 @@ Wugong Email's wizards (`init`, `account add`, `configure`) support **partial in
 | `--encryption-password` | `-p` | Specify the encryption password (can also be set via `WUGONG_PASSWORD` environment variable). |
 | `--log-level` | `-L` | Override the console log level (DEBUG, INFO, WARNING, ERROR, CRITICAL). |
 | `--non-interactive` | | Run in non-interactive mode. |
+| `--json` | | Output result in a single, standardized JSON block. |
 
 ---
 

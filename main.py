@@ -20,6 +20,8 @@ from logger import setup_logger, update_console_level
 
 from rich.console import Console
 
+from cli.render import CLIRenderer
+
 # Set global timeout for all network operations
 socket.setdefaulttimeout(30)
 
@@ -30,13 +32,15 @@ console = Console()
 def main() -> None:
     # Common arguments for all commands
     common_parser = argparse.ArgumentParser(add_help=False)
-    common_parser.add_argument("--encryption-password", "-p", default=argparse.SUPPRESS, help="Encryption password (also looks for WUGONG_PASSWORD environment variable)")
-    common_parser.add_argument("--log-level", "-L", default=argparse.SUPPRESS, help="Override console log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
-    common_parser.add_argument("--non-interactive", action="store_true", default=argparse.SUPPRESS, help="Run in non-interactive mode")
+    common_parser.add_argument("--encryption-password", "-p", help="Encryption password (also looks for WUGONG_PASSWORD environment variable)")
+    common_parser.add_argument("--log-level", "-L", help="Override console log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
+    common_parser.add_argument("--non-interactive", action="store_true", help="Run in non-interactive mode")
+    common_parser.add_argument("--json", action="store_true", help="Output results in JSON format")
     
     parser = argparse.ArgumentParser(description="Wugong Email CLI Manager", parents=[common_parser])
     parser.add_argument("--version", "-v", action="store_true", help="Show the version of Wugong Email")
     
+    # Enable global arguments to be used AFTER subcommands as well
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # List command
@@ -163,11 +167,12 @@ def main() -> None:
     uninstall_parser.add_argument("--keep-data", action="store_true", help="Keep local email cache and database")
 
     args = parser.parse_args()
+    json_out = getattr(args, "json", False)
 
     if args.version:
         v_file = Path(__file__).parent / ".version"
         version = v_file.read_text().strip() if v_file.exists() else "Unknown"
-        console.print(f"[bold blue]Wugong Email[/bold blue] [cyan]v{version}[/cyan]")
+        CLIRenderer.render_message(f"Wugong Email v{version}", type="info", json_output=json_out, data={"version": version})
         return
 
     log_level = getattr(args, "log_level", None)
@@ -212,9 +217,18 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        console.print("\n[yellow]Operation cancelled by user.[/yellow]")
+        # Check if --json was used
+        json_out = False
+        if "--json" in sys.argv:
+            json_out = True
+        CLIRenderer.render_message("Operation cancelled by user.", type="warning", json_output=json_out)
         sys.exit(0)
     except Exception as e:
         logger.critical(f"Unhandled exception: {e}", exc_info=True)
-        console.print(f"\n[bold red]Fatal Error:[/bold red] {e}")
+        # Check if --json was used
+        json_out = False
+        if "--json" in sys.argv:
+            json_out = True
+        CLIRenderer.render_message(f"Fatal Error: {e}", type="error", json_output=json_out)
         sys.exit(1)
+

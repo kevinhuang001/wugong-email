@@ -117,7 +117,8 @@ class MailSynchronizer:
                 server_uids = {uid.decode() for uid in uids_raw}
                 
                 # Identify UIDs to process
-                if uids_to_process := self._get_uids_to_process(uids_raw, limit, is_initial_sync, search_criteria):
+                uids_to_process = self._get_uids_to_process(uids_raw, limit, is_initial_sync, search_criteria)
+                if uids_to_process:
                     newly_fetched_emails = self._sync_emails_internal(
                         mail, account_name, folder, uids_to_process, auth_password, progress_callback
                     )
@@ -233,9 +234,17 @@ class MailSynchronizer:
             batch = uids[i:i + batch_size]
             uids_str = ",".join([u.decode() for u in batch])
             res, data = mail.uid('fetch', uids_str, '(FLAGS)')
+            logger.info(f"Fetch flags for {uids_str}: {res}, {data}")
             if res == "OK":
                 for item in data:
-                    if isinstance(item, tuple) and (resp_text := item[0].decode()):
+                    resp_text = None
+                    if isinstance(item, tuple):
+                        resp_text = item[0].decode()
+                    elif isinstance(item, bytes):
+                        resp_text = item.decode()
+                    
+                    if resp_text:
+                        logger.debug(f"Parsing fetch response: {resp_text}")
                         if uid_match := re.search(r'UID (\d+)', resp_text):
                             uid = uid_match.group(1)
                             statuses[uid] = '\\Seen' in resp_text

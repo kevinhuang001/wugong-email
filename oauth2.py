@@ -17,6 +17,8 @@ os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 # Relax scope matching for providers like Microsoft that might return different scopes than requested
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
 
+logger = logging.getLogger("wugong.oauth2")
+
 def start_oauth_flow(client_id: str, client_secret: str, auth_url: str, token_url: str, scopes: list[str], redirect_uri: str) -> dict:
     """Starts a local server to handle OAuth2 callback and returns the token."""
     app = Flask(__name__)
@@ -78,11 +80,11 @@ def start_oauth_flow(client_id: str, client_secret: str, auth_url: str, token_ur
     oauth = OAuth2Session(client_id, scope=scopes, redirect_uri=redirect_uri)
     authorization_url, _ = oauth.authorization_url(auth_url, access_type="offline", prompt="consent")
     
-    print(f"\nOpening browser for authorization...")
-    print(f"If the browser doesn't open, please visit: {authorization_url}")
+    logger.info(f"\nOpening browser for authorization...")
+    logger.info(f"If the browser doesn't open, please visit: {authorization_url}")
     webbrowser.open(authorization_url)
 
-    print("Waiting for callback on local server...")
+    logger.info("Waiting for callback on local server...")
     stop_event.wait(timeout=120)
 
     return token_data

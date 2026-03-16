@@ -1,7 +1,10 @@
 import argparse
 import sys
 import imaplib
+import json
+import logging
 from typing import Any
+from contextlib import nullcontext
 from rich.console import Console
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
@@ -11,7 +14,9 @@ import config
 from mail import MailManager
 from crypto_utils import encrypt_data
 from oauth2 import start_oauth_flow
+from cli.render import CLIRenderer
 
+logger = logging.getLogger(__name__)
 console = Console()
 
 EMAIL_PROVIDERS = {
@@ -115,6 +120,7 @@ def test_imap_connection(imap_server: str, imap_port: int, username: str, passwo
 
 def account_add_wizard(
     args: argparse.Namespace | None = None,
+    current_config: dict[str, Any] | None = None,
     friendly_name: str | None = None,
     provider: str | None = None,
     login_method: str | None = None,
@@ -133,11 +139,24 @@ def account_add_wizard(
     scopes: list[str] | None = None,
     redirect_uri: str | None = None,
     sync_limit: str | int | None = None,
-    non_interactive: bool = False
+    non_interactive: bool = False,
+    json_output: bool = False,
+    status_messages: list[str] | None = None
 ) -> tuple[list, str | None]:
     """Interactive or non-interactive wizard to add one or more email accounts."""
-    config_path = config.get_config_path()
-    current_config = config.load_config(config_path)
+    if status_messages is None:
+        status_messages = []
+    
+    def add_message(msg: str, type: str = "info"):
+        if json_output:
+            status_messages.append(msg)
+        else:
+            CLIRenderer.render_message(msg, type=type, json_output=False)
+
+    if current_config is None:
+        config_path = config.get_config_path()
+        current_config = config.load_config(config_path)
+    
     original_accounts_count = len(current_config.get("accounts", []))
     newly_added = []
     encryption_password = None
@@ -158,17 +177,20 @@ def account_add_wizard(
         if non_interactive:
             # === Non-Interactive Flow (Single Account) ===
             if not friendly_name:
-                raise ValueError("Friendly name is required in non-interactive mode.")
+                add_message("Friendly name is required in non-interactive mode.", type="error")
+                return [], None
             if not username:
-                raise ValueError("Email Account (username) is required in non-interactive mode.")
+                add_message("Email Account (username) is required in non-interactive mode.", type="error")
+                return [], None
             
             # Check for unique friendly name
             if is_friendly_name_taken(friendly_name):
-                raise ValueError(f"Account with friendly name '{friendly_name}' already exists.")
+                add_message(f"Account with friendly name '{friendly_name}' already exists.", type="error")
+                return [], None
 
             # Warn for duplicate email address
             if is_username_taken(username):
-                console.print(f"[yellow]Warning: An account with username '{username}' is already configured.[/yellow]")
+                add_message(f"Warning: An account with username '{username}' is already configured.", type="warning")
 
             # Pre-check encryption password if encryption is enabled
             encryption_password = config.get_verified_password(current_config, args)
@@ -187,14 +209,16 @@ def account_add_wizard(
             match login_method:
                 case "Account/Password":
                     if not password:
-                        raise ValueError("Password is required in non-interactive mode for Account/Password login.")
+                        add_message("Password is required in non-interactive mode for Account/Password login.", type="error")
+                        return [], None
                     auth_details = {
                         "username": username,
                         "password": encrypt_data(password, encryption_password, salt_val) if encrypt_enabled else password
                     }
                 case "OAuth2":
                     if not client_id or not client_secret:
-                        raise ValueError("Client ID and Client Secret are required in non-interactive mode for OAuth2 login.")
+                        add_message("Client ID and Client Secret are required in non-interactive mode for OAuth2 login.", type="error")
+                        return [], None
                     auth_url = auth_url or provider_info.get("auth_url", "")
                     token_url = token_url or provider_info.get("token_url", "")
                     scopes = scopes or provider_info.get("scopes", [])
@@ -202,7 +226,8 @@ def account_add_wizard(
                     # Use password as refresh token in non-interactive OAuth2 if needed
                     refresh_token_val = password or ""
                     if not refresh_token_val:
-                        raise ValueError("Refresh Token is required in non-interactive mode for OAuth2 login (provide via --password).")
+                        add_message("Refresh Token is required in non-interactive mode for OAuth2 login (provide via --password).", type="error")
+                        return [], None
                     
                     if encrypt_enabled:
                         auth_details = {
@@ -246,19 +271,29 @@ def account_add_wizard(
             if login_method == "Account/Password":
                 success, msg = test_imap_connection(imap_server, imap_port, username, password=password, tls_method=imap_tls_method)
             elif login_method == "OAuth2":
-                console.print("[yellow]Skipping connection test for non-interactive OAuth2 (requires refresh token exchange).[/yellow]")
+                add_message("Skipping connection test for non-interactive OAuth2 (requires refresh token exchange).", type="warning")
             
             if not success:
-                console.print(f"[red]❌ Connection test failed for '{friendly_name}': {msg}[/red]")
-                raise ValueError(f"Connection test failed for '{friendly_name}': {msg}")
+                add_message(f"Connection test failed for '{friendly_name}': {msg}", type="error")
+                return [], None
 
-            console.print(f"[green]✅ Connection test successful for '{friendly_name}'![/green]")
+            add_message(f"Connection test successful for '{friendly_name}'!", type="success")
             newly_added.append((account, limit))
             return newly_added, encryption_password
 
         # === Interactive Flow (Multi-Account) ===
+        # If encryption is enabled, we should verify the master password ONCE at the beginning
+        # to ensure the user doesn't waste time entering account details if they don't know the password.
+        if encrypt_enabled and encryption_password is None:
+            try:
+                encryption_password = config.get_verified_password(current_config, args, prompt_text="Enter your encryption password to proceed with adding accounts:")
+            except ValueError as e:
+                add_message(str(e), type="error")
+                return [], None
+
         while True:
-            console.print("\n[bold cyan]=== Add New Email Account ===[/bold cyan]")
+            if not json_output:
+                console.print("\n[bold cyan]=== Add New Email Account ===[/bold cyan]")
 
             is_default = len(current_config.get("accounts", [])) == 0
             
@@ -270,7 +305,8 @@ def account_add_wizard(
                         raise KeyboardInterrupt
                     
                     if is_friendly_name_taken(curr_friendly_name):
-                        console.print(f"[red]Error: Account with friendly name '{curr_friendly_name}' already exists. Please choose another name.[/red]")
+                        if not json_output:
+                            console.print(f"[red]Error: Account with friendly name '{curr_friendly_name}' already exists. Please choose another name.[/red]")
                         curr_friendly_name = None
                         continue
                     break
@@ -285,7 +321,7 @@ def account_add_wizard(
                     raise KeyboardInterrupt
             
             provider_info = EMAIL_PROVIDERS.get(curr_provider, EMAIL_PROVIDERS["other"])
-            if provider_info["hint"]:
+            if provider_info["hint"] and not json_output:
                 console.print(f"\n[bold yellow]![/bold yellow] {provider_info['hint']}\n")
 
             # 3. Login Method
@@ -302,7 +338,8 @@ def account_add_wizard(
                         raise KeyboardInterrupt
                     
                     if not curr_username:
-                        console.print("[red]Email Account is required.[/red]")
+                        if not json_output:
+                            console.print("[red]Email Account is required.[/red]")
                         continue
                     
                     if is_username_taken(curr_username):
@@ -312,7 +349,8 @@ def account_add_wizard(
                     break
             else:
                 if is_username_taken(curr_username):
-                    console.print(f"[yellow]Warning: An account with username '{curr_username}' is already configured.[/yellow]")
+                    if not json_output:
+                        console.print(f"[yellow]Warning: An account with username '{curr_username}' is already configured.[/yellow]")
 
 
             # 5. IMAP Server
@@ -355,10 +393,7 @@ def account_add_wizard(
                     raise KeyboardInterrupt
                 curr_smtp_port = int(smtp_port_str)
 
-            # 11. Encryption Password (one-time check)
-            if encryption_password is None:
-                encryption_password = config.get_verified_password(current_config, args, prompt_text="Enter your encryption password to encrypt new account credentials:")
-
+            # 11. Connection Test and Credentials
             auth_details = {}
             access_token = ""
             password_val = password
@@ -374,13 +409,16 @@ def account_add_wizard(
                                 raise KeyboardInterrupt
                         
                         # Test Connection Immediately
-                        with console.status(f"[bold green]Testing connection for '{curr_friendly_name}'..."):
+                        if not json_output:
+                            with console.status(f"[bold green]Testing connection for '{curr_friendly_name}'..."):
+                                success, msg = test_imap_connection(curr_imap_server, curr_imap_port, curr_username, password=password_val, tls_method=curr_imap_tls_method)
+                        else:
                             success, msg = test_imap_connection(curr_imap_server, curr_imap_port, curr_username, password=password_val, tls_method=curr_imap_tls_method)
                         
                         if not success:
-                            console.print(f"[red]❌ Connection test failed: {msg}[/red]")
+                            add_message(f"Connection test failed: {msg}", type="error")
                             if not questionary.confirm("Connection failed. Do you want to re-enter credentials?").ask():
-                                console.print("[yellow]Skipping this account.[/yellow]")
+                                add_message("Skipping this account.", type="warning")
                                 break # Skip this account
                             password_val = None # Reset password to ask again
                             continue
@@ -418,7 +456,7 @@ def account_add_wizard(
                             raise KeyboardInterrupt
 
                         # OAuth2 flow
-                        console.print("[bold cyan]Starting OAuth2 flow in your browser...[/bold cyan]")
+                        add_message("Starting OAuth2 flow in your browser...", type="info")
                         try:
                             token_data = start_oauth_flow(curr_client_id, curr_client_secret, curr_auth_url, curr_token_url, curr_scopes, curr_redirect_uri)
                             if token_data and (token := token_data.get('token')):
@@ -431,11 +469,27 @@ def account_add_wizard(
                                         curr_username = detected_email
                                 
                                 # Test connection with access token
-                                with console.status(f"[bold green]Testing connection for '{curr_friendly_name}'..."):
-                                    success, msg = test_imap_connection(curr_imap_server, curr_imap_port, curr_username, access_token=access_token, tls_method=curr_imap_tls_method)
+                                if not json_output:
+                                    with console.status(f"[bold green]Testing connection for '{curr_friendly_name}'..."):
+                                        success, msg = test_imap_connection(
+                                            imap_server=curr_imap_server,
+                                            imap_port=curr_imap_port,
+                                            username=curr_username,
+                                            access_token=access_token,
+                                            tls_method=curr_imap_tls_method
+                                        )
+                                else:
+                                    success, msg = test_imap_connection(
+                                        imap_server=curr_imap_server,
+                                        imap_port=curr_imap_port,
+                                        username=curr_username,
+                                        access_token=access_token,
+                                        tls_method=curr_imap_tls_method
+                                    )
                                 
                                 if not success:
-                                    console.print(f"[red]❌ Connection test failed with obtained tokens: {msg}[/red]")
+                                    if not json_output:
+                                        console.print(f"[red]❌ Connection test failed with obtained tokens: {msg}[/red]")
                                     if not questionary.confirm("Do you want to try OAuth2 again?").ask():
                                         break
                                     continue
@@ -449,18 +503,20 @@ def account_add_wizard(
                                     "redirect_uri": curr_redirect_uri,
                                     "scopes": curr_scopes,
                                     "refresh_token": encrypt_data(refresh_token_val, encryption_password, salt_val) if encrypt_enabled else refresh_token_val,
-                                    "access_token": ""
+                                    "access_token": access_token
                                 }
                             else:
                                 raise ValueError("Failed to obtain tokens.")
                         except Exception as e:
-                            console.print(f"[red]❌ OAuth2 flow failed: {e}[/red]")
+                            if not json_output:
+                                console.print(f"[red]❌ OAuth2 flow failed: {e}[/red]")
                             if not questionary.confirm("OAuth2 failed. Do you want to try again?").ask():
                                 break
                             continue
 
                 if success:
-                    console.print(f"[green]✅ Connection test successful for '{curr_friendly_name}'![/green]")
+                    if not json_output:
+                        console.print(f"[green]✅ Connection test successful for '{curr_friendly_name}'![/green]")
                     
                     # 13. Sync Limit
                     curr_sync_limit = sync_limit
@@ -494,7 +550,7 @@ def account_add_wizard(
     except KeyboardInterrupt:
         return newly_added, encryption_password
     except Exception as e:
-        console.print(f"\n[red]❌ Error: {e}[/red]")
+        add_message(str(e), type="error")
         return [], None
 
 def handle_account(args: argparse.Namespace, manager: MailManager, account_parser: argparse.ArgumentParser) -> None:
@@ -505,55 +561,42 @@ def handle_account(args: argparse.Namespace, manager: MailManager, account_parse
 
     match args.account_command:
         case "list":
+            json_out = getattr(args, "json", False)
             if not manager.accounts:
-                console.print("[yellow]No accounts configured yet. Run 'wugong account add' to get started.[/yellow]")
+                CLIRenderer.render_message("No accounts configured yet. Run 'wugong account add' to get started.", type="warning", json_output=json_out)
                 return
                 
             verbose = getattr(args, "verbose", False)
-            
-            table = Table(title="Configured Email Accounts", show_footer=True)
-            table.add_column("ID", style="cyan", no_wrap=True)
-            table.add_column("Friendly Name", style="magenta")
-            table.add_column("Email Address", style="blue")
-            table.add_column("Cached", style="green", justify="right")
-            table.add_column("Unseen", style="bold yellow", justify="right")
-            
-            if verbose:
-                table.add_column("Server Total", style="blue", justify="right")
-                table.add_column("Server Unseen", style="bold red", justify="right")
-                table.add_column("Method", style="green")
-                table.add_column("IMAP Server", style="yellow")
-
-            total_all_cached = 0
-            total_all_unseen = 0
-            total_server_msg = 0
-            total_server_unseen = 0
+            accounts_data = []
 
             # Only fetch server stats if verbose mode is enabled
             password = None
-            if verbose and manager.accounts:
+            if verbose:
                 try:
                     prompt = "Enter encryption password to fetch server stats (or Ctrl+C to skip):"
                     password = config.get_verified_password(manager.config, args, prompt)
-                except (ValueError, KeyboardInterrupt):
-                    console.print("[yellow]Skipping server stats due to missing password.[/yellow]")
+                except (ValueError, KeyboardInterrupt) as e:
+                    if not json_out:
+                        console.print(f"[yellow]Skipping server stats: {e}[/yellow]")
 
-            with console.status("[bold green]Fetching account statistics...") as status:
+            # Unified account data gathering logic
+            status_ctx = console.status("[bold green]Fetching account stats...", spinner="dots") if not json_out else nullcontext()
+            with status_ctx as status:
                 for idx, acc in enumerate(manager.accounts, 1):
                     account_name = acc.get("friendly_name", "N/A")
                     
                     # Local stats
                     cached_count = manager.storage_manager.get_email_count(account_name)
                     unseen_count = manager.storage_manager.get_email_count(account_name, only_unseen=True)
-                    total_all_cached += cached_count
-                    total_all_unseen += unseen_count
 
                     # Server stats (only if verbose and password provided)
-                    srv_total = "0"
-                    srv_unseen = "0"
+                    srv_total = "N/A"
+                    srv_unseen = "N/A"
                     if verbose and password:
-                        status.update(f"[bold green]Connecting to {account_name}...")
+                        if not json_out and status:
+                            status.update(f"[bold green]Connecting to {account_name}...")
                         try:
+                            # Pass password to decrypt credentials if needed
                             mail = manager.connector.get_imap_connection(acc, password)
                             if mail:
                                 acc_msg_sum = 0
@@ -564,44 +607,35 @@ def handle_account(args: argparse.Namespace, manager: MailManager, account_parse
                                     acc_msg_sum += f_status.get("messages", 0)
                                     acc_unseen_sum += f_status.get("unseen", 0)
                                 
-                                srv_total = str(acc_msg_sum)
-                                srv_unseen = str(acc_unseen_sum)
-                                
-                                total_server_msg += acc_msg_sum
-                                total_server_unseen += acc_unseen_sum
+                                srv_total = acc_msg_sum
+                                srv_unseen = acc_unseen_sum
                                 mail.logout()
                         except Exception as e:
-                            logger.debug(f"Failed to fetch server stats for {account_name}: {e}")
-                            srv_total = "[red]Error[/red]"
-                            srv_unseen = "[red]Error[/red]"
+                            logger.error(f"Failed to fetch server stats for {account_name}: {e}")
+                            srv_total = "Error"
+                            srv_unseen = "Error"
 
-                    row = [
-                        str(idx),
-                        account_name,
-                        acc.get("auth", {}).get("username", "N/A"),
-                        str(cached_count),
-                        str(unseen_count)
-                    ]
-                    if verbose:
-                        row.append(srv_total)
-                        row.append(srv_unseen)
-                        row.append(acc.get("login_method", "N/A"))
-                        row.append(f"{acc.get('imap_server')}:{acc.get('imap_port')}")
-                    table.add_row(*row)
+                    accounts_data.append({
+                        "id": idx,
+                        "friendly_name": account_name,
+                        "username": acc.get("auth", {}).get("username", "N/A"),
+                        "cached_count": cached_count,
+                        "unseen_count": unseen_count,
+                        "server_total": srv_total,
+                        "server_unseen": srv_unseen,
+                        "login_method": acc.get("login_method", "N/A"),
+                        "imap_server": acc.get("imap_server"),
+                        "imap_port": acc.get("imap_port")
+                    })
             
-            # Update footer with totals
-            table.columns[0].footer = "Total"
-            table.columns[3].footer = str(total_all_cached)
-            table.columns[4].footer = str(total_all_unseen)
-            if verbose:
-                table.columns[5].footer = str(total_server_msg) if password else "0"
-                table.columns[6].footer = str(total_server_unseen) if password else "0"
-            
-            console.print(table)
+            CLIRenderer.render_accounts_table(accounts_data, verbose=verbose, json_output=json_out)
             
         case "add":
+            json_out = getattr(args, "json", False)
+            status_messages = []
             newly_added, encryption_password = account_add_wizard(
                 args=args,
+                current_config=manager.config,
                 friendly_name=args.friendly_name,
                 provider=args.provider,
                 login_method=args.login_method,
@@ -620,69 +654,143 @@ def handle_account(args: argparse.Namespace, manager: MailManager, account_parse
                 scopes=args.scopes.split(",") if args.scopes else None,
                 redirect_uri=args.redirect_uri,
                 sync_limit=args.sync_limit,
-                non_interactive=getattr(args, "non_interactive", False)
+                non_interactive=getattr(args, "non_interactive", False),
+                json_output=json_out,
+                status_messages=status_messages
             )
             
+            if not newly_added and json_out:
+                # If wizard failed and returned no accounts, but might have messages
+                CLIRenderer.render_message(". ".join(status_messages) or "Failed to add account.", type="error", json_output=True)
+                return
+
             if newly_added:
                 # 1. BATCH SAVE ALL VERIFIED ACCOUNTS
+                logger.debug(f"Newly added accounts: {[acc.get('friendly_name') for acc, _ in newly_added]}")
                 for acc, _ in newly_added:
                     manager.accounts.append(acc)
                 
                 manager.config["accounts"] = manager.accounts
+                logger.debug(f"Saving config with accounts: {[acc.get('friendly_name') for acc in manager.accounts]}")
                 manager._save_config()
-                console.print(f"[green]✅ {len(newly_added)} account(s) configured and saved successfully.[/green]")
+                logger.debug("Config saved successfully.")
+                
+                # We collect messages to merge them if json_out is True
+                status_type = "success"
+
+                status_messages.append(f"{len(newly_added)} account(s) configured and saved successfully.")
+                if not json_out:
+                    CLIRenderer.render_message(status_messages[-1], type="success")
 
                 # 2. BATCH INITIAL SYNC
+                if not json_out:
+                    console.print() # Add spacing before sync
+                
                 if encryption_password is None:
                     try:
                         encryption_password = config.get_verified_password(manager.config, args, "Enter encryption password to start initial sync:")
                     except ValueError as e:
-                        console.print(f"[red]Error: {e}[/red]")
+                        if json_out:
+                            status_messages.append(f"Error: {e}")
+                            status_type = "error"
+                            CLIRenderer.render_message(". ".join(status_messages), type=status_type, json_output=True)
+                        else:
+                            CLIRenderer.render_message(f"Error: {e}", type="error")
                         return
 
                 for acc, limit in newly_added:
                     account_name = acc.get("friendly_name")
                     if limit == 0:
-                        console.print(f"[yellow]Initial sync for '{account_name}' skipped (limit 0).[/yellow]")
+                        msg = f"Initial sync for '{account_name}' skipped (limit 0)."
+                        status_messages.append(msg)
+                        if not json_out:
+                            CLIRenderer.render_message(msg, type="warning")
                         continue
 
-                    with Progress(
-                        SpinnerColumn(),
-                        TextColumn("[progress.description]{task.description}"),
-                        BarColumn(),
-                        TaskProgressColumn(),
-                        TimeRemainingColumn(),
-                        console=console,
-                        transient=True,
-                        disable=not sys.stdin.isatty()
-                    ) as progress:
-                        task = progress.add_task(f"Initial sync for '{account_name}'...", total=limit if limit > 0 else 100)
-                        
-                        def update_progress(current, total, description=None):
-                            progress.update(task, completed=current, total=total)
-                        
-                        try:
-                            emails, metadata = manager.syncer.sync_emails(acc, encryption_password, limit=limit, is_initial_sync=True, progress_callback=update_progress)
+                    sync_result = None
+                    try:
+                        with Progress(
+                            SpinnerColumn(),
+                            TextColumn("[progress.description]{task.description}"),
+                            BarColumn(),
+                            TaskProgressColumn(),
+                            TimeRemainingColumn(),
+                            console=console,
+                            transient=True,
+                            disable=not sys.stdin.isatty() or json_out
+                        ) as progress:
+                            task = progress.add_task(f"Initial sync for '{account_name}'...", total=limit if limit > 0 else 100)
                             
-                            if metadata.get("is_offline", False):
-                                console.print(f"[yellow]⚠️ Initial sync for '{account_name}' failed: {metadata.get('error', 'Connection failed')}.[/yellow]")
+                            def update_progress(current, total, description=None):
+                                progress.update(task, completed=current, total=total)
+                            
+                            emails, metadata = manager.syncer.sync_emails(acc, encryption_password, limit=limit, is_initial_sync=True, progress_callback=update_progress)
+                            sync_result = metadata
+                            
+                        # Print success/warning message OUTSIDE the Progress block for cleaner output
+                        if sync_result:
+                            if sync_result.get("is_offline", False):
+                                msg = f"Initial sync for '{account_name}' failed: {sync_result.get('error', 'Connection failed')}."
+                                status_messages.append(msg)
+                                if not json_out:
+                                    CLIRenderer.render_message(msg, type="warning")
                             else:
-                                console.print(f"[green]✅ Initial sync for '{account_name}' complete ({len(metadata.get('new_emails', []))} new emails).[/green]")
-                                
-                        except Exception as e:
-                            console.print(f"[red]❌ Error during initial sync for '{account_name}': {e}[/red]")
+                                msg = f"Initial sync for '{account_name}' complete ({len(sync_result.get('new_emails', []))} new emails)."
+                                status_messages.append(msg)
+                                if not json_out:
+                                    CLIRenderer.render_message(msg, type="success")
+                        
+                    except Exception as e:
+                        msg = f"Error during initial sync for '{account_name}': {e}"
+                        status_messages.append(msg)
+                        status_type = "error"
+                        if not json_out:
+                            CLIRenderer.render_message(msg, type="error")
+                
+                # Final merged JSON output
+                if json_out:
+                    CLIRenderer.render_message(". ".join(status_messages), type=status_type, json_output=True)
             
         case "delete":
-            if not (account := manager.get_account_by_name(args.name)):
-                console.print(f"[red]Error: Account '{args.name}' not found.[/red]")
+            json_out = getattr(args, "json", False)
+            non_interactive = getattr(args, "non_interactive", False)
+            target = args.name
+
+            if not target:
+                if non_interactive:
+                    CLIRenderer.render_message("Account name is required in non-interactive mode.", type="error", json_output=json_out)
+                    return
+                
+                if not json_out:
+                    console.print("\n[bold cyan]=== Delete Email Account ===[/bold cyan]")
+                
+                choices = [acc.get("friendly_name") for acc in manager.accounts]
+                if not choices:
+                    CLIRenderer.render_message("No accounts found to delete.", type="warning", json_output=json_out)
+                    return
+                
+                target = questionary.select(
+                    "Select account to delete:",
+                    choices=choices
+                ).ask()
+                
+                if not target:
+                    return
+
+            # Confirmation (only in interactive mode)
+            if not non_interactive:
+                if not questionary.confirm(f"Are you sure you want to delete account '{target}'? This will also remove its local email cache.").ask():
+                    if not json_out:
+                        console.print("[yellow]Deletion aborted.[/yellow]")
+                    return
+
+            if not (account := manager.get_account_by_name(target)):
+                CLIRenderer.render_message(f"Account '{target}' not found.", type="error", json_output=json_out)
                 return
                 
-            if getattr(args, "non_interactive", False) or questionary.confirm(f"Are you sure you want to delete account '{args.name}'?").ask():
-                manager.accounts = [acc for acc in manager.accounts if acc.get("friendly_name") != args.name]
-                manager.config["accounts"] = manager.accounts
-                manager._save_config()
-                console.print(f"[green]Successfully deleted account '{args.name}'.[/green]")
-            else:
-                console.print("[yellow]Deletion cancelled.[/yellow]")
+            manager.accounts = [acc for acc in manager.accounts if acc.get("friendly_name") != target]
+            manager.config["accounts"] = manager.accounts
+            manager._save_config()
+            CLIRenderer.render_message(f"Successfully deleted account '{target}'.", type="success", json_output=json_out)
         case _:
             account_parser.print_help()

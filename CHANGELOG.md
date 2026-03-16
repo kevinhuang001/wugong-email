@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-03-16
+
+### Features
+- **JSON Output Standardization**: All CLI commands now produce a single, valid JSON block when the `--json` flag is used, facilitating easier parsing for AI agents and automated scripts.
+- **Result Aggregation**: Multi-account operations (such as `sync all`, `list all`, and `account list`) now aggregate results from all target accounts into a single JSON object or array.
+- **Unified Error Handling in JSON**: Errors encountered during multi-account operations are collected and returned within the final JSON block, providing a comprehensive status report.
+- **Improved Account Wizard**: The `account add` wizard now collects and reports all interactive status messages in a single JSON response when running in JSON mode.
+- **Test Infrastructure Enhancements**: 
+    - Standardized all integration tests to verify JSON output consistency.
+    - Implemented a robust, stack-based JSON extraction helper in `conftest.py` to identify the first valid JSON block in command output.
+
+### Fixed
+- **AttributeError in Tests**: Resolved a critical issue where `CLIRenderer` was returning JSON strings instead of dictionaries, causing attribute errors in test assertions.
+- **ID Type Mismatches**: Fixed comparison failures in `test_delete.py` and `test_read.py` by adopting string-based ID comparisons across the test suite.
+- **Send Parameter Fix**: Corrected recipient handling in `test_send.py` to use friendly names instead of full email addresses for better compatibility with test mailbox setups.
+- **JSON Output Cleanliness**: Eliminated redundant or malformed JSON blocks across all CLI commands to ensure strict compliance with JSON standards.
+
 ## [1.0.9] - 2026-03-15
 
 ### Features

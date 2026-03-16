@@ -28,26 +28,47 @@ try {
     Write-Error "❌ Error: python is not installed or not in PATH. Please install Python >= $MinPythonVersion first."
 }
 
-# 2. Source Directory
-$SourceDir = $PSScriptRoot
-if (-not $SourceDir) { $SourceDir = (Get-Location).Path }
+# 2. Check for existing installation
+if ((Test-Path $InstallDir) -and (Test-Path (Join-Path $InstallDir "main.py")) -and (Test-Path (Join-Path $InstallDir ".venv\Scripts\python.exe"))) {
+    Write-Host "💡 Wugong Email is already installed at $InstallDir." -ForegroundColor Blue
+    Write-Host "🔄 Switching to upgrade mode..." -ForegroundColor Blue
+     # Run the existing installation's upgrade command
+     & "$InstallDir\.venv\Scripts\python.exe" "$InstallDir\main.py" upgrade $args
+     exit
+ }
 
-if (-not $SourceDir -or -not (Test-Path (Join-Path $SourceDir "main.py")) -or -not (Test-Path (Join-Path $SourceDir "configure.py"))) {
-    Write-Host "📡 Source files not found locally. Cloning from GitHub..." -ForegroundColor Blue
+# 3. Source Directory Detection (Local vs Remote)
+$SourceDir = $null
+$TempDir = $null
+
+if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot "main.py")) -and (Test-Path (Join-Path $PSScriptRoot "cli\configure.py"))) {
+    # Script is being executed as a local file, and we found source files next to it
+    Write-Host "📂 Local source files found at $PSScriptRoot. Using local version." -ForegroundColor Blue
+    $SourceDir = $PSScriptRoot
+} elseif ((Test-Path "main.py") -and (Test-Path "cli\configure.py")) {
+    # We are in the source directory already
+    $SourceDir = (Get-Location).Path
+    Write-Host "📂 Source files found in current directory. Using local version." -ForegroundColor Blue
+} else {
+    # Likely being piped or executed remotely (e.g., iwr ... | iex)
+    Write-Host "📡 Remote execution detected or source files not found. Cloning from GitHub..." -ForegroundColor Blue
     $TempDir = Join-Path $env:TEMP "wugong_install_$(Get-Random)"
     New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
-    git clone --quiet --depth 1 $RepoUrl $TempDir
-    $SourceDir = $TempDir
-} else {
-    Write-Host "📂 Local source files found. Using current directory." -ForegroundColor Blue
+    try {
+        git clone --quiet --depth 1 $RepoUrl $TempDir
+        $SourceDir = $TempDir
+    } catch {
+        Write-Error "❌ Error: Failed to clone repository. Make sure git is installed."
+        exit 1
+    }
 }
 
-# 3. Create Directories
+# 4. Create Directories
 Write-Host "📁 Creating directories..." -ForegroundColor Blue
 New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null
 
-# 4. Copy Files
+# 5. Copy Files
 Write-Host "📦 Copying source files..." -ForegroundColor Blue
 # Use recursive copy to ensure folders like 'mail' are included
 # Exclude git/venv/pycache/db/config if they exist in source
@@ -62,23 +83,23 @@ foreach ($Item in $ItemsToCopy) {
     Copy-Item -Path $Item.FullName -Destination $InstallDir -Recurse -Force
 }
 
-# 5. Setup Virtual Environment
+# 6. Setup Virtual Environment
 Set-Location $InstallDir
 Write-Host "🐍 Setting up virtual environment..." -ForegroundColor Blue
 python -m venv .venv
 & "$InstallDir\.venv\Scripts\python.exe" -m pip install --quiet --upgrade pip
 & "$InstallDir\.venv\Scripts\pip.exe" install --quiet -r requirements.txt
 
-# 6. Setup Wrapper Scripts
+# 7. Setup Wrapper Scripts
 Write-Host "🔨 Setting up executable wrapper..." -ForegroundColor Blue
-# wugong.bat is already copied in Step 4
+# wugong.bat is already copied in Step 5
 
-# 7. Cleanup
+# 8. Cleanup
 if ($TempDir) {
     Remove-Item $TempDir -Recurse -Force
 }
 
-# 8. Final Instructions
+# 9. Final Instructions
 Write-Host "`n🎉 Installation Complete!" -ForegroundColor Green
 Write-Host "--------------------------------------------------"
 Write-Host "Location: $InstallDir"

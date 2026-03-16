@@ -11,6 +11,7 @@ Wugong Email is a **minimalist, efficient, and AI-friendly** command-line email 
 - **Automated OAuth2 Support**: Built-in local server for automatic Token exchange and silent background refresh for major providers like Gmail and Outlook.
 - **Minimalist End-to-End Encryption**: Uses PBKDF2 + Fernet to encrypt configuration files, ensuring your account data is stored securely with a single master password.
 - **Seamless Multi-Account Management**: Manage unlimited email accounts with pre-configured settings for Gmail, Outlook, QQ, 163, and more.
+- **Standardized JSON Output**: All commands produce a single, valid JSON block when the `--json` flag is used, making it easier for AI agents to parse and process.
 - **AI-Native Design**: Clean CLI output and simple configuration logic, making it easy for AI agents to read, search, and process emails.
 
 ---

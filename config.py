@@ -40,63 +40,82 @@ def verify_encryption_password(config_data: Dict[str, Any], password: str) -> bo
     except Exception:
         return False
 
-def get_encryption_password(args: Optional[Any] = None, prompt_text: str = "Enter encryption password:") -> Optional[str]:
+def get_encryption_password(args: Optional[Any] = None, prompt_text: str = "Enter encryption password:", ignore_env: bool = False) -> Optional[str]:
     """
     Get encryption password from --encryption-password arg, WUGONG_PASSWORD env var, or interactive prompt.
     """
-    # 1. Check CLI argument if provided
-    if args:
+    # 1. Check CLI argument if provided (only if not ignore_env)
+    if args and not ignore_env:
         # Check specifically for encryption_password
         password = getattr(args, "encryption_password", None)
         if password:
             logger.debug("Encryption password retrieved from CLI argument (encryption_password).")
             return password
     
-    # 2. Check environment variable
-    password = os.environ.get("WUGONG_PASSWORD")
-    if password:
-        logger.debug("Encryption password retrieved from environment variable.")
-        return password
+    # 2. Check environment variable (only if not ignore_env)
+    if not ignore_env:
+        password = os.environ.get("WUGONG_PASSWORD")
+        if password:
+            logger.debug("Encryption password retrieved from environment variable.")
+            return password
     
-    # 3. Interactive prompt (only if in a terminal AND not in non-interactive mode)
-    is_non_interactive = getattr(args, "non_interactive", False) or not sys.stdin.isatty()
+    # 3. Interactive prompt (only if not in non-interactive mode)
+    is_non_interactive = getattr(args, "non_interactive", False) if args is not None else False
     
     if not is_non_interactive:
-        logger.debug("Requesting encryption password via interactive prompt.")
-        return questionary.password(prompt_text).ask()
+        # Force prompt
+        try:
+            password = questionary.password(prompt_text).ask()
+            if password is None: # User cancelled with Ctrl+C
+                return None
+            return password
+        except Exception:
+            return None
     
     logger.warning("No encryption password found in CLI, env, or terminal (non-interactive mode enabled).")
     return None
 
 def get_verified_password(config_data: Dict[str, Any], args: Optional[Any] = None, prompt_text: str = "Enter encryption password:") -> str:
-    """
-    Retrieves and verifies the encryption password.
-    Raises ValueError if password is missing (in non-interactive mode) or invalid.
-    """
+    """Gets and verifies the encryption password with retries."""
     general = config_data.get("general", {})
+    # Check if encryption is enabled in general settings
     encryption_enabled = general.get("encryption_enabled", False) or general.get("encrypt_emails", False)
     
     if not encryption_enabled:
         return ""
+
+    is_non_interactive = getattr(args, "non_interactive", False) if args is not None else False
     
-    # 1. Get password
-    password = get_encryption_password(args, prompt_text)
+    # In interactive mode, we allow up to 3 attempts
+    max_attempts = 1 if is_non_interactive else 3
     
-    # 2. Check if missing in non-interactive mode
-    is_non_interactive = getattr(args, "non_interactive", False) or not sys.stdin.isatty()
-    
-    if not password:
+    for attempt in range(max_attempts):
+        # 1. Get password
+        # In the first attempt, we check everything. 
+        # In subsequent attempts, we ignore env/args and force a prompt.
+        password = get_encryption_password(args, prompt_text, ignore_env=True if attempt > 0 else False)
+        
+        if not password:
+            if is_non_interactive:
+                raise ValueError("Encryption password is REQUIRED in non-interactive mode (via --encryption-password or WUGONG_PASSWORD).")
+            else:
+                raise ValueError("Encryption password is required to proceed.")
+
+        # 2. Verify password
+        if verify_encryption_password(config_data, password):
+            return password
+        
+        # 3. Handle failure
         if is_non_interactive:
-            raise ValueError("Encryption password is REQUIRED in non-interactive mode (via --encryption-password or WUGONG_PASSWORD).")
+            raise ValueError("Invalid encryption password. Make sure it matches the one used during 'init'.")
         else:
-            # If interactive but user cancelled prompt
-            raise ValueError("Encryption password is required to proceed.")
-                
-    # 3. Verify password
-    if not verify_encryption_password(config_data, password):
-        raise ValueError("Invalid encryption password. Make sure it matches the one used during 'init'.")
+            from cli.render import CLIRenderer
+            CLIRenderer.render_message(f"Invalid encryption password (attempt {attempt + 1}/{max_attempts}). Please try again.", type="error")
+            # Clear the password from args to force prompt in next attempt if it came from args
+            if args and hasattr(args, "encryption_password"):
+                delattr(args, "encryption_password")
     
-    return password
+    raise ValueError("Invalid encryption password. Authentication failed after multiple attempts.")
 
 def get_config_path() -> Path:
     """Determine the configuration file path based on environment variables or defaults."""
@@ -129,7 +148,7 @@ def load_config(path: Optional[Union[Path, str]] = None) -> Dict[str, Any]:
     if path.exists():
         try:
             config_data = toml.load(path)
-            logger.info(f"Configuration loaded from {path}")
+            # logger.info(f"Configuration loaded from {path}")
             return config_data
         except Exception as e:
             logger.error(f"Error loading config from {path}: {e}")
@@ -149,7 +168,8 @@ def save_config(config: Dict[str, Any], path: Optional[Union[Path, str]] = None)
         
     with open(path, "w") as f:
         toml.dump(config, f)
-    logger.info(f"Configuration saved to {path}")
+    # logger.info(f"Configuration saved to {path}")
+    logger.debug(f"Config saved to {path}. Accounts: {[a.get('friendly_name') for a in config.get('accounts', [])]}")
 
 def get_salt(config: Dict[str, Any]) -> bytes:
     """Retrieve and decode the salt from the configuration."""

@@ -1,0 +1,189 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.4, pytest-7.4.4, pluggy-1.6.0
+rootdir: /Users/kevinwong/Nextcloud/codes/projects/wugong-email
+configfile: pytest.ini
+plugins: mock-3.15.1, anyio-4.2.0, cov-7.0.0
+collected 1 item
+
+tests/integration/test_send.py DEBUG: send output: {
+  "status": "success",
+  "message": "Successfully sent email to user2@example.com!"
+}
+DEBUG: sync user2 res: [{'id': '1715', 'folder': 'INBOX', 'from': 'system@wugong.io', 'from_email': 'system@wugong.io', 'subject': 'Welcome to Wugong', 'date': '', 'seen': True}, {'id': '1716', 'folder': 'INBOX', 'from': 'manager@company.com', 'from_email': 'manager@company.com', 'subject': 'Project Update: Alpha Phase', 'date': '', 'seen': True}, {'id': '1717', 'folder': 'INBOX', 'from': 'security@company.com', 'from_email': 'security@company.com', 'subject': 'Urgent: Action Required', 'date': '', 'seen': True}, {'id': '1718', 'folder': 'INBOX', 'from': 'friend@example.com', 'from_email': 'friend@example.com', 'subject': 'Lunch Today?', 'date': '', 'seen': True}, {'id': '1719', 'folder': 'INBOX', 'from': 'newsletter@techworld.com', 'from_email': 'newsletter@techworld.com', 'subject': 'Weekly Newsletter', 'date': '', 'seen': True}]
+F
+
+=================================== FAILURES ===================================
+_____________________________ test_send_all_params _____________________________
+
+mail_server = {'imap_port': 3143, 'smtp_port': 3025}
+mail_config = {'accounts': ['user1', 'user2'], 'config_dir': PosixPath('/private/var/folders/gs/k4bktz_j4vqgy6dkq8_n_ll40000gn/T/pyt...ders/gs/k4bktz_j4vqgy6dkq8_n_ll40000gn/T/pytest-of-kevinwong/pytest-201/test_send_all_params0/.wugong/emails.db'), ...}
+
+    def test_send_all_params(mail_server, mail_config):
+        """Test the 'send' command with all available parameters."""
+        config_path = mail_config["config_path"]
+        password = mail_config["master_password"]
+        imap_port = mail_server["imap_port"]
+    
+        # Initialize mailboxes
+        init_mailbox("user1", "password", imap_port)
+        init_mailbox("user2", "password", imap_port)
+    
+        # Sync so accounts are ready
+        run_wugong_command(["sync", "user1"], config_path, password)
+        run_wugong_command(["sync", "user2"], config_path, password)
+    
+        # send --account, --to, --subject, --body, --attach
+        # Attachments require a temporary file
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".txt") as tf:
+            tf.write(b"Test attachment content")
+            tf.flush()
+    
+            send_args = [
+                "send",
+                "--account", "user1",
+                "--to", "user2@example.com",
+                "--subject", "Integration Test Send",
+                "--body", "Body of the email",
+                "--attach", tf.name
+            ]
+    
+            output = run_wugong_command(send_args, config_path, password)
+            print(f"DEBUG: send output: {output}")
+            res = json.loads(output)
+    
+            assert res.get("status") == "success"
+    
+        # Verify user2 received it
+        output = run_wugong_command(["sync", "user2"], config_path, password)
+        res = json.loads(output)
+        print(f"DEBUG: sync user2 res: {res}")
+    
+>       assert any("Integration Test Send" in m.get("subject") for m in res)
+E       assert False
+E        +  where False = any(<generator object test_send_all_params.<locals>.<genexpr> at 0x1120aaea0>)
+
+tests/integration/test_send.py:47: AssertionError
+------------------------------ Captured log setup ------------------------------
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder INBOX for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Shopping for clearing...
+INFO     wugong.tests.utils:test_utils.py:169 Seeding 21 emails for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder INBOX for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Shopping for clearing...
+INFO     wugong.tests.utils:test_utils.py:169 Seeding 21 emails for user2
+------------------------------ Captured log call -------------------------------
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder INBOX for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 5 emails from INBOX for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Shopping for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Shopping for user1
+DEBUG    wugong.tests.utils:test_utils.py:44 Connection died, re-logging in for Archive...
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Archive for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 3 emails from Archive for user1
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Archive for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Work for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 3 emails from Work for user1
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Work for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Personal for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Personal for user1
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Personal for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Drafts for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Drafts for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Sent for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Sent for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Spam for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Spam for user1
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Spam for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Travel for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Travel for user1
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Travel for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Finances for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Finances for user1
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Finances for user1
+INFO     wugong.tests.utils:test_utils.py:169 Seeding 21 emails for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder INBOX for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 5 emails from INBOX for user2
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Shopping for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Shopping for user2
+DEBUG    wugong.tests.utils:test_utils.py:44 Connection died, re-logging in for Archive...
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Archive for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 3 emails from Archive for user2
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Archive for user2
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Work for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 3 emails from Work for user2
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Work for user2
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Personal for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Personal for user2
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Personal for user2
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Drafts for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Drafts for user2
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Sent for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Sent for user2
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Spam for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Spam for user2
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Spam for user2
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Travel for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Travel for user2
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Travel for user2
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Finances for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Finances for user2
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Finances for user2
+INFO     wugong.tests.utils:test_utils.py:169 Seeding 21 emails for user2
+---------------------------- Captured log teardown -----------------------------
+DEBUG    wugong:conftest.py:199 Auto-clearing mailboxes after test...
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder INBOX for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 5 emails from INBOX for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Shopping for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Shopping for user1
+DEBUG    wugong.tests.utils:test_utils.py:44 Connection died, re-logging in for Archive...
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Archive for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 3 emails from Archive for user1
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Archive for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Work for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 3 emails from Work for user1
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Work for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Personal for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Personal for user1
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Personal for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Drafts for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Drafts for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Sent for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Sent for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Spam for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Spam for user1
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Spam for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Travel for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Travel for user1
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Travel for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Finances for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Finances for user1
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Finances for user1
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder INBOX for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 5 emails from INBOX for user2
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Shopping for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Shopping for user2
+DEBUG    wugong.tests.utils:test_utils.py:44 Connection died, re-logging in for Archive...
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Archive for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 3 emails from Archive for user2
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Archive for user2
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Work for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 3 emails from Work for user2
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Work for user2
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Personal for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Personal for user2
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Personal for user2
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Drafts for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Drafts for user2
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Sent for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Sent for user2
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Spam for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Spam for user2
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Spam for user2
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Travel for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Travel for user2
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Travel for user2
+DEBUG    wugong.tests.utils:test_utils.py:48 Processing folder Finances for clearing...
+DEBUG    wugong.tests.utils:test_utils.py:62 Clearing 2 emails from Finances for user2
+DEBUG    wugong.tests.utils:test_utils.py:82 Deleted folder Finances for user2
+=========================== short test summary info ============================
+FAILED tests/integration/test_send.py::test_send_all_params - assert False
+============================== 1 failed in 0.81s ===============================
