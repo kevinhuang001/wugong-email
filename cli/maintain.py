@@ -189,7 +189,13 @@ def handle_upgrade(args: Optional[argparse.Namespace] = None, manager: Any = Non
                     if uv_path:
                         if not json_out:
                             console.print("[blue]✨ Using uv for dependency update...[/blue]")
-                        subprocess.run([uv_path, "pip", "install", "--python", str(venv_python), "-r", str(install_dir / "requirements.txt")], check=True, capture_output=True)
+                        
+                        # Use console.status to show activity during dependency update
+                        with console.status("[bold blue]Updating dependencies...[/bold blue]") as status:
+                            subprocess.run([uv_path, "pip", "install", "--python", str(venv_python), "-r", str(install_dir / "requirements.txt")], check=True, capture_output=True)
+                        
+                        if not json_out:
+                            console.print("[green]✅ Dependencies updated successfully.[/green]")
                     else:
                         # No fallback to pip as requested
                         error_msg = "uv not found in PATH. uv is required for dependency management."
@@ -205,6 +211,10 @@ def handle_upgrade(args: Optional[argparse.Namespace] = None, manager: Any = Non
                     raise Exception(f"Dependency update failed: {error_msg}")
 
         # Upgrade success
+        if not json_out:
+            console.print(f"\n[bold green]🎉 Wugong Email has been successfully upgraded to v{remote_version}![/bold green]")
+            console.print("[dim]All files synchronized and dependencies updated.[/dim]\n")
+        
         CLIRenderer.render_message(f"Successfully upgraded to v{remote_version}.", type="success", json_output=json_out, data={"new_version": remote_version})
         
     except Exception as e:
