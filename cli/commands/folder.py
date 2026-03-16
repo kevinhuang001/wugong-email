@@ -92,7 +92,7 @@ def handle_folder(args: argparse.Namespace, manager: MailManager) -> None:
                     
                     non_interactive = getattr(args, "non_interactive", False)
                     import questionary
-                    if non_interactive or questionary.confirm(f"Are you sure you want to delete folder '{args.name}'?").ask():
+                    if non_interactive or questionary.confirm(f"Are you sure you want to delete folder '{args.name}'?", style=CLIRenderer.get_questionary_style()).ask():
                         if manager.folder_manager.delete_folder(mail, args.name):
                             CLIRenderer.render_message(f"Successfully deleted folder '{args.name}'.", type="success", json_output=json_out)
                         else:

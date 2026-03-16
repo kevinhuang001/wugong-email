@@ -28,6 +28,15 @@ def get_install_dir() -> Path:
             return config_dir
     return dir_path
 
+def parse_v(v: str) -> list[int]:
+    """Parses a version string into a list of integers, handling leading 'v'."""
+    try:
+        # Remove leading 'v' if present
+        v_str = v.lstrip('v')
+        return [int(x) for x in v_str.split('.')]
+    except Exception:
+        return [0]
+
 def handle_upgrade(args: Optional[argparse.Namespace] = None, manager: Any = None) -> None:
     """Handles the 'upgrade' command to update Wugong Email code directly in Python."""
     import questionary
@@ -42,17 +51,27 @@ def handle_upgrade(args: Optional[argparse.Namespace] = None, manager: Any = Non
         CLIRenderer.render_message(f"Installation directory {install_dir} not found. Upgrade aborted.", type="error", json_output=json_out)
         return
 
-    current_version = version_file.read_text().strip() if version_file.exists() else "Unknown"
-    if not json_out:
-        console.print(f"[blue]🔄 Checking for updates... (Current version: {current_version})[/blue]")
-    
     try:
+        current_version = version_file.read_text().strip() if version_file.exists() else "Unknown"
+        if not json_out:
+            console.print(f"[blue]🔄 Checking for updates... (Current version: {current_version})[/blue]")
+        
         # Check remote version
-        with urllib.request.urlopen(f"{raw_url_base}/.version") as response:
-            remote_version = response.read().decode().strip()
-            
-        if remote_version == current_version and not getattr(args, "force", False):
-            CLIRenderer.render_message(f"Wugong Email is already up to date ({current_version}).", type="success", json_output=json_out, data={"current_version": current_version})
+        try:
+            with urllib.request.urlopen(f"{raw_url_base}/.version", timeout=10) as response:
+                remote_version = response.read().decode().strip()
+        except Exception as e:
+            CLIRenderer.render_message(f"Could not fetch remote version: {e}", type="error", json_output=json_out)
+            return
+
+        is_already_latest = False
+        if remote_version == current_version:
+            is_already_latest = True
+        elif current_version != "Unknown" and parse_v(current_version) >= parse_v(remote_version):
+            is_already_latest = True
+
+        if is_already_latest and not getattr(args, "force", False):
+            CLIRenderer.render_message(f"Wugong Email is already up to date (Current: {current_version}, Remote: {remote_version}).", type="success", json_output=json_out, data={"current_version": current_version, "remote_version": remote_version})
             return
             
         if not json_out:
@@ -86,7 +105,7 @@ def handle_upgrade(args: Optional[argparse.Namespace] = None, manager: Any = Non
         if not getattr(args, "yes", False) and not non_interactive:
             if not json_out:
                 console.print("\n[bold cyan]=== Wugong Upgrade ===[/bold cyan]")
-            if not questionary.confirm("Do you want to upgrade to the latest version?").ask():
+            if not questionary.confirm("Do you want to upgrade to the latest version?", style=CLIRenderer.get_questionary_style()).ask():
                 if not json_out:
                     console.print("[yellow]Upgrade aborted by user.[/yellow]")
                 return
@@ -265,25 +284,36 @@ def handle_uninstall(args: Optional[argparse.Namespace] = None, manager: Any = N
                 if not json_out:
                     console.print("[green]✅ Installation directory removed.[/green]")
             except Exception as e:
-                if os.name == 'nt':
-                    if not json_out:
-                        console.print(f"[yellow]⚠️  Could not remove some files in {install_dir} (likely because they are in use).[/yellow]")
-                        console.print(f"[yellow]Please remove the directory manually after the program exits.[/yellow]")
-                else:
-                    raise e
-        
-        # 3. Remove Configuration Directory
+                if not json_out:
+                    console.print(f"[yellow]⚠️  Could not remove installation directory: {e}[/yellow]")
+
+        # 3. Remove Config Directory (if not keep_data)
         if not keep_data and config_dir.exists():
             if not json_out:
-                console.print(f"[blue]📁 Removing configuration directory: {config_dir}...[/blue]")
-            shutil.rmtree(config_dir)
-            if not json_out:
-                console.print("[green]✅ Configuration directory removed.[/green]")
-            
-        CLIRenderer.render_message("Wugong Email has been uninstalled.", type="success", json_output=json_out)
-        if not json_out:
-            console.print(f"Note: If you added {install_dir} to your PATH, please remove it manually.")
+                console.print(f"[blue]📁 Removing config directory: {config_dir}...[/blue]")
+            try:
+                shutil.rmtree(config_dir)
+                if not json_out:
+                    console.print("[green]✅ Config directory removed.[/green]")
+            except Exception as e:
+                if not json_out:
+                    console.print(f"[yellow]⚠️  Could not remove config directory: {e}[/yellow]")
         
-    except Exception as e:
-        CLIRenderer.render_message(f"Uninstall failed: {e}", type="error", json_output=json_out)
+        # 4. Remove wugong command from /usr/local/bin or similar if possible
+        # (This is usually handled by the installer, but we can try to be clean)
+        bin_path = Path("/usr/local/bin/wugong")
+        if os.name != 'nt' and bin_path.exists():
+            if not json_out:
+                console.print(f"[blue]🔗 Removing symlink: {bin_path}...[/blue]")
+            try:
+                os.remove(bin_path)
+                if not json_out:
+                    console.print("[green]✅ Symlink removed.[/green]")
+            except Exception as e:
+                if not json_out:
+                    console.print(f"[yellow]⚠️  Could not remove symlink (may need sudo): {e}[/yellow]")
 
+        CLIRenderer.render_message("Wugong Email uninstalled successfully.", type="success", json_output=json_out)
+
+    except Exception as e:
+        CLIRenderer.render_message(f"Error during uninstallation: {e}", type="error", json_output=json_out)

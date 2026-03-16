@@ -106,13 +106,32 @@ class MailConnector:
                     if "auth" in str(e).lower() or "expired" in str(e).lower():
                         logger.info("IMAP OAuth2 token expired, refreshing...")
                         new_auth = self.auth_manager.refresh_oauth2_token(account, auth_password)
-                        new_token = new_auth['access_token']
-                        res, data = mail.authenticate('XOAUTH2', lambda x: f"user={user}\x01auth=Bearer {new_token}\x01\x01".encode())
-                        if res == "OK":
-                            logger.info(f"IMAP: Logged in as {user} using refreshed OAuth2")
+                        if new_auth:
+                            # Update config with new tokens (or cleared tokens)
+                            account['auth'] = new_auth
                             self.save_config_callback()
-                            return mail
-                    raise e
+                            
+                            if new_token_encrypted := new_auth.get('access_token'):
+                                # Decrypt new token for use
+                                new_token = self.auth_manager.decrypt_account_auth(account, auth_password)['access_token']
+                                
+                                res, data = mail.authenticate('XOAUTH2', lambda x: f"user={user}\x01auth=Bearer {new_token}\x01\x01".encode())
+                                if res == "OK":
+                                     logger.info(f"IMAP: Logged in as {user} using refreshed OAuth2")
+                                     return mail
+                                     
+                            # If refresh failed (returned empty tokens) or new token still fails, try full re-auth
+                            logger.info("Refreshing failed, attempting full re-authorization...")
+                            new_auth = self.auth_manager.reauthorize_oauth2(account, auth_password)
+                            if new_auth and (new_token_encrypted := new_auth.get('access_token')):
+                                account['auth'] = new_auth
+                                self.save_config_callback()
+                                new_token = self.auth_manager.decrypt_account_auth(account, auth_password)['access_token']
+                                res, data = mail.authenticate('XOAUTH2', lambda x: f"user={user}\x01auth=Bearer {new_token}\x01\x01".encode())
+                                if res == "OK":
+                                    logger.info(f"IMAP: Logged in as {user} using re-authorized OAuth2")
+                                    return mail
+                        raise e
         return mail
 
     def _authenticate_smtp(self, server: smtplib.SMTP, account: dict[str, Any], auth: dict[str, Any], auth_password: str) -> None:
@@ -132,10 +151,32 @@ class MailConnector:
                     if e.smtp_code == 535: # Auth failed / expired
                         logger.info("SMTP OAuth2 token expired, refreshing...")
                         new_auth = self.auth_manager.refresh_oauth2_token(account, auth_password)
-                        new_token = new_auth['access_token']
-                        new_auth_str = f"user={user}\x01auth=Bearer {new_token}\x01\x01"
-                        server.docmd("AUTH", "XOAUTH2 " + base64.b64encode(new_auth_str.encode()).decode())
-                        self.save_config_callback()
+                        if new_auth:
+                            # Update config with new tokens (or cleared tokens)
+                            account['auth'] = new_auth
+                            self.save_config_callback()
+                            
+                            if new_token_encrypted := new_auth.get('access_token'):
+                                # Decrypt new token for use
+                                new_token = self.auth_manager.decrypt_account_auth(account, auth_password)['access_token']
+                                
+                                new_auth_str = f"user={user}\x01auth=Bearer {new_token}\x01\x01"
+                                server.docmd("AUTH", "XOAUTH2 " + base64.b64encode(new_auth_str.encode()).decode())
+                                logger.info(f"SMTP: Logged in as {user} using refreshed OAuth2")
+                                return
+                                
+                        # If refresh failed (returned empty tokens) or new token still fails, try full re-auth
+                        logger.info("SMTP: Refreshing failed, attempting full re-authorization...")
+                        new_auth = self.auth_manager.reauthorize_oauth2(account, auth_password)
+                        if new_auth and (new_token_encrypted := new_auth.get('access_token')):
+                            account['auth'] = new_auth
+                            self.save_config_callback()
+                            new_token = self.auth_manager.decrypt_account_auth(account, auth_password)['access_token']
+                            new_auth_str = f"user={user}\x01auth=Bearer {new_token}\x01\x01"
+                            server.docmd("AUTH", "XOAUTH2 " + base64.b64encode(new_auth_str.encode()).decode())
+                            logger.info(f"SMTP: Logged in as {user} using re-authorized OAuth2")
+                            return
+                        raise e
                     else:
                         raise e
 

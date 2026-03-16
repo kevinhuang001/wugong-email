@@ -65,7 +65,8 @@ def get_encryption_password(args: Optional[Any] = None, prompt_text: str = "Ente
     if not is_non_interactive:
         # Force prompt
         try:
-            password = questionary.password(prompt_text).ask()
+            from cli.render import CLIRenderer
+            password = questionary.password(prompt_text, style=CLIRenderer.get_questionary_style()).ask()
             if password is None: # User cancelled with Ctrl+C
                 return None
             return password

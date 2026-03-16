@@ -140,7 +140,7 @@ def test_handle_read_menu_browser_plain_text(mock_console, mock_browser, mock_se
     mock_select.return_value.ask.return_value = "browser"
     mock_browser.return_value = True
     
-    with patch('sys.stdin.isatty', return_value=True):
+    with patch('sys.stdin.isatty', return_value=True), patch('sys.stdout.isatty', return_value=True):
         handle_read(args, mock_manager)
     
     assert mock_browser.called
@@ -230,7 +230,7 @@ def test_handle_read_html_only_extract_text(mock_render, mock_console, mock_sele
     mock_manager.reader.read_email.return_value = mock_email
     mock_select.return_value.ask.return_value = "text"
     
-    with patch('sys.stdin.isatty', return_value=True):
+    with patch('sys.stdin.isatty', return_value=True), patch('sys.stdout.isatty', return_value=True):
         handle_read(args, mock_manager)
     
     assert "Extracted from HTML" in mock_email.content
@@ -259,7 +259,7 @@ def test_handle_read_html_only_cancel(mock_render, mock_console, mock_select, mo
     mock_manager.reader.read_email.return_value = mock_email
     mock_select.return_value.ask.return_value = "cancel"
     
-    with patch('sys.stdin.isatty', return_value=True):
+    with patch('sys.stdin.isatty', return_value=True), patch('sys.stdout.isatty', return_value=True):
         handle_read(args, mock_manager)
     
     assert not mock_render.called
@@ -326,7 +326,7 @@ def test_handle_read_html_only_raw_html(mock_render, mock_console, mock_select, 
     mock_manager.reader.read_email.return_value = mock_email
     mock_select.return_value.ask.return_value = "raw"
     
-    with patch('sys.stdin.isatty', return_value=True):
+    with patch('sys.stdin.isatty', return_value=True), patch('sys.stdout.isatty', return_value=True):
         handle_read(args, mock_manager)
     
     assert mock_email.content == '<html><body>Test Content</body></html>'
@@ -355,7 +355,7 @@ def test_handle_read_menu_browser(mock_console, mock_browser, mock_select, mock_
     mock_select.return_value.ask.return_value = "browser"
     mock_browser.return_value = True
     
-    with patch('sys.stdin.isatty', return_value=True):
+    with patch('sys.stdin.isatty', return_value=True), patch('sys.stdout.isatty', return_value=True):
         handle_read(args, mock_manager)
     
     assert mock_browser.called

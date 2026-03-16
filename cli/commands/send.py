@@ -22,7 +22,7 @@ def handle_send(args: argparse.Namespace, manager: MailManager) -> None:
         CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
         return
 
-    if not (body := args.body) and not (body := questionary.text("Email Body (press enter for multiple lines, type 'DONE' on a new line to finish):", multiline=True).ask()):
+    if not (body := args.body) and not (body := questionary.text("Email Body (press enter for multiple lines, type 'DONE' on a new line to finish):", multiline=True, style=CLIRenderer.get_questionary_style()).ask()):
         CLIRenderer.render_message("Email body is required.", type="error", json_output=json_out)
         return
 

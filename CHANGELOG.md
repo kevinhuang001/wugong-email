@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - 2026-03-16
+
+### Features
+- **Improved Upgrade UX**: `wugong upgrade` now uses `rich.console` for real-time status updates, preventing silent termination during update checks.
+- **Enhanced Version Comparison**: Added semantic version parsing that correctly handles 'v' prefixes and ensures "already up to date" prompts are shown when local version >= remote version.
+- **Enhanced Test Coverage**: Added new unit tests for version parsing and message rendering logic.
+
+### Fixed
+- **Fixed Unit Test Failures**: Resolved multiple failures in `test_read.py` and `test_maintain.py` by correctly mocking TTY environments and aligning error-handling assertions.
+
+## [1.1.0] - 2026-03-16
+
+### Features
+- **Clean Wizard UI**: Redesigned interactive wizard styles to remove bold text and heavy background highlighting from recommended options. 
+    - Recommended options are now identified solely by a pointer (»), ensuring a cleaner and more professional look.
+    - Removed "(Recommended)" text from encryption prompts, relying on default selection and pointer instead.
+- **Enhanced JSON Interactivity**: Refactored the `read` command to support interactive display mode selection even when the `--json` flag is used, provided the command is run in a TTY.
+- **Global Questionary Styling**: Standardized the appearance of all interactive prompts across the entire CLI (account setup, configuration, mail reading, folder management, etc.) using a unified custom style in `CLIRenderer`.
+
+### Fixed
+- **JSON Output Consistency**: Ensured that the `read` command correctly outputs a single JSON block regardless of whether an interactive selection was made.
+- **Style Inheritance**: Fixed an issue where `questionary`'s default theme (like purple background) would persist on highlighted items by explicitly disabling reverse video and inheriting terminal backgrounds.
+
 ## [1.0.9] - 2026-03-16
 
 ### Features

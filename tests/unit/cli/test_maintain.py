@@ -4,7 +4,14 @@ import os
 import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-from cli.maintain import handle_upgrade, handle_uninstall
+from cli.maintain import handle_upgrade, handle_uninstall, parse_v
+
+def test_parse_v():
+    assert parse_v("1.0.0") == [1, 0, 0]
+    assert parse_v("v1.2.3") == [1, 2, 3]
+    assert parse_v("2.10.5") == [2, 10, 5]
+    assert parse_v("invalid") == [0]
+    assert parse_v("v.1.2") == [0] # Invalid but handled
 
 @pytest.fixture
 def mock_manager():
@@ -166,4 +173,7 @@ def test_handle_uninstall_error(mock_console, mock_render_message, mock_confirm,
         with patch('cli.maintain.get_install_dir') as mock_dir:
             mock_dir.return_value.exists.return_value = True
             handle_uninstall(args, mock_manager)
-            assert any("uninstall failed" in str(call[0][0]).lower() for call in mock_render_message.call_args_list)
+            # Success message is still shown because individual step errors are caught and printed as warnings
+            assert any("uninstalled successfully" in str(call[0][0]).lower() for call in mock_render_message.call_args_list)
+            # Check that the error was printed to console
+            assert any("could not remove installation directory" in str(call).lower() for call in mock_console.print.call_args_list)

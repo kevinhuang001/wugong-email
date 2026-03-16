@@ -301,7 +301,7 @@ def account_add_wizard(
             curr_friendly_name = friendly_name
             if curr_friendly_name is None:
                 while True:
-                    if (curr_friendly_name := questionary.text("Friendly Name (e.g., 'Work Gmail'):", default="default" if is_default else "").ask()) is None:
+                    if (curr_friendly_name := questionary.text("Friendly Name (e.g., 'Work Gmail'):", default="default" if is_default else "", style=CLIRenderer.get_questionary_style()).ask()) is None:
                         raise KeyboardInterrupt
                     
                     if is_friendly_name_taken(curr_friendly_name):
@@ -317,7 +317,7 @@ def account_add_wizard(
             # 2. Provider
             curr_provider = provider
             if curr_provider is None:
-                if (curr_provider := questionary.select("Select your email provider:", choices=list(EMAIL_PROVIDERS.keys()), default="other").ask()) is None:
+                if (curr_provider := questionary.select("Select your email provider:", choices=list(EMAIL_PROVIDERS.keys()), default="other", style=CLIRenderer.get_questionary_style()).ask()) is None:
                     raise KeyboardInterrupt
             
             provider_info = EMAIL_PROVIDERS.get(curr_provider, EMAIL_PROVIDERS["other"])
@@ -327,14 +327,14 @@ def account_add_wizard(
             # 3. Login Method
             curr_login_method = login_method
             if curr_login_method is None:
-                if (curr_login_method := questionary.select("Choose login method:", choices=provider_info["auth_methods"], default=provider_info["auth_methods"][0]).ask()) is None:
+                if (curr_login_method := questionary.select("Choose login method:", choices=provider_info["auth_methods"], default=provider_info["auth_methods"][0], style=CLIRenderer.get_questionary_style()).ask()) is None:
                     raise KeyboardInterrupt
 
             # 4. Username
             curr_username = username
             if curr_username is None:
                 while True:
-                    if (curr_username := questionary.text("Email Account (e.g. yourname@example.com):").ask()) is None:
+                    if (curr_username := questionary.text("Email Account (e.g. yourname@example.com):", style=CLIRenderer.get_questionary_style()).ask()) is None:
                         raise KeyboardInterrupt
                     
                     if not curr_username:
@@ -343,7 +343,7 @@ def account_add_wizard(
                         continue
                     
                     if is_username_taken(curr_username):
-                        if not questionary.confirm(f"Warning: An account with username '{curr_username}' is already configured. Add it anyway?").ask():
+                        if not questionary.confirm(f"Warning: An account with username '{curr_username}' is already configured. Add it anyway?", style=CLIRenderer.get_questionary_style()).ask():
                             curr_username = None
                             continue
                     break
@@ -356,40 +356,40 @@ def account_add_wizard(
             # 5. IMAP Server
             curr_imap_server = imap_server
             if curr_imap_server is None:
-                if (curr_imap_server := questionary.text("IMAP Server:", default=provider_info["imap_server"]).ask()) is None:
+                if (curr_imap_server := questionary.text("IMAP Server:", default=provider_info["imap_server"], style=CLIRenderer.get_questionary_style()).ask()) is None:
                     raise KeyboardInterrupt
             
             # 6. IMAP TLS Method
             curr_imap_tls_method = imap_tls_method
             if curr_imap_tls_method is None:
-                if (curr_imap_tls_method := questionary.select("IMAP TLS Method:", choices=["SSL/TLS", "STARTTLS", "Plain"], default=provider_info.get("imap_tls_method", "SSL/TLS")).ask()) is None:
+                if (curr_imap_tls_method := questionary.select("IMAP TLS Method:", choices=["SSL/TLS", "STARTTLS", "Plain"], default=provider_info.get("imap_tls_method", "SSL/TLS"), style=CLIRenderer.get_questionary_style()).ask()) is None:
                     raise KeyboardInterrupt
 
             # 7. IMAP Port
             curr_imap_port = imap_port
             if curr_imap_port is None:
                 suggested_imap_port = provider_info.get("imap_port") or (993 if curr_imap_tls_method == "SSL/TLS" else 143)
-                if (imap_port_str := questionary.text("IMAP Port:", default=str(suggested_imap_port)).ask()) is None:
+                if (imap_port_str := questionary.text("IMAP Port:", default=str(suggested_imap_port), style=CLIRenderer.get_questionary_style()).ask()) is None:
                     raise KeyboardInterrupt
                 curr_imap_port = int(imap_port_str)
             
             # 8. SMTP Server
             curr_smtp_server = smtp_server
             if curr_smtp_server is None:
-                if (curr_smtp_server := questionary.text("SMTP Server:", default=provider_info["smtp_server"]).ask()) is None:
+                if (curr_smtp_server := questionary.text("SMTP Server:", default=provider_info["smtp_server"], style=CLIRenderer.get_questionary_style()).ask()) is None:
                     raise KeyboardInterrupt
             
             # 9. SMTP TLS Method
             curr_smtp_tls_method = smtp_tls_method
             if curr_smtp_tls_method is None:
-                if (curr_smtp_tls_method := questionary.select("SMTP TLS Method:", choices=["SSL/TLS", "STARTTLS", "Plain"], default=provider_info.get("smtp_tls_method", "SSL/TLS")).ask()) is None:
+                if (curr_smtp_tls_method := questionary.select("SMTP TLS Method:", choices=["SSL/TLS", "STARTTLS", "Plain"], default=provider_info.get("smtp_tls_method", "SSL/TLS"), style=CLIRenderer.get_questionary_style()).ask()) is None:
                     raise KeyboardInterrupt
 
             # 10. SMTP Port
             curr_smtp_port = smtp_port
             if curr_smtp_port is None:
                 suggested_smtp_port = provider_info.get("smtp_port") or (465 if curr_smtp_tls_method == "SSL/TLS" else 587 if curr_smtp_tls_method == "STARTTLS" else 25)
-                if (smtp_port_str := questionary.text("SMTP Port:", default=str(suggested_smtp_port)).ask()) is None:
+                if (smtp_port_str := questionary.text("SMTP Port:", default=str(suggested_smtp_port), style=CLIRenderer.get_questionary_style()).ask()) is None:
                     raise KeyboardInterrupt
                 curr_smtp_port = int(smtp_port_str)
 
@@ -405,7 +405,7 @@ def account_add_wizard(
                     case "Account/Password":
                         if password_val is None:
                             pwd_label = "Authorization Code:" if "Authorization Code" in provider_info["hint"] else "Email Password (or App Password):"
-                            if (password_val := questionary.password(pwd_label).ask()) is None:
+                            if (password_val := questionary.password(pwd_label, style=CLIRenderer.get_questionary_style()).ask()) is None:
                                 raise KeyboardInterrupt
                         
                         # Test Connection Immediately
@@ -417,7 +417,7 @@ def account_add_wizard(
                         
                         if not success:
                             add_message(f"Connection test failed: {msg}", type="error")
-                            if not questionary.confirm("Connection failed. Do you want to re-enter credentials?").ask():
+                            if not questionary.confirm("Connection failed. Do you want to re-enter credentials?", style=CLIRenderer.get_questionary_style()).ask():
                                 add_message("Skipping this account.", type="warning")
                                 break # Skip this account
                             password_val = None # Reset password to ask again
@@ -437,20 +437,20 @@ def account_add_wizard(
                         curr_redirect_uri = redirect_uri
 
                         if curr_client_id is None or curr_client_secret is None:
-                            if (curr_client_id := questionary.text("OAuth2 Client ID:", default=curr_client_id or "").ask()) is None or \
-                               (curr_client_secret := questionary.password("OAuth2 Client Secret:").ask()) is None:
+                            if (curr_client_id := questionary.text("OAuth2 Client ID:", default=curr_client_id or "", style=CLIRenderer.get_questionary_style()).ask()) is None or \
+                               (curr_client_secret := questionary.password("OAuth2 Client Secret:", style=CLIRenderer.get_questionary_style()).ask()) is None:
                                 raise KeyboardInterrupt
                         
                         if curr_auth_url is None:
-                            curr_auth_url = questionary.text("OAuth2 Authorization URL:", default=provider_info.get("auth_url", "")).ask()
+                            curr_auth_url = questionary.text("OAuth2 Authorization URL:", default=provider_info.get("auth_url", ""), style=CLIRenderer.get_questionary_style()).ask()
                         if curr_token_url is None:
-                            curr_token_url = questionary.text("OAuth2 Token URL:", default=provider_info.get("token_url", "")).ask()
+                            curr_token_url = questionary.text("OAuth2 Token URL:", default=provider_info.get("token_url", ""), style=CLIRenderer.get_questionary_style()).ask()
                         if curr_scopes is None:
-                            scopes_input = questionary.text("OAuth2 Scopes (comma separated):", default=",".join(provider_info.get("scopes", []))).ask()
+                            scopes_input = questionary.text("OAuth2 Scopes (comma separated):", default=",".join(provider_info.get("scopes", [])), style=CLIRenderer.get_questionary_style()).ask()
                             if scopes_input is None: raise KeyboardInterrupt
                             curr_scopes = [s.strip() for s in scopes_input.split(",") if s.strip()]
                         if curr_redirect_uri is None:
-                            curr_redirect_uri = questionary.text("Redirect URI:", default="http://localhost:5000/").ask()
+                            curr_redirect_uri = questionary.text("Redirect URI:", default="http://localhost:5000/", style=CLIRenderer.get_questionary_style()).ask()
                         
                         if any(v is None for v in [curr_auth_url, curr_token_url, curr_scopes, curr_redirect_uri]):
                             raise KeyboardInterrupt
@@ -463,7 +463,7 @@ def account_add_wizard(
                                 refresh_token_val = token.get('refresh_token', '')
                                 access_token = token.get('access_token', '')
                                 if (detected_email := token_data.get('user_email')) and detected_email != curr_username:
-                                    if (use_detected := questionary.confirm(f"Detected email '{detected_email}' differs from '{curr_username}'. Use detected email?").ask()) is None:
+                                    if (use_detected := questionary.confirm(f"Detected email '{detected_email}' differs from '{curr_username}'. Use detected email?", style=CLIRenderer.get_questionary_style()).ask()) is None:
                                         raise KeyboardInterrupt
                                     if use_detected:
                                         curr_username = detected_email
@@ -490,7 +490,7 @@ def account_add_wizard(
                                 if not success:
                                     if not json_output:
                                         console.print(f"[red]❌ Connection test failed with obtained tokens: {msg}[/red]")
-                                    if not questionary.confirm("Do you want to try OAuth2 again?").ask():
+                                    if not questionary.confirm("Do you want to try OAuth2 again?", style=CLIRenderer.get_questionary_style()).ask():
                                         break
                                     continue
 
@@ -503,14 +503,14 @@ def account_add_wizard(
                                     "redirect_uri": curr_redirect_uri,
                                     "scopes": curr_scopes,
                                     "refresh_token": encrypt_data(refresh_token_val, encryption_password, salt_val) if encrypt_enabled else refresh_token_val,
-                                    "access_token": access_token
+                                    "access_token": encrypt_data(access_token, encryption_password, salt_val) if encrypt_enabled else access_token
                                 }
                             else:
                                 raise ValueError("Failed to obtain tokens.")
                         except Exception as e:
                             if not json_output:
                                 console.print(f"[red]❌ OAuth2 flow failed: {e}[/red]")
-                            if not questionary.confirm("OAuth2 failed. Do you want to try again?").ask():
+                            if not questionary.confirm("OAuth2 failed. Do you want to try again?", style=CLIRenderer.get_questionary_style()).ask():
                                 break
                             continue
 
@@ -521,7 +521,7 @@ def account_add_wizard(
                     # 13. Sync Limit
                     curr_sync_limit = sync_limit
                     if curr_sync_limit is None:
-                        curr_sync_limit = questionary.text(f"Initial sync limit for '{curr_friendly_name}' (number, or 'all'):", default="20").ask()
+                        curr_sync_limit = questionary.text(f"Initial sync limit for '{curr_friendly_name}' (number, or 'all'):", default="20", style=CLIRenderer.get_questionary_style()).ask()
                     
                     limit = -1 if str(curr_sync_limit).lower() == "all" else int(curr_sync_limit) if str(curr_sync_limit).isdigit() else 20
 
@@ -539,7 +539,7 @@ def account_add_wizard(
                     newly_added.append((account, limit))
 
             # Ask to add another account
-            if not questionary.confirm("Add another account?").ask():
+            if not questionary.confirm("Add another account?", style=CLIRenderer.get_questionary_style()).ask():
                 break
 
             # Reset parameters for next loop iteration
@@ -749,6 +749,11 @@ def handle_account(args: argparse.Namespace, manager: MailManager, account_parse
                         if not json_out:
                             CLIRenderer.render_message(msg, type="error", json_output=json_out)
                 
+                # Final summary for interactive users
+                if not json_out and status_type == "success":
+                    console.print("\n[bold green]✨ All set! Your account(s) have been successfully added and are ready to use.[/bold green]")
+                    console.print(f"[dim]You can now use 'wugong list' or 'wugong sync' to manage your emails.[/dim]\n")
+
                 # Final merged JSON output
                 if json_out:
                     CLIRenderer.render_message(". ".join(status_messages), type=status_type, json_output=True)

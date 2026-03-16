@@ -8,6 +8,7 @@ from rich.console import Console, Group
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
+from questionary import Style
 from mail.storage_manager import Email
 
 console = Console()
@@ -15,6 +16,22 @@ console = Console()
 class CLIRenderer:
     """Handles all Rich-based UI rendering logic."""
     
+    @staticmethod
+    def get_questionary_style() -> Style:
+        """Returns a custom style for questionary to remove bold and background from highlighted choices."""
+        return Style([
+            ('qmark', 'fg:#673ab7 bold'),       # token in front of the question
+            ('question', 'bold'),               # question text
+            ('answer', 'fg:#f44336 bold'),      # submitted answer text behind the question
+            ('pointer', 'fg:#673ab7 bold'),     # pointer used in select and checkbox prompts
+            ('highlighted', 'noinherit noreverse'), # pointed-at choice (REMOVE BOLD & BACKGROUND)
+            ('selected', 'noinherit noreverse'),    # selected item in list
+            ('separator', 'fg:#cc5454'),        # separator in lists
+            ('instruction', ''),                # user instructions for select, checkbox, etc.
+            ('text', ''),                       # plain text
+            ('disabled-answer', 'fg:#858585'),  # disabled choices for select and checkbox prompts
+        ])
+
     @staticmethod
     def render_header(title: str, subtitle: str | None = None, json_output: bool = False) -> None:
         """Renders a full-width centered header with optional subtitle."""
@@ -258,13 +275,12 @@ class CLIRenderer:
             sys.stdout.write(json.dumps(output, indent=2, ensure_ascii=False) + "\n")
             return
         
-        logger = logging.getLogger("wugong.cli")
         match type:
             case "success":
-                logger.info(f"[green]✅ {message}[/green]")
+                console.print(f"[bold green]✅ {message}[/bold green]")
             case "error":
-                logger.error(f"[red]❌ {message}[/red]")
+                console.print(f"[bold red]❌ {message}[/bold red]")
             case "warning":
-                logger.warning(f"[yellow]⚠️ {message}[/yellow]")
+                console.print(f"[bold yellow]⚠️ {message}[/bold yellow]")
             case _:
-                logger.info(message)
+                console.print(message)

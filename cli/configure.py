@@ -83,7 +83,8 @@ def configure_wizard(
             if (console_log_level := questionary.select(
                 f"Select console log level (current: {current_console_level}):",
                 choices=log_levels,
-                default=current_console_level
+                default=current_console_level,
+                style=CLIRenderer.get_questionary_style()
             ).ask()) is None:
                 raise KeyboardInterrupt
 
@@ -91,7 +92,8 @@ def configure_wizard(
             if (file_log_level := questionary.select(
                 f"Select file log level (current: {current_file_level}):",
                 choices=log_levels,
-                default=current_file_level
+                default=current_file_level,
+                style=CLIRenderer.get_questionary_style()
             ).ask()) is None:
                 raise KeyboardInterrupt
 
@@ -214,7 +216,7 @@ def init_wizard(
 
         # 1. Encryption Choice
         if encrypt_creds is None:
-            encryption_enabled = questionary.confirm("Enable encryption? (Recommended)", default=True).ask()
+            encryption_enabled = questionary.confirm("Enable encryption?", default=True, style=CLIRenderer.get_questionary_style()).ask()
             if encryption_enabled is None:
                 raise KeyboardInterrupt
             encrypt_creds = encryption_enabled
@@ -245,7 +247,8 @@ def init_wizard(
             if (console_log_level := questionary.select(
                 "Select default console log level:",
                 choices=log_levels,
-                default="WARNING"
+                default="WARNING",
+                style=CLIRenderer.get_questionary_style()
             ).ask()) is None:
                 raise KeyboardInterrupt
 
@@ -253,13 +256,14 @@ def init_wizard(
             if (file_log_level := questionary.select(
                 "Select default file log level:",
                 choices=log_levels,
-                default="DEBUG"
+                default="DEBUG",
+                style=CLIRenderer.get_questionary_style()
             ).ask()) is None:
                 raise KeyboardInterrupt
 
         # 3. Sync Interval & Scheduling
         if sync_interval is None:
-            if (sync_interval_str := questionary.text("Sync interval in minutes (e.g., 5, 10, 60. Enter 0 to disable auto-sync):", default="10").ask()) is None:
+            if (sync_interval_str := questionary.text("Sync interval in minutes (e.g., 5, 10, 60. Enter 0 to disable auto-sync):", default="10", style=CLIRenderer.get_questionary_style()).ask()) is None:
                 raise KeyboardInterrupt
             else:
                 interval = int(sync_interval_str) if sync_interval_str.isdigit() else 10
@@ -292,7 +296,7 @@ def init_wizard(
 
         if not current_config.get("accounts") and not json_output:
             console.print("\n[info]💡 Tip: No accounts found. Use 'wugong account add' to add your first email account.[/info]")
-            if questionary.confirm("Do you want to add an account now?").ask():
+            if questionary.confirm("Do you want to add an account now?", style=CLIRenderer.get_questionary_style()).ask():
                 from cli.commands.account import account_add_wizard
                 account_add_wizard(current_config, args, json_output=json_output)
 

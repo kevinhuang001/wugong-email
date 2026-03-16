@@ -24,7 +24,7 @@ def handle_delete(args: argparse.Namespace, manager: MailManager) -> None:
 
     folder = getattr(args, "folder", "INBOX") or "INBOX"
 
-    if not getattr(args, "non_interactive", False) and not questionary.confirm(f"Are you sure you want to delete email {args.id} from {account_name} ({folder})?").ask():
+    if not getattr(args, "non_interactive", False) and not questionary.confirm(f"Are you sure you want to delete email {args.id} from {account_name} ({folder})?", style=CLIRenderer.get_questionary_style()).ask():
         CLIRenderer.render_message("Deletion cancelled.", type="warning", json_output=json_out)
         return
 

@@ -29,3 +29,17 @@ def decrypt_data(encrypted_data: str, password: str, salt: bytes) -> str:
 def generate_salt() -> bytes:
     """Generates a random 16-byte salt."""
     return os.urandom(16)
+
+def is_fernet_token(data: str) -> bool:
+    """Check if a string looks like a Fernet-encrypted token."""
+    if not isinstance(data, str) or not data:
+        return False
+    # Fernet tokens always start with 'gAAAAA' (base64 for version 0x80)
+    # and they should be base64-decodable.
+    if not data.startswith("gAAAAA"):
+        return False
+    try:
+        base64.urlsafe_b64decode(data.encode())
+        return True
+    except Exception:
+        return False
