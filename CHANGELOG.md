@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.2] - 2026-03-17
+
+### Features
+- **Enhanced OAuth2 UX**: Added a prominent Rich-based panel to display the OAuth2 authorization URL in the console. This ensures usability in headless environments (e.g., SSH) where a browser cannot be automatically opened.
+
 ## [1.1.1] - 2026-03-16
 
 ### Features
