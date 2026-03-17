@@ -1,13 +1,12 @@
 import argparse
 import logging
-from rich.console import Console
+from logger import console, setup_logger
 import questionary
 from mail import MailManager
 import config
 from cli.render import CLIRenderer
 
-logger = logging.getLogger("cli.send")
-console = Console()
+logger = setup_logger("cli.send")
 
 def handle_send(args: argparse.Namespace, manager: MailManager) -> None:
     json_out = getattr(args, "json", False)

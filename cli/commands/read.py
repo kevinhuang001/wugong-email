@@ -6,15 +6,14 @@ import webbrowser
 import tempfile
 import os
 import html
-from rich.console import Console
+from logger import console, setup_logger
 import questionary
 from mail import MailManager
 from mail.storage_manager import Email
 from cli.render import CLIRenderer
 import config
 
-logger = logging.getLogger("cli.read")
-console = Console()
+logger = setup_logger("cli.read")
 
 def handle_read(args: argparse.Namespace, manager: MailManager) -> None:
     json_out = getattr(args, "json", False)

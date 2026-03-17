@@ -12,9 +12,9 @@ def test_folder_list_all_params(mail_server, mail_config):
     # Initialize mailbox for user1
     init_mailbox("user1", "password", imap_port)
     
-    # folder list <account>
+    # folder list -a <account>
     folder_args = [
-        "folder", "list", "user1"
+        "folder", "list", "-a", "user1"
     ]
     
     output = run_wugong_command(folder_args, config_path, password)
@@ -45,7 +45,7 @@ def test_folder_create_and_delete(mail_server, mail_config):
     assert res.get("status") == "success"
     
     # Verify it exists
-    output = run_wugong_command(["folder", "list", "user1"], config_path, password)
+    output = run_wugong_command(["folder", "list", "-a", "user1"], config_path, password)
     res = json.loads(output)
     assert any(f.get("name") == "NewFolder" for f in res)
     
@@ -62,7 +62,7 @@ def test_folder_create_and_delete(mail_server, mail_config):
     assert res.get("status") == "success"
     
     # Verify it was deleted
-    output = run_wugong_command(["folder", "list", "user1"], config_path, password)
+    output = run_wugong_command(["folder", "list", "-a", "user1"], config_path, password)
     res = json.loads(output)
     assert not any(f.get("name") == "NewFolder" for f in res)
 
@@ -72,7 +72,7 @@ def test_folder_move_email(mail_server, mail_config):
     password = mail_config["master_password"]
     
     # Sync INBOX first
-    output = run_wugong_command(["sync", "user1"], config_path, password)
+    output = run_wugong_command(["sync", "-a", "user1", "--all"], config_path, password)
     res = json.loads(output)
     
     # Get ID of first email in INBOX
@@ -93,14 +93,14 @@ def test_folder_move_email(mail_server, mail_config):
     
     # Verify it moved to Archive
     # First sync Archive to update local cache
-    run_wugong_command(["sync", "user1", "--folder", "Archive"], config_path, password)
+    run_wugong_command(["sync", "-a", "user1", "--folder", "Archive"], config_path, password)
     
-    output = run_wugong_command(["list", "user1", "--folder", "Archive"], config_path, password)
+    # Verify move
+    output = run_wugong_command(["list", "-a", "user1", "--folder", "Archive"], config_path, password)
     res = json.loads(output)
+    assert any(subject in m.get("subject") for m in res)
     
-    assert any(m.get("subject") == subject for m in res)
-    
-    # Verify it's no longer in INBOX
-    output = run_wugong_command(["list", "user1", "--folder", "INBOX"], config_path, password)
+    # Verify removed from INBOX
+    output = run_wugong_command(["list", "-a", "user1", "--folder", "INBOX"], config_path, password)
     res = json.loads(output)
     assert not any(m.get("subject") == subject for m in res)

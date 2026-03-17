@@ -1,13 +1,12 @@
 import argparse
 import logging
-from rich.console import Console
+from logger import console, setup_logger
 from rich.table import Table
 from mail import MailManager
 import config
 from cli.render import CLIRenderer
 
-logger = logging.getLogger("cli.folder")
-console = Console()
+logger = setup_logger("cli.folder")
 
 def handle_folder(args: argparse.Namespace, manager: MailManager) -> None:
     json_out = getattr(args, "json", False)

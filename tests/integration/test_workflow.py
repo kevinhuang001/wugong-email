@@ -101,7 +101,7 @@ def test_full_complex_workflow(mail_server, mail_config):
     # -------------------------------------------------------------------------
     print("[Step 5] user2_workflow syncing and verifying email...")
     time.sleep(3.0) # Increased delay for delivery
-    output = run_wugong_command(["sync", "user2_workflow"], config_path, password)
+    output = run_wugong_command(["sync", "-a", "user2_workflow", "--all"], config_path, password)
     emails = json.loads(output)
     assert isinstance(emails, list)
     
@@ -116,7 +116,7 @@ def test_full_complex_workflow(mail_server, mail_config):
         # Try one more sync if not found
         print(f"DEBUG: Email '{subject_to_u2}' not found for user2_workflow yet. Retrying sync...")
         time.sleep(2.0)
-        output = run_wugong_command(["sync", "user2_workflow"], config_path, password)
+        output = run_wugong_command(["sync", "-a", "user2_workflow", "--all"], config_path, password)
         emails = json.loads(output)
         for m in emails:
             if subject_to_u2 in m.get("subject"):
@@ -132,7 +132,7 @@ def test_full_complex_workflow(mail_server, mail_config):
     # -------------------------------------------------------------------------
     print("[Step 6] user2 managing folders...")
     # List initial folders
-    output = run_wugong_command(["folder", "list", "user2"], config_path, password)
+    output = run_wugong_command(["folder", "list", "-a", "user2"], config_path, password)
     folders = json.loads(output)
     assert isinstance(folders, list)
     
@@ -143,7 +143,7 @@ def test_full_complex_workflow(mail_server, mail_config):
     assert res.get("status") == "success"
     
     # Verify creation
-    output = run_wugong_command(["folder", "list", "user2"], config_path, password)
+    output = run_wugong_command(["folder", "list", "-a", "user2"], config_path, password)
     folders = json.loads(output)
     assert any(f.get("name") == "ProjectX" for f in folders)
 
@@ -156,7 +156,7 @@ def test_full_complex_workflow(mail_server, mail_config):
     assert res.get("status") == "success"
 
     # Verify move
-    output = run_wugong_command(["list", "user2", "--folder", "ProjectX"], config_path, password)
+    output = run_wugong_command(["list", "-a", "user2", "--folder", "ProjectX"], config_path, password)
     emails_in_px = json.loads(output)
     # Search by subject because UID might change during move
     assert any(subject_to_u2 in m.get("subject", "") for m in emails_in_px)
@@ -183,7 +183,7 @@ def test_full_complex_workflow(mail_server, mail_config):
     # -------------------------------------------------------------------------
     print("[Step 8] user1 syncing and verifying reply...")
     time.sleep(2.0) # Allow some time for delivery
-    output = run_wugong_command(["sync", "user1"], config_path, password)
+    output = run_wugong_command(["sync", "-a", "user1", "--all"], config_path, password)
     emails = json.loads(output)
     
     found_reply = False
@@ -206,7 +206,7 @@ def test_full_complex_workflow(mail_server, mail_config):
     assert res.get("status") == "success"
 
     # Get the new ID from the Replies folder because UID might change during move
-    output = run_wugong_command(["list", "user1", "--folder", "Replies"], config_path, password)
+    output = run_wugong_command(["list", "-a", "user1", "--folder", "Replies"], config_path, password)
     emails_in_replies = json.loads(output)
     new_reply_id = None
     for m in emails_in_replies:
@@ -240,7 +240,7 @@ def test_full_complex_workflow(mail_server, mail_config):
     # 11. Verify reply is deleted from user1's 'Replies' list
     # -------------------------------------------------------------------------
     print("[Step 11] Verifying deletion for user1 in 'Replies'...")
-    output = run_wugong_command(["list", "user1", "--folder", "Replies"], config_path, password)
+    output = run_wugong_command(["list", "-a", "user1", "--folder", "Replies"], config_path, password)
     emails = json.loads(output)
     assert not any(str(m.get("id")) == str(reply_id) for m in emails)
 
@@ -259,7 +259,7 @@ def test_full_complex_workflow(mail_server, mail_config):
     assert res.get("status") == "success"
     
     # Verify folder is gone
-    output = run_wugong_command(["folder", "list", "user2"], config_path, password)
+    output = run_wugong_command(["folder", "list", "-a", "user2"], config_path, password)
     folders = json.loads(output)
     assert not any(f.get("name") == "ProjectX" for f in folders)
 
@@ -267,7 +267,7 @@ def test_full_complex_workflow(mail_server, mail_config):
     # 13. Delete user2 account from CLI
     # -------------------------------------------------------------------------
     print("[Step 13] Deleting user2 account from CLI...")
-    output = run_wugong_command(["account", "delete", "user2"], config_path, password)
+    output = run_wugong_command(["account", "delete", "-a", "user2"], config_path, password)
     res = json.loads(output)
     assert res.get("status") == "success"
 
@@ -303,7 +303,7 @@ def test_interaction_edge_cases(mail_server, mail_config):
     assert res.get("status") in ["error", "warning"] or "not found" in res.get("message", "").lower()
 
     print("[Edge Case 2] Listing folders for non-existent account...")
-    output = run_wugong_command(["folder", "list", "ghost_account"], config_path, password)
+    output = run_wugong_command(["folder", "list", "-a", "ghost_account"], config_path, password)
     res = json.loads(output)
     assert res.get("status") == "error"
     assert "not found" in res.get("message").lower()
@@ -377,7 +377,7 @@ def test_sync_performance_and_aggregation(mail_server, mail_config):
     assert isinstance(res, list)
     
     print("[Sync Test] Testing sync limit (limit=5)...")
-    output = run_wugong_command(["sync", "user1", "--limit", "5"], config_path, password)
+    output = run_wugong_command(["sync", "-a", "user1", "--limit", "5"], config_path, password)
     res = json.loads(output)
     assert isinstance(res, list)
     # Note: If there are fewer than 5 emails, it will return all of them
@@ -388,14 +388,14 @@ def test_sync_performance_and_aggregation(mail_server, mail_config):
     # -------------------------------------------------------------------------
     print("\n[Final Test] Testing search and sort functionality...")
     # Search for "Workflow" keyword
-    output = run_wugong_command(["list", "user1", "--keyword", "Workflow"], config_path, password)
+    output = run_wugong_command(["list", "-a", "user1", "--keyword", "Workflow"], config_path, password)
     search_res = json.loads(output)
     assert isinstance(search_res, list)
     # Since we sent multiple emails with "Workflow" in subject
     assert len(search_res) >= 1
 
     # Sort by subject ascending
-    output = run_wugong_command(["list", "user1", "--sort", "subject", "--order", "asc"], config_path, password)
+    output = run_wugong_command(["list", "-a", "user1", "--sort", "subject", "--order", "asc"], config_path, password)
     sorted_res = json.loads(output)
     assert isinstance(sorted_res, list)
     if len(sorted_res) > 1:

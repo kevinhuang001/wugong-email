@@ -13,7 +13,7 @@ def test_read_all_params(mail_server, mail_config):
     init_mailbox("user1", "password", imap_port)
     
     # Sync first so database is populated
-    output = run_wugong_command(["sync", "user1"], config_path, password)
+    output = run_wugong_command(["sync", "-a", "user1", "--all"], config_path, password)
     res = json.loads(output)
     
     # Get ID of the one with an attachment (security updates)
@@ -47,11 +47,11 @@ def test_read_missing_account(mail_config):
     config_path = mail_config["config_path"]
     password = mail_config["master_password"]
     
-    # Run sync for default account (user1)
-    run_wugong_command(["sync"], config_path, password)
+    # Run sync for all accounts
+    run_wugong_command(["sync", "-a", "all", "--all"], config_path, password)
     
     # Get IDs from list output for all accounts
-    output = run_wugong_command(["list", "all"], config_path, password)
+    output = run_wugong_command(["list", "-a", "all"], config_path, password)
     res = json.loads(output)
     
     # Just read the first email from first account (user1)

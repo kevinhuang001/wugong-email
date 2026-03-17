@@ -16,9 +16,7 @@ from cli.commands import (
 )
 from cli.configure import handle_init, handle_configure
 from cli.maintain import handle_upgrade, handle_uninstall
-from logger import setup_logger, update_console_level
-
-from rich.console import Console
+from logger import setup_logger, update_console_level, console
 
 from cli.render import CLIRenderer
 
@@ -27,7 +25,6 @@ socket.setdefaulttimeout(30)
 
 # Pre-initialize logger with defaults
 logger = setup_logger("cli")
-console = Console()
 
 def main() -> None:
     # Common arguments for all commands
@@ -45,7 +42,7 @@ def main() -> None:
 
     # List command
     list_parser = subparsers.add_parser("list", parents=[common_parser], help="List accounts or emails")
-    list_parser.add_argument("account", nargs="?", help="Friendly name of the account to list emails from (use 'all' for all accounts)")
+    list_parser.add_argument("--account", "-a", help="Friendly name of the account to list emails from (use 'all' for all accounts)")
     list_parser.add_argument("--limit", "-l", type=int, help="Number of emails to list per account (default from config)")
     list_parser.add_argument("--verbose", "-v", action="store_true", help="Show more information (e.g., email addresses and folders)")
     list_parser.add_argument("--all", action="store_true", help="List all available emails")
@@ -83,7 +80,7 @@ def main() -> None:
 
     # Sync command
     sync_parser = subparsers.add_parser("sync", parents=[common_parser], help="Sync latest emails from server")
-    sync_parser.add_argument("account", nargs="?", help="Friendly name of the account to sync (use 'all' for all accounts)")
+    sync_parser.add_argument("--account", "-a", help="Friendly name of the account to sync (use 'all' for all accounts)")
     sync_parser.add_argument("--limit", "-l", type=int, help="Limit number of emails to fetch (default: 0 = use config/recent)")
     sync_parser.add_argument("--all", action="store_true", help="Sync all available emails (overrides limit)")
     sync_parser.add_argument("--folder", default="INBOX", help="Specific folder to sync (default: INBOX)")
@@ -124,7 +121,7 @@ def main() -> None:
     acc_add_parser.add_argument("--redirect-uri", help="OAuth2 Redirect URI")
     acc_add_parser.add_argument("--sync-limit", help="Number of emails to download initially (e.g., 20, 50 or 'all')")
     acc_del_parser = account_subparsers.add_parser("delete", parents=[common_parser], help="Delete an email account")
-    acc_del_parser.add_argument("name", help="Friendly name of the account to delete")
+    acc_del_parser.add_argument("--account", "-a", help="Friendly name of the account to delete")
 
     # Folder management
     folder_parser = subparsers.add_parser("folder", parents=[common_parser], help="Manage folders and move emails")
@@ -132,7 +129,7 @@ def main() -> None:
     
     # List folders
     folder_list_parser = folder_subparsers.add_parser("list", parents=[common_parser], help="List folders for an account")
-    folder_list_parser.add_argument("account", nargs="?", help="Account name (uses default if not specified)")
+    folder_list_parser.add_argument("--account", "-a", help="Account name (uses default if not specified)")
     folder_list_parser.add_argument("--verbose", "-v", action="store_true", help="Show more information (e.g., email counts)")
     
     # Create folder

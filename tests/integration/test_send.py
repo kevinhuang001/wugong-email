@@ -14,8 +14,8 @@ def test_send_all_params(mail_server, mail_config):
     init_mailbox("user2", "password", imap_port)
     
     # Sync so accounts are ready
-    run_wugong_command(["sync", "user1"], config_path, password)
-    run_wugong_command(["sync", "user2"], config_path, password)
+    run_wugong_command(["sync", "-a", "user1", "--all"], config_path, password)
+    run_wugong_command(["sync", "-a", "user2", "--all"], config_path, password)
     
     # send --account, --to, --subject, --body, --attach
     # Attachments require a temporary file
@@ -40,18 +40,18 @@ def test_send_all_params(mail_server, mail_config):
         assert res.get("status") == "success"
         
     # Verify user2 received it
-    output = run_wugong_command(["sync", "user2"], config_path, password)
+    output = run_wugong_command(["sync", "-a", "user2", "--all"], config_path, password)
     res = json.loads(output)
     
     assert any("Integration Test Send" in m.get("subject") for m in res)
 
-def test_send_to_friendly_name(mail_config):
+def test_send_to_friendly_name(mail_server, mail_config):
     """Test sending using friendly names for sender/recipient."""
     config_path = mail_config["config_path"]
     password = mail_config["master_password"]
     
     # Sync accounts
-    run_wugong_command(["sync"], config_path, password)
+    run_wugong_command(["sync", "-a", "all", "--all"], config_path, password)
     
     # send --account (friendly), --to (friendly)
     send_args = [
@@ -68,6 +68,6 @@ def test_send_to_friendly_name(mail_config):
     assert res.get("status") == "success"
     
     # Sync user2 to confirm
-    output = run_wugong_command(["sync", "user2"], config_path, password)
+    output = run_wugong_command(["sync", "-a", "user2", "--all"], config_path, password)
     res = json.loads(output)
     assert any("Friendly Name Test" in m.get("subject") for m in res)

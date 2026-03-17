@@ -5,7 +5,7 @@ import threading
 import webbrowser
 import logging
 import os
-from rich.console import Console
+from logger import console, setup_logger
 from rich.panel import Panel
 from flask import Flask, request
 from requests_oauthlib import OAuth2Session
@@ -18,8 +18,7 @@ log.setLevel(logging.ERROR)
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 # Relax scope matching for providers like Microsoft that might return different scopes than requested
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
-
-logger = logging.getLogger("wugong.oauth2")
+logger = setup_logger("oauth2")
 
 def start_oauth_flow(client_id: str, client_secret: str, auth_url: str, token_url: str, scopes: list[str], redirect_uri: str) -> dict:
     """Starts a local server to handle OAuth2 callback and returns the token."""
@@ -116,7 +115,6 @@ def start_oauth_flow(client_id: str, client_secret: str, auth_url: str, token_ur
     oauth = OAuth2Session(client_id, scope=scopes, redirect_uri=redirect_uri)
     authorization_url, _ = oauth.authorization_url(auth_url, access_type="offline", prompt="consent")
     
-    console = Console()
     console.print(Panel(
         f"[bold blue]🚀 OAuth2 Authorization Required[/bold blue]\n\n"
         f"If your browser didn't open automatically, please visit this URL:\n\n"

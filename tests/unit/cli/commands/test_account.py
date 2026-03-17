@@ -26,7 +26,7 @@ def get_mock_args(**kwargs):
         'sync_limit': None,
         'non_interactive': False,
         'password_override': None,
-        'name': None,
+        'account': None,
         'json': False,
     }
     defaults.update(kwargs)
@@ -90,7 +90,7 @@ def test_handle_account_list_json(mock_render, mock_manager):
 def test_handle_account_delete_success(mock_confirm, mock_select, mock_render, mock_manager):
     args = get_mock_args(
         account_command="delete",
-        name="test_acc",
+        account="test_acc",
         json=False
     )
     # Mock questionary
@@ -291,7 +291,7 @@ def test_handle_account_list_empty(mock_render, mock_manager):
 def test_handle_account_delete_not_found(mock_select, mock_render, mock_manager):
     args = get_mock_args(
         account_command="delete",
-        name="non_existent",
+        account="non_existent",
         non_interactive=True,
         json=False
     )
@@ -310,7 +310,7 @@ def test_handle_account_delete_not_found(mock_select, mock_render, mock_manager)
 def test_handle_account_delete_cancel(mock_render, mock_confirm, mock_select, mock_manager):
     args = get_mock_args(
         account_command="delete",
-        name="test_acc",
+        account="test_acc",
         json=False
     )
     mock_manager.accounts = [{"friendly_name": "test_acc"}]
@@ -320,8 +320,8 @@ def test_handle_account_delete_cancel(mock_render, mock_confirm, mock_select, mo
     
     handle_account(args, mock_manager, mock_parser)
     
-    # Check if delete was NOT called (manager.accounts still has the account)
-    assert len(mock_manager.accounts) == 1
+    # Verify no deletion happened
+    mock_manager.get_account_by_name.assert_not_called()
 
 @patch('cli.commands.account.console')
 @patch('cli.commands.account.account_add_wizard')

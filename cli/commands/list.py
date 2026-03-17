@@ -2,13 +2,12 @@ import argparse
 import sys
 import logging
 from typing import Any, cast
-from rich.console import Console
+from logger import console, setup_logger
 from mail import MailManager
 from cli.render import CLIRenderer
 import config
 
-logger = logging.getLogger("cli.list")
-console = Console()
+logger = setup_logger("cli.list")
 
 def handle_list(args: argparse.Namespace, manager: MailManager) -> None:
     json_out = getattr(args, "json", False)
@@ -17,37 +16,24 @@ def handle_list(args: argparse.Namespace, manager: MailManager) -> None:
         return
 
     if not args.account:
-        # List all accounts if no specific account is provided
-        accounts_data = []
-        for idx, acc in enumerate(manager.accounts, 1):
-            account_name = acc.get("friendly_name", "N/A")
-            cached_count = manager.storage_manager.get_email_count(account_name)
-            unseen_count = manager.storage_manager.get_email_count(account_name, only_unseen=True)
-            accounts_data.append({
-                "id": idx,
-                "friendly_name": account_name,
-                "username": acc.get("auth", {}).get("username", "N/A"),
-                "cached_count": cached_count,
-                "unseen_count": unseen_count,
-                "server_total": "N/A", # Don't fetch server stats for quick list
-                "server_unseen": "N/A",
-                "login_method": acc.get("login_method", "N/A"),
-                "imap_server": acc.get("imap_server"),
-                "imap_port": acc.get("imap_port")
-            })
-        CLIRenderer.render_accounts_table(accounts_data, verbose=getattr(args, "verbose", False), json_output=json_out)
-        return
+        # Default to "default" account if no specific account is provided
+        target_account_name = "default"
+    else:
+        target_account_name = args.account
 
-    target_accounts = manager.accounts if args.account == "all" else [
-        acc for acc in [manager.get_account_by_name(args.account)] if acc
+    target_accounts = manager.accounts if target_account_name == "all" else [
+        acc for acc in [manager.get_account_by_name(target_account_name)] if acc
     ]
     
     if not target_accounts:
-        CLIRenderer.render_message(f"Account '{args.account}' not found.", type="error", json_output=json_out)
+        if not args.account:
+            CLIRenderer.render_message("No accounts configured yet. Run 'wugong account add' to get started.", type="warning", json_output=json_out)
+        else:
+            CLIRenderer.render_message(f"Account '{target_account_name}' not found.", type="error", json_output=json_out)
         return
 
     try:
-        prompt = "Enter encryption password for all accounts:" if args.account == "all" else f"Enter encryption password for '{target_accounts[0]['friendly_name']}':"
+        prompt = "Enter encryption password for all accounts:" if target_account_name == "all" else f"Enter encryption password for '{target_accounts[0]['friendly_name']}':"
         password = config.get_verified_password(manager.config, args, prompt)
     except ValueError as e:
         CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)

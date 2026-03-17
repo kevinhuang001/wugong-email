@@ -7,15 +7,14 @@ import logging
 import tempfile
 from pathlib import Path
 import urllib.request
-from rich.console import Console
+from logger import console, setup_logger
 from rich.markdown import Markdown
 
 from typing import Any, Optional
 
 from cli.render import CLIRenderer
 
-logger = logging.getLogger("cli.maintainer")
-console = Console()
+logger = setup_logger("cli.maintainer")
 
 def get_install_dir() -> Path:
     """Returns the installation directory where the code resides."""

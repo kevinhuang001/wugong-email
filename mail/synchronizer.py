@@ -80,7 +80,7 @@ class MailSynchronizer:
         self, 
         account: dict[str, Any], 
         auth_password: str, 
-        limit: int = 20, 
+        limit: int = 0, 
         search_criteria: dict[str, Any] | None = None, 
         progress_callback: Callable[[int, int, str], None] | None = None, 
         is_initial_sync: bool = False,
@@ -122,19 +122,32 @@ class MailSynchronizer:
                     newly_fetched_emails = self._sync_emails_internal(
                         mail, account_name, folder, uids_to_process, auth_password, progress_callback
                     )
+                elif progress_callback:
+                    # Report 0/0 progress if no UIDs to process (e.g., limit 0 or empty folder)
+                    progress_callback(0, 0, "No emails to sync")
                 
                 # Update sync status
                 new_last_uid = uids_raw[-1].decode() if uids_raw else sync_info.get("uid", "0")
                 self.storage_manager.update_sync_info(account_name, folder, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), new_last_uid)
                 sync_info = self.storage_manager.get_last_sync_info(account_name, folder)
 
-            mail.close()
-            mail.logout()
-            
-        except Exception as e:
+        except (Exception, KeyboardInterrupt) as e:
+            if isinstance(e, KeyboardInterrupt):
+                # Don't set is_offline, just re-raise to be handled by caller
+                raise e
             logger.error(f"Sync error for {account_name} [{folder}]: {e}")
             is_offline = True
             sync_error = str(e)
+        finally:
+            if 'mail' in locals() and mail:
+                try:
+                    mail.close()
+                except:
+                    pass
+                try:
+                    mail.logout()
+                except:
+                    pass
 
         email_list = self.storage_manager.get_emails_from_cache(account_name, limit, search_criteria, auth_password, folder=folder)
         return email_list, {
@@ -205,26 +218,28 @@ class MailSynchronizer:
         cached_statuses = self.storage_manager.get_cached_statuses(account_name, uids_decoded, folder)
         server_statuses = self._fetch_server_statuses(mail, uids)
         
-        for i, uid_bin in enumerate(reversed(uids)):
-            uid_str = uid_bin.decode()
-            server_seen = server_statuses.get(uid_str, False)
-            
-            if progress_callback:
-                progress_callback(i + 1, total, f"Syncing {i+1}/{total}...")
+        try:
+            for i, uid_bin in enumerate(reversed(uids)):
+                uid_str = uid_bin.decode()
+                server_seen = server_statuses.get(uid_str, False)
+                
+                if progress_callback:
+                    progress_callback(i + 1, total, f"Syncing {i+1}/{total}...")
 
-            if uid_str in cached_statuses:
-                if server_seen != cached_statuses[uid_str]:
-                    self.storage_manager.update_seen_status(account_name, uid_str, server_seen, folder)
-            else:
-                res, msg_data = mail.uid('fetch', uid_bin, '(RFC822)')
-                if res == "OK" and msg_data[0]:
-                    msg = email.message_from_bytes(msg_data[0][1])
-                    status_data = f"(FLAGS ({'\\Seen' if server_seen else ''}))"
-                    parsed = MailParser.parse_full_email(account_name, uid_str, msg, status_data, folder)
-                    new_emails.append(parsed)
+                if uid_str in cached_statuses:
+                    if server_seen != cached_statuses[uid_str]:
+                        self.storage_manager.update_seen_status(account_name, uid_str, server_seen, folder)
+                else:
+                    res, msg_data = mail.uid('fetch', uid_bin, '(RFC822)')
+                    if res == "OK" and msg_data[0]:
+                        msg = email.message_from_bytes(msg_data[0][1])
+                        status_data = f"(FLAGS ({'\\Seen' if server_seen else ''}))"
+                        parsed = MailParser.parse_full_email(account_name, uid_str, msg, status_data, folder)
+                        new_emails.append(parsed)
+        finally:
+            if new_emails:
+                self.storage_manager.save_emails_to_cache(account_name, folder, [e.to_dict() for e in new_emails], auth_password)
         
-        if new_emails:
-            self.storage_manager.save_emails_to_cache(account_name, folder, [e.to_dict() for e in new_emails], auth_password)
         return new_emails
 
     def _fetch_server_statuses(self, mail: imaplib.IMAP4, uids: list[bytes]) -> dict[str, bool]:

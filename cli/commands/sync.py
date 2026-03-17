@@ -1,14 +1,13 @@
 import argparse
 import sys
 import logging
-from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 from mail import MailManager
 from cli.render import CLIRenderer
 import config
+from logger import console, setup_logger
 
-logger = logging.getLogger("cli.sync")
-console = Console()
+logger = setup_logger("cli.sync")
 
 def handle_sync(args: argparse.Namespace, manager: MailManager) -> None:
     json_out = getattr(args, "json", False)
@@ -37,8 +36,8 @@ def handle_sync(args: argparse.Namespace, manager: MailManager) -> None:
     from mail.storage_manager import Email
     for account in target_accounts:
         account_name = account.get("friendly_name") or "default"
-        # If limit is 0, use a reasonable default for sync (e.g., 20)
-        sync_limit = -1 if args.all else (args.limit if args.limit is not None else 20)
+        # If limit is not provided, default to 0 which triggers incremental sync (since last sync)
+        sync_limit = -1 if args.all else (args.limit if args.limit is not None else 0)
         
         with Progress(
             SpinnerColumn(),
@@ -48,10 +47,11 @@ def handle_sync(args: argparse.Namespace, manager: MailManager) -> None:
             TimeRemainingColumn(),
             console=console,
             transient=True,
-            disable=not sys.stdin.isatty() or json_out
+            disable=not sys.stdin.isatty() or json_out,
+            refresh_per_second=10  # Reduce UI thread overhead
         ) as progress:
             sync_task = progress.add_task(f"[green]Syncing {account_name} ({folder})...", total=None)
-            
+
             def update_progress(current, total, description=None):
                 progress.update(sync_task, total=total, completed=current, description=f"[green]Syncing {account_name} ({folder}): {description or ''}")
 
@@ -62,39 +62,44 @@ def handle_sync(args: argparse.Namespace, manager: MailManager) -> None:
                     progress_callback=update_progress,
                     folder=folder
                 )
-                if json_out:
-                    if metadata.get("is_offline", False):
-                        errors.append({"account": account_name, "error": metadata.get('error') or 'Connection failed', "offline": True})
-                    
-                    if emails:
-                        for em in emails:
-                            if isinstance(em, Email):
-                                em_dict = em.to_dict()
-                                em_dict["account"] = account_name
-                                all_emails.append(em_dict)
-                            elif isinstance(em, dict):
-                                em["account"] = account_name
-                                all_emails.append(em)
-
-                if not json_out:
-                    if metadata.get("is_offline", False):
-                        CLIRenderer.render_message(f"Sync failed for {account_name} ({folder}): {metadata.get('error') or 'Connection failed'}.", type="error", json_output=json_out)
-                    else:
-                        new_emails = metadata.get('new_emails', [])
-                        num_new = len(new_emails)
-                        CLIRenderer.render_message(f"{account_name}: Sync complete ({num_new} new emails fetched from {folder}).", type="success")
-                        if num_new > 0:
-                            title = f"New Emails for [bold cyan]{account_name}[/bold cyan]"
-                            if folder != "INBOX":
-                                title += f" in folder [bold yellow]{folder}[/bold yellow]"
-                            CLIRenderer.render_header(title)
-                            CLIRenderer.render_email_table(new_emails, show_folder=True)
             except Exception as e:
                 logger.error(f"Error syncing {account_name}: {e}")
                 if json_out:
                     errors.append({"account": account_name, "error": str(e)})
                 else:
                     CLIRenderer.render_message(f"Error syncing {account_name}: {e}", type="error", json_output=json_out)
+                continue
+
+        if json_out:
+            if metadata.get("is_offline", False):
+                errors.append({"account": account_name, "error": metadata.get('error') or 'Connection failed', "offline": True})
+            
+            if emails:
+                for em in emails:
+                    if isinstance(em, Email):
+                        em_dict = em.to_dict()
+                        em_dict["account"] = account_name
+                        all_emails.append(em_dict)
+                    elif isinstance(em, dict):
+                        em["account"] = account_name
+                        all_emails.append(em)
+
+        if not json_out:
+            if metadata.get("is_offline", False):
+                CLIRenderer.render_message(f"Sync failed for {account_name} ({folder}): {metadata.get('error') or 'Connection failed'}.", type="error", json_output=json_out)
+            else:
+                new_emails = metadata.get('new_emails', [])
+                num_new = len(new_emails)
+                
+                # Add a newline before the result message to ensure it doesn't overlap with previous output
+                console.print()
+                CLIRenderer.render_message(f"{account_name}: Sync complete ({num_new} new emails fetched from {folder}).", type="success")
+                if num_new > 0:
+                    title = f"New Emails for [bold cyan]{account_name}[/bold cyan]"
+                    if folder != "INBOX":
+                        title += f" in folder [bold yellow]{folder}[/bold yellow]"
+                    CLIRenderer.render_header(title)
+                    CLIRenderer.render_email_table(new_emails, show_folder=True)
 
     if json_out:
         if errors and not all_emails:

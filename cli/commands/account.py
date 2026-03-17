@@ -5,7 +5,7 @@ import json
 import logging
 from typing import Any
 from contextlib import nullcontext
-from rich.console import Console
+from logger import console, setup_logger
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 import questionary
@@ -16,8 +16,7 @@ from crypto_utils import encrypt_data
 from oauth2 import start_oauth_flow
 from cli.render import CLIRenderer
 
-logger = logging.getLogger(__name__)
-console = Console()
+logger = setup_logger("cli.account")
 
 EMAIL_PROVIDERS = {
     "gmail": {
@@ -518,12 +517,15 @@ def account_add_wizard(
                     if not json_output:
                         console.print(f"[green]✅ Connection test successful for '{curr_friendly_name}'![/green]")
                     
-                    # 13. Sync Limit
+                    # 13. Sync Limit (Only for initial sync, not stored in config)
                     curr_sync_limit = sync_limit
                     if curr_sync_limit is None:
-                        curr_sync_limit = questionary.text(f"Initial sync limit for '{curr_friendly_name}' (number, or 'all'):", default="20", style=CLIRenderer.get_questionary_style()).ask()
+                        curr_sync_limit = questionary.text(f"How many recent emails to sync for '{curr_friendly_name}'? (number, or 'all')", default="100", style=CLIRenderer.get_questionary_style()).ask()
                     
-                    limit = -1 if str(curr_sync_limit).lower() == "all" else int(curr_sync_limit) if str(curr_sync_limit).isdigit() else 20
+                    if curr_sync_limit is None: # User cancelled
+                        limit = 0 # Skip sync if cancelled
+                    else:
+                        limit = -1 if str(curr_sync_limit).lower() == "all" else int(curr_sync_limit) if str(curr_sync_limit).isdigit() else 100
 
                     account = {
                         "friendly_name": curr_friendly_name,
@@ -761,7 +763,7 @@ def handle_account(args: argparse.Namespace, manager: MailManager, account_parse
         case "delete":
             json_out = getattr(args, "json", False)
             non_interactive = getattr(args, "non_interactive", False)
-            target = args.name
+            target = args.account
 
             if not target:
                 if non_interactive:

@@ -1,10 +1,10 @@
 import os
 import platform
 import subprocess
-import logging
 from pathlib import Path
+from logger import setup_logger
 
-logger = logging.getLogger("wugong.schedule")
+logger = setup_logger("schedule")
 
 def setup_scheduling(interval_minutes: int, encryption_password: str | None = None, json_output: bool = False) -> bool:
     """Sets up a periodic sync task using Cron (Unix) or Task Scheduler (Windows)."""

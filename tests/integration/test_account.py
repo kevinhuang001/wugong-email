@@ -59,7 +59,7 @@ def test_account_delete_priority(mail_config):
     assert any(acc.get("friendly_name") == "user2" for acc in res)
     
     # Delete user2 specifying it as argument
-    output = run_wugong_command(["account", "delete", "user2"], config_path, password)
+    output = run_wugong_command(["account", "delete", "-a", "user2"], config_path, password)
     res = json.loads(output)
     
     # Verify it was deleted

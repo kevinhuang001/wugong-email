@@ -1,11 +1,12 @@
-import logging
-from typing import Any
+from typing import Any, Optional
 import requests
+import imaplib
 from requests_oauthlib import OAuth2Session
 from crypto_utils import decrypt_data, encrypt_data, is_fernet_token
 import oauth2
+from logger import setup_logger
 
-logger = logging.getLogger("wugong.mail.authenticator")
+logger = setup_logger("mail.authenticator")
 
 class MailAuthenticator:
     def __init__(self, encryption_enabled: bool, salt: str):

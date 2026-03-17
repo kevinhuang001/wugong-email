@@ -3,8 +3,12 @@ import sys
 import os
 from pathlib import Path
 from typing import Optional, Union
-from rich.logging import RichHandler
 from rich.console import Console
+from rich.logging import RichHandler
+
+# Global console instance used across the application to ensure UI coordination
+# (e.g., preventing logs from overlapping with progress bars)
+console = Console(stderr=True)
 
 def setup_logger(
     name: str = "wugong", 
@@ -19,22 +23,20 @@ def setup_logger(
         
     logger = logging.getLogger(name)
     
-    # Force the lowest level on the logger itself so handlers can filter
-    logger.setLevel(logging.DEBUG)
+    # Always use the root 'wugong' logger to hold handlers for consistent propagation
+    target_logger = logging.getLogger("wugong")
     
-    # Avoid duplicate handlers on the root 'wugong' logger
-    root_logger = logging.getLogger("wugong")
-    if root_logger.handlers and name != "wugong":
-        return logger
+    # Force the lowest level on the target logger so handlers can filter
+    target_logger.setLevel(logging.DEBUG)
     
-    if logger.handlers:
+    if target_logger.handlers:
         # Update existing handlers if needed
-        for handler in logger.handlers:
+        for handler in target_logger.handlers:
             if isinstance(handler, RichHandler):
                 handler.setLevel(console_level)
             elif isinstance(handler, logging.FileHandler):
                 handler.setLevel(file_level)
-        return logger
+        return logging.getLogger(name)
 
     formatter = logging.Formatter(
         "%(message)s",
@@ -43,7 +45,7 @@ def setup_logger(
 
     # Console handler using RichHandler - Default to stderr to avoid breaking JSON output
     console_handler = RichHandler(
-        console=Console(stderr=True),
+        console=console,
         rich_tracebacks=True,
         show_time=False,
         show_path=False,
@@ -51,7 +53,7 @@ def setup_logger(
     )
     console_handler.setFormatter(formatter)
     console_handler.setLevel(console_level)
-    logger.addHandler(console_handler)
+    target_logger.addHandler(console_handler)
 
     # File handler - Default to config directory log if not provided
     if log_file is None:
@@ -71,7 +73,7 @@ def setup_logger(
         file_handler = logging.FileHandler(log_file, encoding='utf-8')
         file_handler.setFormatter(formatter)
         file_handler.setLevel(file_level)
-        logger.addHandler(file_handler)
+        target_logger.addHandler(file_handler)
     except Exception as e:
         logger.warning(f"Could not setup file logging: {e}")
 

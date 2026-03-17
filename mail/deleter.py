@@ -1,10 +1,10 @@
 import imaplib
-import logging
 from typing import Any, Tuple, Optional
 from .storage_manager import MailStorageManager
 from .connector import MailConnector
+from logger import setup_logger
 
-logger = logging.getLogger("deleter")
+logger = setup_logger("mail.deleter")
 
 class MailDeleter:
     def __init__(

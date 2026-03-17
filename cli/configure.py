@@ -3,7 +3,7 @@ import os
 import logging
 import base64
 import questionary
-from rich.console import Console
+from logger import console, setup_logger
 
 import config
 from mail import MailManager
@@ -12,8 +12,7 @@ from schedule import setup_scheduling
 
 from cli.render import CLIRenderer
 
-logger = logging.getLogger("cli.configure")
-console = Console()
+logger = setup_logger("cli.configure")
 
 def configure_wizard(
     args: argparse.Namespace | None = None,

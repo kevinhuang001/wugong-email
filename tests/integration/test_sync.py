@@ -12,9 +12,9 @@ def test_sync_all_params(mail_server, mail_config):
     # Initialize mailboxes
     init_mailbox("user1", "password", imap_port)
     
-    # sync <account> --folder, --limit, --all
+    # sync -a <account> --folder, --limit, --all
     sync_args = [
-        "sync", "user1", 
+        "sync", "-a", "user1", 
         "--folder", "Archive",
         "--limit", "10",
         "--all"
@@ -32,8 +32,8 @@ def test_sync_no_account(mail_config):
     config_path = mail_config["config_path"]
     password = mail_config["master_password"]
     
-    # Running sync without account argument
-    output = run_wugong_command(["sync"], config_path, password)
+    # Running sync with -a all --all to sync all accounts and all emails
+    output = run_wugong_command(["sync", "-a", "all", "--all"], config_path, password)
     res = json.loads(output)
     
     # Should sync all configured accounts (user1, user2)

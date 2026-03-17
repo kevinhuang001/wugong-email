@@ -13,7 +13,7 @@ def test_delete_all_params(mail_server, mail_config):
     init_mailbox("user1", "password", imap_port)
     
     # Sync first so database is populated
-    output = run_wugong_command(["sync", "user1"], config_path, password)
+    output = run_wugong_command(["sync", "-a", "user1", "--all"], config_path, password)
     res = json.loads(output)
     
     # Get ID of first email (INBOX)
@@ -35,7 +35,7 @@ def test_delete_all_params(mail_server, mail_config):
     assert res.get("status") == "success"
     
     # Verify it was deleted from local cache (list it again)
-    output = run_wugong_command(["list", "user1", "--folder", "INBOX"], config_path, password)
+    output = run_wugong_command(["list", "-a", "user1", "--folder", "INBOX"], config_path, password)
     res = json.loads(output)
     
     assert not any(m.get("id") == msg_id for m in res)
@@ -47,7 +47,7 @@ def test_delete_multiple_ids(mail_config):
     password = mail_config["master_password"]
     
     # Get multiple IDs from list (all accounts)
-    output = run_wugong_command(["list", "all"], config_path, password)
+    output = run_wugong_command(["list", "-a", "all"], config_path, password)
     res = json.loads(output)
     
     # Filter emails that belong to the first account (user1) to ensure delete works
@@ -64,12 +64,12 @@ def test_delete_multiple_ids(mail_config):
     # We test it with single ID first.
     
     for msg_id in ids:
-        output = run_wugong_command(["delete", "--id", msg_id], config_path, password)
+        output = run_wugong_command(["delete", "-a", "user1", "--id", msg_id], config_path, password)
         res = json.loads(output)
         assert res.get("status") == "success"
         
     # Verify both were deleted
-    output = run_wugong_command(["list", "all"], config_path, password)
+    output = run_wugong_command(["list", "-a", "all"], config_path, password)
     res = json.loads(output)
     
     for msg_id in ids:

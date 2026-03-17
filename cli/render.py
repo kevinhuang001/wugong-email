@@ -4,14 +4,13 @@ import json
 import logging
 from typing import Any, cast
 from email.utils import parsedate_to_datetime
-from rich.console import Console, Group
+from rich.console import Group
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 from questionary import Style
 from mail.storage_manager import Email
-
-console = Console()
+from logger import console
 
 class CLIRenderer:
     """Handles all Rich-based UI rendering logic."""
