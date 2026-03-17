@@ -79,27 +79,44 @@ def handle_upgrade(args: Optional[argparse.Namespace] = None, manager: Any = Non
         # Show changelog
         if not json_out:
             try:
-                with urllib.request.urlopen(f"{raw_url_base}/CHANGELOG.md") as response:
-                    changelog_text = response.read().decode()
+                # Use a proper User-Agent to avoid some blocks, although raw.github usually doesn't need it
+                req = urllib.request.Request(f"{raw_url_base}/CHANGELOG.md")
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    changelog_text = response.read().decode("utf-8")
                     lines = changelog_text.splitlines()
                     relevant_lines = []
                     found_latest = False
+                    
                     for line in lines:
+                        # Check for version headers like "## [1.1.3]" or "## [v1.1.3]"
                         if line.startswith("## ["):
-                            if current_version != "Unknown" and f"[{current_version}]" in line:
+                            # If we hit the current version, stop collecting
+                            if current_version != "Unknown" and (f"[{current_version}]" in line or f"[v{current_version}]" in line):
                                 break
+                            
+                            # Start collecting from the first version header we find
                             if not found_latest:
                                 found_latest = True
                             elif current_version == "Unknown":
+                                # If version is unknown, only show the first section
                                 break
+                                
                         if found_latest:
                             relevant_lines.append(line)
+                            
                     if relevant_lines:
                         console.print("\n[blue]📄 What's new:[/blue]")
-                        console.print(Markdown("\n".join(relevant_lines)))
-                        console.print("-" * 40 + "\n")
-            except Exception:
-                pass
+                        # Join and strip to avoid extra blank lines at start/end
+                        markdown_content = "\n".join(relevant_lines).strip()
+                        if markdown_content:
+                            console.print(Markdown(markdown_content))
+                            console.print("-" * 40 + "\n")
+                        else:
+                            logger.debug("Changelog content was empty after parsing")
+                    else:
+                        logger.debug(f"No relevant changelog entries found for version > {current_version}")
+            except Exception as e:
+                logger.warning(f"Could not fetch or parse changelog: {e}")
 
         if not getattr(args, "yes", False) and not non_interactive:
             if not json_out:
