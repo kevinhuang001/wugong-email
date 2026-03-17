@@ -61,27 +61,34 @@ These tests use a Greenmail Docker container to simulate IMAP/SMTP servers. This
 - Docker Desktop must be installed and running.
 
 **Steps to run:**
-1. Start the Greenmail container with pre-configured users (required by tests):
+1. Start the Greenmail container with pre-configured users and host binding (required by tests):
    ```bash
-   docker run -it --rm \
-     -e GREENMAIL_OPTS="-Dgreenmail.setup.test.all -Dgreenmail.users=user1:password,user2:password,workflow_user:password" \
+   docker run -d --rm \
+     -e GREENMAIL_OPTS="-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.users=user1:password,user2:password,workflow_user:password" \
      -p 3025:3025 -p 3143:3143 \
      greenmail/standalone:2.0.0
    ```
+   *Note: `-Dgreenmail.hostname=0.0.0.0` is essential to allow connections from the host machine.*
+
 2. Run the tests:
    ```bash
-   # Ensure PYTHONPATH is set to the current directory
-   export PYTHONPATH=$PYTHONPATH:.
-   pytest tests/integration/
+   # The test suite automatically detects if Greenmail is running and skips integration tests if not.
+   pytest -m "not real_account"
    ```
 
 **What these tests do:**
 - Automatically detect the Greenmail server on ports 3025 (SMTP) and 3143 (IMAP).
-- Initialize the mailboxes with rich test data (folders like `Archive`, `Personal`, `Shopping`, etc., and multiple seeded emails) before each test run.
+- Initialize mailboxes with rich test data (folders like `Archive`, `Personal`, `Shopping`, etc.) before each test run.
 - Mimic user CLI workflows (e.g., `account add`, `sync`, `list`, `read`, `send`, `delete`, `folder`).
 - Verify both standard and JSON outputs for all commands.
-- Standardize JSON output by extracting the first valid JSON block from the output.
 - Automatically clear the mailboxes after each test to ensure isolation.
+
+**Performance & Troubleshooting:**
+- **Test Speed**: The suite uses fewer PBKDF2 iterations (1,000 instead of 100,000) when `WUGONG_TESTING=1` is set to speed up tests significantly.
+- **Connection Issues**:
+  - If tests are skipped even with the container running, ensure `-Dgreenmail.hostname=0.0.0.0` is in `GREENMAIL_OPTS`.
+  - If you see `socket error: EOF` or the connection times out without a greeting, it might be a container startup issue. Try using version `1.6.1` if `2.0.0` is unstable on your machine.
+  - Check logs: `docker logs <container_id>`. You should see `GreenMail standalone started` at the end of the logs.
 
 #### Real Account Tests (Optional)
 These tests interact with real email servers and require a valid configuration. By default, they are skipped if no configuration is found.

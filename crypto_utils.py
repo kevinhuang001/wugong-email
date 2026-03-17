@@ -6,11 +6,13 @@ from cryptography.fernet import Fernet
 
 def derive_key(password: str, salt: bytes) -> bytes:
     """Derives a 32-byte key from a password and salt using PBKDF2."""
+    # Use fewer iterations for tests to speed them up
+    iterations = 1000 if os.environ.get("WUGONG_TESTING") == "1" else 100000
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
         salt=salt,
-        iterations=100000,
+        iterations=iterations,
     )
     return base64.urlsafe_b64encode(kdf.derive(password.encode()))
 

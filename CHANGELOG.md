@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file.
 
 ### Features
 - **Enhanced OAuth2 UX**: Added a prominent Rich-based panel to display the OAuth2 authorization URL in the console. This ensures usability in headless environments (e.g., SSH) where a browser cannot be automatically opened.
+- **Improved OAuth2 Response Time**: Reduced the server shutdown delay after successful OAuth2 authorization from 2 seconds to 0.5 seconds.
+
+### Performance
+- **Optimized Test Suite**: 
+    - Reduced PBKDF2 iterations in test environments to significantly speed up cryptographic operations.
+    - Optimized `cleanup_mailboxes` fixture to only run for integration tests, eliminating unnecessary delays in unit tests.
+    - Implemented smarter Greenmail server detection with automatic retries and waits, ensuring better reliability in slow or CI environments.
 
 ## [1.1.1] - 2026-03-16
 

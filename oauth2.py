@@ -42,7 +42,7 @@ def start_oauth_flow(client_id: str, client_secret: str, auth_url: str, token_ur
     @app.route('/')
     def callback():
         def delayed_shutdown():
-            time.sleep(2)  # Give browser time to receive and render the response
+            time.sleep(0.5)  # Reduced delay for better user experience
             if server:
                 server.shutdown()
 
