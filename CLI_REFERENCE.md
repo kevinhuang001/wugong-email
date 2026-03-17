@@ -88,8 +88,10 @@ Add a new email account (interactive wizard or non-interactive).
 
 ### `account delete`
 Delete a specific email account.
-- **Usage**: `wugong account delete <account_name>`
-- **Example**: `wugong account delete my_gmail`
+- **Usage**: `wugong account delete -a <account_name>`
+- **Parameters**:
+    - `--account`, `-a`: **(Required)** Friendly name of the account to delete.
+- **Example**: `wugong account delete -a my_gmail`
 
 ---
 
@@ -98,7 +100,7 @@ Delete a specific email account.
 ### `list`
 List emails from local cache or the remote server.
 - **Parameters**:
-    - `[account]`: Optional. Specify account name; uses the default account if omitted. Use `all` to list emails from all accounts.
+    - `--account`, `-a`: Specify the account name; uses the "default" account (the first configured) if omitted. Use `all` to list emails from all configured accounts.
     - `--limit`, `-l`: Limit the number of emails displayed.
     - `--all`: List all available emails.
     - `--verbose`, `-v`: Show more details (folder name and sender email address).
@@ -112,19 +114,21 @@ List emails from local cache or the remote server.
     - `--order`: Sort order (`asc`, `desc`), default is `desc`.
 - **Examples**:
     - `wugong list` (Show latest emails for the default account)
-    - `wugong list my_gmail --limit 20`
+    - `wugong list -a my_gmail --limit 20`
+    - `wugong list -a all` (Show emails from all configured accounts)
     - `wugong list --keyword "invoice" --local`
 
 ### `sync`
 Sync latest emails from the server to the local cache.
 - **Parameters**:
-    - `[account]`: Optional. Specify account name or use `all`.
+    - `--account`, `-a`: Specify the account name or use `all`. If omitted, defaults to `all`.
     - `--limit`, `-l`: Limit the number of emails to fetch.
     - `--all`: Sync all available emails (overrides limit).
     - `--folder`: Specify the folder to sync (default: `INBOX`).
 - **Examples**:
-    - `wugong sync`
-    - `wugong sync my_gmail --folder "Sent"`
+    - `wugong sync` (Sync all accounts)
+    - `wugong sync -a my_gmail --folder "Sent"`
+    - `wugong sync -a my_gmail --all` (Perform a full sync for a specific account)
 
 ---
 
@@ -171,29 +175,30 @@ Delete a specific email.
 
 ### `folder list`
 List all folders for a specific account.
-- **Parameters**: `[account]` (Optional)
+- **Parameters**:
+    - `--account`, `-a`: Specify the account name; uses the default account if omitted.
 - **Example**: `wugong folder list`
 
 ### `folder create`
-Create a new folder.
+Create a new folder on the remote server.
 - **Parameters**:
-    - `name`: **(Required)** Folder name to create.
-    - `--account`, `-a`: Specify the account.
+    - `name`: **(Required)** Positional argument. Name of the folder to create.
+    - `--account`, `-a`: Specify the account name; uses the default account if omitted.
 - **Example**: `wugong folder create "My Work"`
 
 ### `folder delete`
-Delete a folder.
+Delete a folder from the remote server.
 - **Parameters**:
-    - `name`: **(Required)** Folder name to delete.
-    - `--account`, `-a`: Specify the account.
+    - `name`: **(Required)** Positional argument. Name of the folder to delete.
+    - `--account`, `-a`: Specify the account name; uses the default account if omitted.
 - **Example**: `wugong folder delete "Old Trash"`
 
 ### `folder move`
-Move an email to a specified folder.
+Move an email from one folder to another.
 - **Parameters**:
     - `id`: **(Required)** Email UID.
-    - `dest`: **(Required)** Destination folder.
-    - `--account`, `-a`: Specify the account.
+    - `dest`: **(Required)** Destination folder name.
+    - `--account`, `-a`: Specify the account name; uses the default account if omitted.
     - `--src`: Source folder (default: `INBOX`).
 - **Example**: `wugong folder move 123 "Archive"`
 

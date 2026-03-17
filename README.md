@@ -51,7 +51,7 @@ Follow the interactive wizard to add your first email account. You can provide a
 wugong account add          # Full interactive setup wizard
 wugong account add --friendly-name "Work" --provider "gmail" # Partial interactive
 wugong account list         # List all configured accounts
-wugong account delete <name> # Remove an account
+wugong account delete -a name # Remove an account
 ```
 
 ---
@@ -68,16 +68,17 @@ Wugong Email's wizards (`init`, `account add`, `configure`) support **partial in
 ### 3. Sync Emails
 Synchronize your local cache with the IMAP server:
 ```bash
-wugong sync                 # Sync all accounts (latest emails)
-wugong sync work --limit 50 # Sync latest 50 emails for 'work' account
-wugong sync --folder "Sent" # Sync a specific folder
+wugong sync                 # Sync all accounts (default)
+wugong sync -a work --limit 50 # Sync latest 50 emails for 'work' account
+wugong sync -a all --all    # Force full sync for all accounts
 ```
 
 ### 4. List and Search Emails
 Display emails from your local cache or fetch them directly from the server:
 ```bash
 wugong list                       # Show latest emails (default account)
-wugong list work --limit 20       # Show 20 emails from 'work' account
+wugong list -a work --limit 20    # Show 20 emails from 'work' account
+wugong list -a all                # Show emails from all accounts
 wugong list --keyword "invoice"   # Search subject/body for keywords
 wugong list --verbose             # Show more details (folder, sender email)
 wugong list --local               # Offline mode (cache only)

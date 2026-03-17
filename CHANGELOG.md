@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.3] - 2026-03-17
+
+### Features
+- **CLI Parameter Refactoring**: Standardized all CLI commands to use the `-a/--account` option for account specification instead of positional parameters. This provides a more consistent and predictable user experience across the entire tool.
+- **Enhanced Default Account Logic**:
+    - `list`, `read`, `delete`, `send`, `folder`: Now default to the "default" account (the first one configured) if no `-a` is provided.
+    - `sync`: Now defaults to all configured accounts if no `-a` is provided, simplifying the synchronization workflow.
+- **Log & Progress Bar Coordination**: Resolved issues where log messages would overlap with Rich progress bars. This was achieved by centralizing `Rich Console` instances and restructuring progress bar context managers to ensure clean, non-interfering UI updates.
+
+### Fixed
+- **Build System Compatibility**: Fixed a `hatchling` version parsing error by explicitly defining the version regex pattern in `pyproject.toml`. This ensures reliable builds and installations across different environments.
+- **Unit & Integration Test Stability**: Updated the entire test suite (129 unit tests and 27 integration tests) to align with the new parameter structure. All tests are now passing, ensuring the stability of the refactored CLI logic.
+
 ## [1.1.2] - 2026-03-17
 
 ### Features

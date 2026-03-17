@@ -52,6 +52,7 @@ wugong = "main:main"
 
 [tool.hatch.version]
 path = ".version"
+pattern = "(?P<version>.*)"
 
 [tool.hatch.build.targets.wheel]
 packages = ["cli", "mail", "main.py", "logger.py", "config.py", "crypto_utils.py", "oauth2.py", "schedule.py"]
