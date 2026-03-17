@@ -104,7 +104,7 @@ def main() -> None:
     acc_add_parser = account_subparsers.add_parser("add", parents=[common_parser], help="Add a new email account")
     acc_add_parser.add_argument("--friendly-name", "-n", help="Friendly name for the account")
     acc_add_parser.add_argument("--provider", choices=["gmail", "outlook", "qq", "163", "other"], help="Email provider")
-    acc_add_parser.add_argument("--login-method", choices=["Account/Password", "OAuth2"], help="Login method")
+    acc_add_parser.add_argument("--login-method", choices=["Password", "OAuth2"], help="Login method")
     acc_add_parser.add_argument("--username", "-u", help="Email address")
     acc_add_parser.add_argument("--imap-server", help="IMAP server address")
     acc_add_parser.add_argument("--imap-port", type=int, help="IMAP server port")
@@ -181,7 +181,30 @@ def main() -> None:
         return
 
     # Initialize manager
-    manager = MailManager()
+    # Automatically detect non-interactive mode if not explicitly provided and no TTY
+    # Check both args and sys.argv because argparse subcommands can sometimes overwrite global flags
+    non_interactive = getattr(args, "non_interactive", False) or "--non-interactive" in sys.argv
+    if not non_interactive and not sys.stdin.isatty():
+        logger.debug("Non-interactive mode detected (no TTY).")
+        non_interactive = True
+    
+    # Also check for other global flags that might have been overwritten
+    json_out = getattr(args, "json", False) or "--json" in sys.argv
+    encryption_password = getattr(args, "encryption_password", None)
+    if not encryption_password:
+        # Check if -p or --encryption-password was provided in sys.argv
+        for i, arg in enumerate(sys.argv):
+            if arg in ["-p", "--encryption-password"] and i + 1 < len(sys.argv):
+                encryption_password = sys.argv[i+1]
+                break
+    
+    # Update args with detected values to ensure handlers see them correctly
+    args.non_interactive = non_interactive
+    args.json = json_out
+    if encryption_password:
+        args.encryption_password = encryption_password
+
+    manager = MailManager(non_interactive=non_interactive)
 
     # Route commands to handlers
     match args.command:

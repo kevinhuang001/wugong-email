@@ -13,22 +13,23 @@ from .folder_manager import MailFolderManager
 import config
 
 class MailManager:
-    def __init__(self, config_path: str | Path | None = None):
+    def __init__(self, config_path: str | Path | None = None, non_interactive: bool = False):
         self.config_path = Path(config_path or config.get_config_path())
         self.config = config.load_config(str(self.config_path))
+        self.non_interactive = non_interactive
         
         general = self.config.get("general", {})
         self.accounts = self.config.get("accounts", [])
         self.encryption_enabled = general.get("encryption_enabled", False)
         self.encrypt_emails = general.get("encrypt_emails", False)
-        self.sync_interval = general.get("sync_interval", 10)
+        self.sync_interval = general.get("sync_interval", 0)
         self.salt = config.get_salt(self.config)
         
         # Initialize sub-modules
         self.auth_manager = MailAuthenticator(self.encryption_enabled, self.salt)
         db_path = self.config_path.parent / "cache.db"
         self.storage_manager = MailStorageManager(str(db_path), self.encrypt_emails, self.encryption_enabled, self.salt)
-        self.connector = MailConnector(self.auth_manager, self.config, self._save_config)
+        self.connector = MailConnector(self.auth_manager, self.config, self._save_config, non_interactive=self.non_interactive)
         
         self.sender = MailSender(self.connector, self.config, self._save_config)
         self.syncer = MailSynchronizer(self.connector, self.storage_manager, self.config, self._save_config)

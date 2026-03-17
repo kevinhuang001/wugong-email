@@ -151,10 +151,10 @@ class MailStorageManager:
             conn.commit()
 
     def _safe_encrypt(self, val: str, password: str) -> str:
-        return encrypt_data(val, password, self.salt) if val and self.encrypt_emails and self.encryption_enabled else val
+        return encrypt_data(val, password, self.salt) if val and self.encrypt_emails else val
 
     def _safe_decrypt(self, val: str, password: str) -> str:
-        if not val or not (self.encrypt_emails and self.encryption_enabled):
+        if not val or not self.encrypt_emails:
             return val
         if isinstance(val, str) and val.startswith("gAAAAAB"):
             try:

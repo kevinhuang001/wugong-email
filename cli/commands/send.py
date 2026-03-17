@@ -15,15 +15,28 @@ def handle_send(args: argparse.Namespace, manager: MailManager) -> None:
         return
 
     account_name = account.get("friendly_name", "default")
-    try:
-        password = config.get_verified_password(manager.config, args, f"Enter encryption password for '{account_name}':")
-    except ValueError as e:
-        CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
-        return
-
-    if not (body := args.body) and not (body := questionary.text("Email Body (press enter for multiple lines, type 'DONE' on a new line to finish):", multiline=True, style=CLIRenderer.get_questionary_style()).ask()):
-        CLIRenderer.render_message("Email body is required.", type="error", json_output=json_out)
-        return
+    
+    # Only fetch password if needed for decrypting credentials
+    needs_password = manager.encryption_enabled
+    
+    password = ""
+    if needs_password:
+        try:
+            password = config.get_verified_password(manager.config, args, f"Enter encryption password for '{account_name}':", non_interactive=manager.non_interactive)
+        except ValueError as e:
+            CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
+            return
+    
+    body = args.body
+    if not body:
+        if manager.non_interactive:
+            CLIRenderer.render_message("Email body is required in non-interactive mode. Please use --body.", type="error", json_output=json_out)
+            return
+        
+        body = questionary.text("Email Body (press enter for multiple lines, type 'DONE' on a new line to finish):", multiline=True, style=CLIRenderer.get_questionary_style()).ask()
+        if not body:
+            CLIRenderer.render_message("Email body is required.", type="error", json_output=json_out)
+            return
 
     if json_out:
         try:

@@ -227,8 +227,8 @@ database_path = "{db_path}"
     smtp_server = "127.0.0.1"
     smtp_port = {smtp_port}
     smtp_tls_method = "Plain"
-    login_method = "Account/Password"
-    auth_method = "Account/Password"
+    login_method = "Password"
+    auth_method = "Password"
     [accounts.auth]
     username = "user1"
     password = "{encrypted_pw1}"
@@ -242,8 +242,8 @@ database_path = "{db_path}"
     smtp_server = "127.0.0.1"
     smtp_port = {smtp_port}
     smtp_tls_method = "Plain"
-    login_method = "Account/Password"
-    auth_method = "Account/Password"
+    login_method = "Password"
+    auth_method = "Password"
     [accounts.auth]
     username = "user2"
     password = "{encrypted_pw2}"

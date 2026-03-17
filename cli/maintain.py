@@ -40,7 +40,7 @@ def handle_upgrade(args: Optional[argparse.Namespace] = None, manager: Any = Non
     """Handles the 'upgrade' command to update Wugong Email code directly in Python."""
     import questionary
     json_out = getattr(args, "json", False)
-    non_interactive = getattr(args, "non_interactive", False)
+    non_interactive = manager.non_interactive if manager else False
     install_dir = get_install_dir()
     version_file = install_dir / ".version"
     raw_url_base = "https://raw.githubusercontent.com/kevinhuang001/wugong-email/main"
@@ -261,7 +261,7 @@ def handle_uninstall(args: Optional[argparse.Namespace] = None, manager: Any = N
     """Handles the 'uninstall' command directly in Python."""
     import questionary
     json_out = getattr(args, "json", False)
-    non_interactive = getattr(args, 'non_interactive', False)
+    non_interactive = manager.non_interactive if manager else False
     keep_data_arg = getattr(args, 'keep_data', False)
 
     if not getattr(args, "yes", False) and not non_interactive and not json_out:

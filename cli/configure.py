@@ -45,7 +45,7 @@ def configure_wizard(
             interval = sync_interval if sync_interval is not None else current_interval
 
             if interval != current_interval or console_log_level != current_console_level or file_log_level != current_file_level:
-                encryption_password = config.get_verified_password(current_config, args)
+                encryption_password = config.get_verified_password(current_config, args, non_interactive=True)
 
                 if not setup_scheduling(interval, encryption_password, json_output=json_output):
                     CLIRenderer.render_message("Failed to update scheduled sync task. Local configuration was still updated.", type="warning", json_output=json_output)
@@ -110,7 +110,7 @@ def configure_wizard(
             interval = sync_interval
 
         if interval != current_interval or console_log_level != current_console_level or file_log_level != current_file_level:
-            encryption_password = config.get_verified_password(current_config, args, prompt_text="Enter your encryption password to update the scheduled task:")
+            encryption_password = config.get_verified_password(current_config, args, prompt_text="Enter your encryption password to update the scheduled task:", non_interactive=non_interactive)
 
             if not setup_scheduling(interval, encryption_password, json_output=json_output):
                 CLIRenderer.render_message("Failed to update scheduled sync task. Local configuration was still updated.", type="warning", json_output=json_output)
@@ -159,16 +159,21 @@ def init_wizard(
                 return True, None
 
             # 1. Encryption Setup
-            encrypt_creds = encrypt_creds if encrypt_creds is not None else True
-            encrypt_emails = encrypt_emails if encrypt_emails is not None else True
+            # In non-interactive mode, if not specified, we only enable encryption IF a password is provided.
+            # This prevents the error when user just runs 'wugong init --non-interactive'
+            encryption_password = config.get_encryption_password(args, non_interactive=True)
+            
+            if encrypt_creds is None:
+                encrypt_creds = True if encryption_password else False
+            if encrypt_emails is None:
+                encrypt_emails = True if encryption_password else False
+                
             encrypt_enabled = encrypt_creds or encrypt_emails
 
             salt_val = ""
             canary = ""
-            encryption_password = None
 
             if encrypt_enabled:
-                encryption_password = config.get_encryption_password(args)
                 if not encryption_password:
                     raise ValueError("Encryption password must be provided via --encryption-password or WUGONG_PASSWORD to set up encryption in non-interactive mode.")
                 
@@ -214,12 +219,27 @@ def init_wizard(
             return False, None
 
         # 1. Encryption Choice
-        if encrypt_creds is None:
-            encryption_enabled = questionary.confirm("Enable encryption?", default=True, style=CLIRenderer.get_questionary_style()).ask()
-            if encryption_enabled is None:
-                raise KeyboardInterrupt
-            encrypt_creds = encryption_enabled
-            encrypt_emails = encryption_enabled
+        if encrypt_creds is None or encrypt_emails is None:
+            if not json_output:
+                console.print("\n[bold]Encryption Settings:[/bold]")
+            
+            if encrypt_creds is None:
+                encrypt_creds = questionary.confirm(
+                    "Enable credential encryption? (Encrypts IMAP/SMTP passwords in config.toml)", 
+                    default=True, 
+                    style=CLIRenderer.get_questionary_style()
+                ).ask()
+                if encrypt_creds is None:
+                    raise KeyboardInterrupt
+            
+            if encrypt_emails is None:
+                encrypt_emails = questionary.confirm(
+                    "Enable email encryption? (Encrypts locally cached email content in cache.db)", 
+                    default=True, 
+                    style=CLIRenderer.get_questionary_style()
+                ).ask()
+                if encrypt_emails is None:
+                    raise KeyboardInterrupt
         
         encrypt_enabled = encrypt_creds or encrypt_emails
         salt_val = ""
@@ -227,7 +247,7 @@ def init_wizard(
         encryption_password = None
 
         if encrypt_enabled:
-            encryption_password = config.get_encryption_password(args, prompt_text="Set your encryption password:")
+            encryption_password = config.get_encryption_password(args, prompt_text="Set your encryption password:", non_interactive=False)
             if encryption_password is None:
                 raise KeyboardInterrupt
             
@@ -262,10 +282,10 @@ def init_wizard(
 
         # 3. Sync Interval & Scheduling
         if sync_interval is None:
-            if (sync_interval_str := questionary.text("Sync interval in minutes (e.g., 5, 10, 60. Enter 0 to disable auto-sync):", default="10", style=CLIRenderer.get_questionary_style()).ask()) is None:
+            if (sync_interval_str := questionary.text("Sync interval in minutes (e.g., 5, 10, 60. Enter 0 to disable auto-sync):", default="0", style=CLIRenderer.get_questionary_style()).ask()) is None:
                 raise KeyboardInterrupt
             else:
-                interval = int(sync_interval_str) if sync_interval_str.isdigit() else 10
+                interval = int(sync_interval_str) if sync_interval_str.isdigit() else 0
         else:
             interval = sync_interval
 
@@ -323,7 +343,7 @@ def handle_init(args: argparse.Namespace, manager: MailManager) -> None:
         console_log_level=args.console_log_level,
         file_log_level=args.file_log_level,
         sync_interval=args.sync_interval,
-        non_interactive=getattr(args, "non_interactive", False),
+        non_interactive=manager.non_interactive,
         json_output=json_out
     )
 
@@ -335,7 +355,7 @@ def handle_configure(args: argparse.Namespace, manager: MailManager) -> None:
         console_log_level=args.console_log_level,
         file_log_level=args.file_log_level,
         sync_interval=args.sync_interval,
-        non_interactive=getattr(args, "non_interactive", False),
+        non_interactive=manager.non_interactive,
         json_output=json_out
     )
 

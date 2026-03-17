@@ -32,13 +32,21 @@ def handle_list(args: argparse.Namespace, manager: MailManager) -> None:
             CLIRenderer.render_message(f"Account '{target_account_name}' not found.", type="error", json_output=json_out)
         return
 
-    try:
-        prompt = "Enter encryption password for all accounts:" if target_account_name == "all" else f"Enter encryption password for '{target_accounts[0]['friendly_name']}':"
-        password = config.get_verified_password(manager.config, args, prompt)
-    except ValueError as e:
-        CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
-        return
-
+    # Only fetch password if needed:
+    # 1. We are encrypting emails (must decrypt local cache to show)
+    # 2. We are going online AND credentials encryption is enabled (to decrypt IMAP password)
+    is_local = getattr(args, "local", False)
+    needs_password = manager.encrypt_emails or (not is_local and manager.encryption_enabled)
+    
+    password = ""
+    if needs_password:
+        try:
+            prompt = "Enter encryption password for all accounts:" if target_account_name == "all" else f"Enter encryption password for '{target_accounts[0]['friendly_name']}':"
+            password = config.get_verified_password(manager.config, args, prompt, non_interactive=manager.non_interactive)
+        except ValueError as e:
+            CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
+            return
+    
     all_emails = []
     errors = []
     from mail.storage_manager import Email

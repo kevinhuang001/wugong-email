@@ -22,26 +22,36 @@ def handle_read(args: argparse.Namespace, manager: MailManager) -> None:
         return
 
     account_name = account.get("friendly_name", "default")
-    try:
-        password = config.get_verified_password(manager.config, args, f"Enter encryption password for '{account_name}':")
-    except ValueError as e:
-        CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
-        return
-
+    
+    # Only fetch password if needed:
+    # 1. We are encrypting emails (must decrypt to show)
+    # 2. We are going online AND credentials encryption is enabled
+    is_local = getattr(args, "local", False)
+    needs_password = manager.encrypt_emails or (not is_local and manager.encryption_enabled)
+    
+    password = ""
+    if needs_password:
+        try:
+            password = config.get_verified_password(manager.config, args, f"Enter encryption password for '{account_name}':", non_interactive=manager.non_interactive)
+        except ValueError as e:
+            CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
+            return
+    
     folder = getattr(args, "folder", "INBOX") or "INBOX"
 
     # Fetch email content
     result = None
     if json_out:
         try:
-            result = manager.reader.read_email(account, password, args.id, folder=folder)
+            result = manager.reader.read_email(account, password, args.id, folder=folder, local_only=is_local)
         except Exception as e:
             CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
             return
     else:
-        with console.status(f"[bold green]Fetching content for email {args.id} from {folder} via {account_name}...") as status:
+        status_msg = f"[bold green]Reading cached email {args.id} from {folder} ({account_name})..." if is_local else f"[bold green]Fetching email {args.id} from {folder} via {account_name}..."
+        with console.status(status_msg) as status:
             try:
-                result = manager.reader.read_email(account, password, args.id, folder=folder)
+                result = manager.reader.read_email(account, password, args.id, folder=folder, local_only=is_local)
                 status.stop()
             except Exception as e:
                 CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
@@ -60,8 +70,8 @@ def handle_read(args: argparse.Namespace, manager: MailManager) -> None:
             elif args.text: mode = "text"
             elif args.browser: mode = "browser"
             
-            # Interactive prompt if no mode specified and we are in a TTY
-            if not mode and sys.stdin.isatty() and sys.stdout.isatty():
+            # Interactive prompt if no mode specified and we are in a TTY and NOT in non-interactive mode
+            if not mode and not manager.non_interactive and sys.stdin.isatty() and sys.stdout.isatty():
                 mode = questionary.select(
                     "Choose how to view this email:",
                     choices=[
@@ -72,6 +82,10 @@ def handle_read(args: argparse.Namespace, manager: MailManager) -> None:
                     ],
                     style=CLIRenderer.get_questionary_style()
                 ).ask()
+            
+            # If no mode and in non-interactive mode, default to text
+            if not mode and manager.non_interactive:
+                mode = "text"
             
             if mode == "cancel" or (not mode and not json_out):
                 return

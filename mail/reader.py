@@ -23,7 +23,7 @@ class MailReader:
         self.config = config
         self.save_config_callback = save_config_callback
 
-    def read_email(self, account: dict[str, Any], auth_password: str, email_id: str, folder: str = "INBOX") -> Email | str:
+    def read_email(self, account: dict[str, Any], auth_password: str, email_id: str, folder: str = "INBOX", local_only: bool = False) -> Email | str:
         """Read full email content. Priority: Local Cache > Remote Server."""
         account_name = account.get("friendly_name", "Unknown")
         
@@ -31,14 +31,15 @@ class MailReader:
         if (details := self.storage_manager.get_email_full_details(account_name, email_id, auth_password, folder)) and details.get("content"):
             self.storage_manager.update_seen_status(account_name, email_id, True, folder)
             
-            # Async best-effort mark as seen on server
-            try:
-                mail = self.connector.get_imap_connection(account, auth_password)
-                mail.select(folder)
-                mail.uid('STORE', email_id, '+FLAGS', '(\\Seen)')
-                mail.logout()
-            except Exception as e:
-                logger.debug(f"Failed to mark as seen on server for {email_id}: {e}")
+            # Async best-effort mark as seen on server (if not local_only)
+            if not local_only:
+                try:
+                    mail = self.connector.get_imap_connection(account, auth_password)
+                    mail.select(folder)
+                    mail.uid('STORE', email_id, '+FLAGS', '(\\Seen)')
+                    mail.logout()
+                except Exception as e:
+                    logger.debug(f"Failed to mark as seen on server for {email_id}: {e}")
             
             return Email(
                 account_name=account_name,
@@ -53,6 +54,9 @@ class MailReader:
                 content=details.get("content", ""),
                 attachments=details.get("attachments", [])
             )
+        
+        if local_only:
+            return "Email content not found in local cache."
 
         # 2. Fallback: Remote Server
         try:

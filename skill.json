@@ -1,0 +1,21 @@
+{
+  "name": "wugong_email_skill",
+  "description": "A tool to manage email accounts, sync emails, and read/send messages using Wugong Email CLI.",
+  "execution_policy": {
+    "non_interactive_flags": ["--non-interactive", "--json"],
+    "encryption_flag": "-p <password>",
+    "oauth2_flow": "Interactive mode required. Notify user to authorize via the provided URL in browser."
+  },
+  "examples": {
+    "init": "wugong init --sync-interval 10 --non-interactive -p <password> --json",
+    "account_add_password": "wugong account add -n \"MyQQ\" --provider qq -u user@qq.com -P \"password\" --non-interactive -p <password> --json",
+    "account_list": "wugong account list --non-interactive -p <password> --json",
+    "sync": "wugong sync --non-interactive -p <password> --json",
+    "read": "wugong read -a <account> -i <index> --non-interactive -p <password> --json"
+  },
+  "decision_flow": {
+    "step1": "Check if ~/.config/wugong/config.toml exists. If not, install via install.sh and ask user for encryption/account config.",
+    "step2": "Check account existence via 'wugong account list --non-interactive -p <password> --json'.",
+    "step3": "Execute target command with --non-interactive, --json, and -p flags."
+  }
+}

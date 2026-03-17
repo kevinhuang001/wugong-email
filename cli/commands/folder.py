@@ -1,5 +1,6 @@
 import argparse
 import logging
+import questionary
 from logger import console, setup_logger
 from rich.table import Table
 from mail import MailManager
@@ -15,12 +16,18 @@ def handle_folder(args: argparse.Namespace, manager: MailManager) -> None:
         return
 
     account_name = account.get("friendly_name", "default")
-    try:
-        password = config.get_verified_password(manager.config, args, f"Enter encryption password for '{account_name}':")
-    except ValueError as e:
-        CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
-        return
-
+    
+    # Only fetch password if needed for decrypting credentials
+    needs_password = manager.encryption_enabled
+    
+    password = ""
+    if needs_password:
+        try:
+            password = config.get_verified_password(manager.config, args, f"Enter encryption password for '{account_name}':", non_interactive=manager.non_interactive)
+        except ValueError as e:
+            CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
+            return
+    
     try:
         # Connect to IMAP
         mail = manager.connector.get_imap_connection(account, password)
@@ -89,9 +96,12 @@ def handle_folder(args: argparse.Namespace, manager: MailManager) -> None:
                         CLIRenderer.render_message("Folder name is required.", type="error", json_output=json_out)
                         return
                     
-                    non_interactive = getattr(args, "non_interactive", False)
-                    import questionary
-                    if non_interactive or questionary.confirm(f"Are you sure you want to delete folder '{args.name}'?", style=CLIRenderer.get_questionary_style()).ask():
+                    if manager.non_interactive:
+                         if manager.folder_manager.delete_folder(mail, args.name):
+                            CLIRenderer.render_message(f"Successfully deleted folder '{args.name}'.", type="success", json_output=json_out)
+                         else:
+                            CLIRenderer.render_message(f"Failed to delete folder '{args.name}'.", type="error", json_output=json_out)
+                    elif questionary.confirm(f"Are you sure you want to delete folder '{args.name}'?", style=CLIRenderer.get_questionary_style()).ask():
                         if manager.folder_manager.delete_folder(mail, args.name):
                             CLIRenderer.render_message(f"Successfully deleted folder '{args.name}'.", type="success", json_output=json_out)
                         else:

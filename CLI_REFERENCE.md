@@ -65,7 +65,7 @@ Add a new email account (interactive wizard or non-interactive).
 - **Parameters**:
     - `--friendly-name`, `-n`: Friendly name for the account.
     - `--provider`: Email provider (`gmail`, `outlook`, `qq`, `163`, `other`).
-    - `--login-method`: Login method (`Account/Password`, `OAuth2`).
+    - `--login-method`: Login method (`Password`, `OAuth2`).
     - `--username`, `-u`: Email address.
     - `--password`, `-P`: Email password or OAuth2 refresh token.
     - `--imap-server`: IMAP server address.

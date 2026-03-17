@@ -41,7 +41,7 @@ def test_full_complex_workflow(mail_server, mail_config):
         "account", "add",
         "--friendly-name", "user2_workflow",
         "--provider", "other",
-        "--login-method", "Account/Password",
+        "--login-method", "Password",
         "--username", "user2",
         "--imap-server", "127.0.0.1",
         "--imap-port", str(imap_port),

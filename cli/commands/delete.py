@@ -15,15 +15,21 @@ def handle_delete(args: argparse.Namespace, manager: MailManager) -> None:
         return
 
     account_name = account.get("friendly_name", "default")
-    try:
-        password = config.get_verified_password(manager.config, args, f"Enter encryption password for '{account_name}':")
-    except ValueError as e:
-        CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
-        return
-
+    
+    # Only fetch password if needed for decrypting credentials
+    needs_password = manager.encryption_enabled
+    
+    password = ""
+    if needs_password:
+        try:
+            password = config.get_verified_password(manager.config, args, f"Enter encryption password for '{account_name}':", non_interactive=manager.non_interactive)
+        except ValueError as e:
+            CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
+            return
+    
     folder = getattr(args, "folder", "INBOX") or "INBOX"
 
-    if not getattr(args, "non_interactive", False) and not questionary.confirm(f"Are you sure you want to delete email {args.id} from {account_name} ({folder})?", style=CLIRenderer.get_questionary_style()).ask():
+    if not manager.non_interactive and not questionary.confirm(f"Are you sure you want to delete email {args.id} from {account_name} ({folder})?", style=CLIRenderer.get_questionary_style()).ask():
         CLIRenderer.render_message("Deletion cancelled.", type="warning", json_output=json_out)
         return
 

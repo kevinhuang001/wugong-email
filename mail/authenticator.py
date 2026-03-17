@@ -108,8 +108,12 @@ class MailAuthenticator:
                 return new_auth
             return None
 
-    def reauthorize_oauth2(self, account: dict[str, Any], password: str) -> dict[str, Any] | None:
+    def reauthorize_oauth2(self, account: dict[str, Any], password: str, non_interactive: bool = False) -> dict[str, Any] | None:
         """Starts a full OAuth2 re-authorization flow if refresh fails."""
+        if non_interactive:
+            logger.error(f"❌ Re-authorization required for '{account.get('friendly_name')}', but not possible in non-interactive mode. Please run Wugong in interactive mode (e.g., 'wugong sync') to authorize in your browser.")
+            return None
+
         auth = account.get("auth", {})
         
         # Decrypt client credentials if encrypted

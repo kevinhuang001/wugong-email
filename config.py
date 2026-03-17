@@ -40,7 +40,7 @@ def verify_encryption_password(config_data: Dict[str, Any], password: str) -> bo
     except Exception:
         return False
 
-def get_encryption_password(args: Optional[Any] = None, prompt_text: str = "Enter encryption password:", ignore_env: bool = False) -> Optional[str]:
+def get_encryption_password(args: Optional[Any] = None, prompt_text: str = "Enter encryption password:", ignore_env: bool = False, non_interactive: Optional[bool] = None) -> Optional[str]:
     """
     Get encryption password from --encryption-password arg, WUGONG_PASSWORD env var, or interactive prompt.
     """
@@ -60,23 +60,27 @@ def get_encryption_password(args: Optional[Any] = None, prompt_text: str = "Ente
             return password
     
     # 3. Interactive prompt (only if not in non-interactive mode)
-    is_non_interactive = getattr(args, "non_interactive", False) if args is not None else False
+    if non_interactive is None:
+        is_non_interactive = False
+    else:
+        is_non_interactive = non_interactive
     
-    if not is_non_interactive:
-        # Force prompt
-        try:
-            from cli.render import CLIRenderer
-            password = questionary.password(prompt_text, style=CLIRenderer.get_questionary_style()).ask()
-            if password is None: # User cancelled with Ctrl+C
-                return None
-            return password
-        except Exception:
-            return None
-    
-    logger.warning("No encryption password found in CLI, env, or terminal (non-interactive mode enabled).")
-    return None
+    if is_non_interactive:
+        return None
 
-def get_verified_password(config_data: Dict[str, Any], args: Optional[Any] = None, prompt_text: str = "Enter encryption password:") -> str:
+    # Force prompt
+    try:
+        from cli.render import CLIRenderer
+        password = questionary.password(prompt_text, style=CLIRenderer.get_questionary_style()).ask()
+        if password is None: # User cancelled with Ctrl+C
+            raise KeyboardInterrupt
+        return password
+    except KeyboardInterrupt:
+        return None
+    except Exception:
+        return None
+
+def get_verified_password(config_data: Dict[str, Any], args: Optional[Any] = None, prompt_text: str = "Enter encryption password:", non_interactive: Optional[bool] = None) -> str:
     """Gets and verifies the encryption password with retries."""
     general = config_data.get("general", {})
     # Check if encryption is enabled in general settings
@@ -85,7 +89,10 @@ def get_verified_password(config_data: Dict[str, Any], args: Optional[Any] = Non
     if not encryption_enabled:
         return ""
 
-    is_non_interactive = getattr(args, "non_interactive", False) if args is not None else False
+    if non_interactive is None:
+        is_non_interactive = False
+    else:
+        is_non_interactive = non_interactive
     
     # In interactive mode, we allow up to 3 attempts
     max_attempts = 1 if is_non_interactive else 3
@@ -94,7 +101,7 @@ def get_verified_password(config_data: Dict[str, Any], args: Optional[Any] = Non
         # 1. Get password
         # In the first attempt, we check everything. 
         # In subsequent attempts, we ignore env/args and force a prompt.
-        password = get_encryption_password(args, prompt_text, ignore_env=True if attempt > 0 else False)
+        password = get_encryption_password(args, prompt_text, ignore_env=True if attempt > 0 else False, non_interactive=is_non_interactive)
         
         if not password:
             if is_non_interactive:

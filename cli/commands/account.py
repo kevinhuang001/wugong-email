@@ -26,11 +26,11 @@ EMAIL_PROVIDERS = {
         "smtp_server": "smtp.gmail.com",
         "smtp_port": 465,
         "smtp_tls_method": "SSL/TLS",
-        "auth_methods": ["OAuth2", "Account/Password"],
+        "auth_methods": ["OAuth2", "Password"],
         "auth_url": "https://accounts.google.com/o/oauth2/auth",
         "token_url": "https://oauth2.googleapis.com/token",
         "scopes": ["https://mail.google.com/"],
-        "hint": "Note: Gmail requires an 'App Password' if using Account/Password and 2FA is enabled."
+        "hint": "Note: Gmail requires an 'App Password' if using Password and 2FA is enabled."
     },
     "outlook": {
         "imap_server": "outlook.office365.com",
@@ -39,7 +39,7 @@ EMAIL_PROVIDERS = {
         "smtp_server": "smtp.office365.com",
         "smtp_port": 587,
         "smtp_tls_method": "STARTTLS",
-        "auth_methods": ["OAuth2", "Account/Password"],
+        "auth_methods": ["OAuth2", "Password"],
         "auth_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
         "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
         "scopes": [
@@ -57,7 +57,7 @@ EMAIL_PROVIDERS = {
         "smtp_server": "smtp.qq.com",
         "smtp_port": 465,
         "smtp_tls_method": "SSL/TLS",
-        "auth_methods": ["Account/Password"],
+        "auth_methods": ["Password"],
         "auth_url": "",
         "token_url": "",
         "scopes": [],
@@ -70,7 +70,7 @@ EMAIL_PROVIDERS = {
         "smtp_server": "smtp.163.com",
         "smtp_port": 465,
         "smtp_tls_method": "SSL/TLS",
-        "auth_methods": ["Account/Password"],
+        "auth_methods": ["Password"],
         "auth_url": "",
         "token_url": "",
         "scopes": [],
@@ -83,7 +83,7 @@ EMAIL_PROVIDERS = {
         "smtp_server": "",
         "smtp_port": 465,
         "smtp_tls_method": "SSL/TLS",
-        "auth_methods": ["Account/Password", "OAuth2"],
+        "auth_methods": ["Password", "OAuth2"],
         "auth_url": "",
         "token_url": "",
         "scopes": [],
@@ -170,6 +170,7 @@ def account_add_wizard(
                any(item[0].get("auth", {}).get("username") == uname for item in newly_added)
 
     encrypt_enabled = current_config.get("general", {}).get("encryption_enabled") or current_config.get("general", {}).get("encrypt_emails")
+    creds_encryption_enabled = current_config.get("general", {}).get("encryption_enabled", False)
     salt_val = config.get_salt(current_config)
 
     try:
@@ -192,11 +193,18 @@ def account_add_wizard(
                 add_message(f"Warning: An account with username '{username}' is already configured.", type="warning")
 
             # Pre-check encryption password if encryption is enabled
-            encryption_password = config.get_verified_password(current_config, args)
+            encryption_password = config.get_verified_password(current_config, args, non_interactive=True)
 
-            provider = provider or "other"
+            if not provider:
+                add_message("Provider is required in non-interactive mode. Please provide --provider (e.g., gmail, outlook, qq, 163, other).", type="error")
+                return [], None
+            
             provider_info = EMAIL_PROVIDERS.get(provider, EMAIL_PROVIDERS["other"])
-            login_method = login_method or "Account/Password"
+            
+            if not login_method:
+                add_message("Login method is required in non-interactive mode. Please provide --login-method (e.g., 'Password' or 'OAuth2').", type="error")
+                return [], None
+            
             imap_server = imap_server or provider_info["imap_server"]
             imap_tls_method = imap_tls_method or provider_info.get("imap_tls_method", "SSL/TLS")
             imap_port = imap_port or provider_info.get("imap_port") or (993 if imap_tls_method == "SSL/TLS" else 143)
@@ -204,48 +212,31 @@ def account_add_wizard(
             smtp_tls_method = smtp_tls_method or provider_info.get("smtp_tls_method", "SSL/TLS")
             smtp_port = smtp_port or provider_info.get("smtp_port") or (465 if smtp_tls_method == "SSL/TLS" else 587 if smtp_tls_method == "STARTTLS" else 25)
 
+            # Validate required fields for 'other' provider or missing defaults
+            if not imap_server:
+                add_message("IMAP server is required for this provider in non-interactive mode. Please provide --imap-server.", type="error")
+                return [], None
+            if not smtp_server:
+                add_message("SMTP server is required for this provider in non-interactive mode. Please provide --smtp-server.", type="error")
+                return [], None
+            
+            if not sync_limit:
+                add_message("Sync limit is required in non-interactive mode. Please provide --sync-limit (e.g., 20, 50, or 'all').", type="error")
+                return [], None
+
             auth_details = {}
             match login_method:
-                case "Account/Password":
+                case "Password":
                     if not password:
-                        add_message("Password is required in non-interactive mode for Account/Password login.", type="error")
+                        add_message("Password is required in non-interactive mode for Password login.", type="error")
                         return [], None
                     auth_details = {
                         "username": username,
-                        "password": encrypt_data(password, encryption_password, salt_val) if encrypt_enabled else password
+                        "password": encrypt_data(password, encryption_password, salt_val) if creds_encryption_enabled else password
                     }
                 case "OAuth2":
-                    if not client_id or not client_secret:
-                        add_message("Client ID and Client Secret are required in non-interactive mode for OAuth2 login.", type="error")
-                        return [], None
-                    auth_url = auth_url or provider_info.get("auth_url", "")
-                    token_url = token_url or provider_info.get("token_url", "")
-                    scopes = scopes or provider_info.get("scopes", [])
-                    redirect_uri = redirect_uri or "http://localhost:5000/"
-                    # Use password as refresh token in non-interactive OAuth2 if needed
-                    refresh_token_val = password or ""
-                    if not refresh_token_val:
-                        add_message("Refresh Token is required in non-interactive mode for OAuth2 login (provide via --password).", type="error")
-                        return [], None
-                    
-                    if encrypt_enabled:
-                        auth_details = {
-                            "username": username,
-                            "client_id": encrypt_data(client_id, encryption_password, salt_val),
-                            "client_secret": encrypt_data(client_secret, encryption_password, salt_val),
-                            "auth_url": auth_url,
-                            "token_url": token_url,
-                            "redirect_uri": redirect_uri,
-                            "scopes": scopes,
-                            "refresh_token": encrypt_data(refresh_token_val, encryption_password, salt_val),
-                            "access_token": ""
-                        }
-                    else:
-                        auth_details = {
-                            "username": username, "client_id": client_id, "client_secret": client_secret,
-                            "auth_url": auth_url, "token_url": token_url, "redirect_uri": redirect_uri,
-                            "scopes": scopes, "refresh_token": refresh_token_val, "access_token": ""
-                        }
+                    add_message("OAuth2 login is not supported in non-interactive mode. Please use interactive mode to authorize in your browser.", type="error")
+                    return [], None
 
             if isinstance(sync_limit, str):
                 limit = -1 if sync_limit.lower() == "all" else int(sync_limit) if sync_limit.isdigit() else 20
@@ -267,7 +258,7 @@ def account_add_wizard(
 
             # Connection Test for Non-Interactive
             success, msg = True, ""
-            if login_method == "Account/Password":
+            if login_method == "Password":
                 success, msg = test_imap_connection(imap_server, imap_port, username, password=password, tls_method=imap_tls_method)
             elif login_method == "OAuth2":
                 add_message("Skipping connection test for non-interactive OAuth2 (requires refresh token exchange).", type="warning")
@@ -285,7 +276,7 @@ def account_add_wizard(
         # to ensure the user doesn't waste time entering account details if they don't know the password.
         if encrypt_enabled and encryption_password is None:
             try:
-                encryption_password = config.get_verified_password(current_config, args, prompt_text="Enter your encryption password to proceed with adding accounts:")
+                encryption_password = config.get_verified_password(current_config, args, prompt_text="Enter your encryption password to proceed with adding accounts:", non_interactive=non_interactive)
             except ValueError as e:
                 add_message(str(e), type="error")
                 return [], None
@@ -401,7 +392,7 @@ def account_add_wizard(
             success = False
             while not success:
                 match curr_login_method:
-                    case "Account/Password":
+                    case "Password":
                         if password_val is None:
                             pwd_label = "Authorization Code:" if "Authorization Code" in provider_info["hint"] else "Email Password (or App Password):"
                             if (password_val := questionary.password(pwd_label, style=CLIRenderer.get_questionary_style()).ask()) is None:
@@ -424,7 +415,7 @@ def account_add_wizard(
 
                         auth_details = {
                             "username": curr_username,
-                            "password": encrypt_data(password_val, encryption_password, salt_val) if encrypt_enabled else password_val
+                            "password": encrypt_data(password_val, encryption_password, salt_val) if creds_encryption_enabled else password_val
                         }
                         
                     case "OAuth2":
@@ -495,14 +486,14 @@ def account_add_wizard(
 
                                 auth_details = {
                                     "username": curr_username,
-                                    "client_id": encrypt_data(curr_client_id, encryption_password, salt_val) if encrypt_enabled else curr_client_id,
-                                    "client_secret": encrypt_data(curr_client_secret, encryption_password, salt_val) if encrypt_enabled else curr_client_secret,
+                                    "client_id": encrypt_data(curr_client_id, encryption_password, salt_val) if creds_encryption_enabled else curr_client_id,
+                                    "client_secret": encrypt_data(curr_client_secret, encryption_password, salt_val) if creds_encryption_enabled else curr_client_secret,
                                     "auth_url": curr_auth_url,
                                     "token_url": curr_token_url,
                                     "redirect_uri": curr_redirect_uri,
                                     "scopes": curr_scopes,
-                                    "refresh_token": encrypt_data(refresh_token_val, encryption_password, salt_val) if encrypt_enabled else refresh_token_val,
-                                    "access_token": encrypt_data(access_token, encryption_password, salt_val) if encrypt_enabled else access_token
+                                    "refresh_token": encrypt_data(refresh_token_val, encryption_password, salt_val) if creds_encryption_enabled else refresh_token_val,
+                                    "access_token": encrypt_data(access_token, encryption_password, salt_val) if creds_encryption_enabled else access_token
                                 }
                             else:
                                 raise ValueError("Failed to obtain tokens.")
@@ -571,16 +562,20 @@ def handle_account(args: argparse.Namespace, manager: MailManager, account_parse
             verbose = getattr(args, "verbose", False)
             accounts_data = []
 
-            # Only fetch server stats if verbose mode is enabled
-            password = None
-            if verbose:
+            # Only fetch server stats if verbose mode is enabled AND encryption is enabled (to decrypt credentials)
+            password = ""
+            if verbose and manager.encryption_enabled:
                 try:
                     prompt = "Enter encryption password to fetch server stats (or Ctrl+C to skip):"
-                    password = config.get_verified_password(manager.config, args, prompt)
+                    password = config.get_verified_password(manager.config, args, prompt, non_interactive=manager.non_interactive)
                 except (ValueError, KeyboardInterrupt) as e:
+                    # If we can't get the password in non-interactive mode, we just skip server stats
+                    # rather than failing the whole command, unless it was a fatal error.
                     if not json_out:
                         console.print(f"[yellow]Skipping server stats: {e}[/yellow]")
-
+                    # Continue with password = "", which will skip the server connection part below
+                    password = ""
+            
             # Unified account data gathering logic
             status_ctx = console.status("[bold green]Fetching account stats...", spinner="dots") if not json_out else nullcontext()
             with status_ctx as status:
@@ -590,11 +585,11 @@ def handle_account(args: argparse.Namespace, manager: MailManager, account_parse
                     # Local stats
                     cached_count = manager.storage_manager.get_email_count(account_name)
                     unseen_count = manager.storage_manager.get_email_count(account_name, only_unseen=True)
-
-                    # Server stats (only if verbose and password provided)
+                    
+                    # Server stats (only if verbose AND password is provided or not needed)
                     srv_total = "N/A"
                     srv_unseen = "N/A"
-                    if verbose and password:
+                    if verbose and (password or not manager.encryption_enabled):
                         if not json_out and status:
                             status.update(f"[bold green]Connecting to {account_name}...")
                         try:
@@ -658,7 +653,7 @@ def handle_account(args: argparse.Namespace, manager: MailManager, account_parse
                 scopes=args.scopes.split(",") if args.scopes else None,
                 redirect_uri=args.redirect_uri,
                 sync_limit=args.sync_limit,
-                non_interactive=getattr(args, "non_interactive", False),
+                non_interactive=manager.non_interactive,
                 json_output=json_out,
                 status_messages=status_messages
             )
@@ -692,7 +687,7 @@ def handle_account(args: argparse.Namespace, manager: MailManager, account_parse
                 
                 if encryption_password is None:
                     try:
-                        encryption_password = config.get_verified_password(manager.config, args, "Enter encryption password to start initial sync:")
+                        encryption_password = config.get_verified_password(manager.config, args, "Enter encryption password to start initial sync:", non_interactive=manager.non_interactive)
                     except ValueError as e:
                         if json_out:
                             status_messages.append(f"Error: {e}")
@@ -762,7 +757,7 @@ def handle_account(args: argparse.Namespace, manager: MailManager, account_parse
             
         case "delete":
             json_out = getattr(args, "json", False)
-            non_interactive = getattr(args, "non_interactive", False)
+            non_interactive = manager.non_interactive
             target = args.account
 
             if not target:

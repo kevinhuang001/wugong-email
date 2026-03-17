@@ -31,6 +31,7 @@ def mock_manager():
     manager.accounts = [{"friendly_name": "test_acc", "imap_server": "imap.test.com", "imap_port": 993}]
     manager.get_account_by_name.return_value = manager.accounts[0]
     manager.encryption_enabled = False
+    manager.non_interactive = False
     manager.config = {"general": {"encrypt_emails": False}}
     return manager
 

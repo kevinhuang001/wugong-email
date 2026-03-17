@@ -22,13 +22,20 @@ def handle_sync(args: argparse.Namespace, manager: MailManager) -> None:
             CLIRenderer.render_message("No accounts configured yet. Run 'wugong account add' to get started.", type="warning", json_output=json_out)
         return
 
-    try:
-        prompt_text = "Enter encryption password for all accounts:" if len(target_accounts) > 1 else f"Enter encryption password for '{target_accounts[0].get('friendly_name', 'default')}':"
-        password = config.get_verified_password(manager.config, args, prompt_text)
-    except ValueError as e:
-        CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
-        return
-
+    # Only fetch password if needed:
+    # 1. We are encrypting credentials (to decrypt IMAP password for remote connection)
+    # 2. We are encrypting emails (to encrypt new emails before saving to cache)
+    needs_password = manager.encryption_enabled or manager.encrypt_emails
+    
+    password = ""
+    if needs_password:
+        try:
+            prompt_text = "Enter encryption password for all accounts:" if len(target_accounts) > 1 else f"Enter encryption password for '{target_accounts[0].get('friendly_name', 'default')}':"
+            password = config.get_verified_password(manager.config, args, prompt_text, non_interactive=manager.non_interactive)
+        except ValueError as e:
+            CLIRenderer.render_message(f"Error: {e}", type="error", json_output=json_out)
+            return
+    
     folder = getattr(args, "folder", "INBOX") or "INBOX"
 
     all_emails = []

@@ -12,11 +12,13 @@ class MailConnector:
         self, 
         auth_manager: Any, 
         config: dict[str, Any], 
-        save_config_callback: Callable[[], None]
+        save_config_callback: Callable[[], None],
+        non_interactive: bool = False
     ) -> None:
         self.auth_manager = auth_manager
         self.config = config
         self.save_config_callback = save_config_callback
+        self.non_interactive = non_interactive
 
     def get_imap_connection(self, account: dict[str, Any], auth_password: str, timeout: int = 60) -> imaplib.IMAP4:
         """Connects and authenticates to IMAP server."""
@@ -91,7 +93,7 @@ class MailConnector:
         user = auth.get("username")
         
         match login_method:
-            case "Account/Password":
+            case "Password":
                 mail.login(user, auth['password'])
                 logger.info(f"IMAP: Logged in as {user} using password")
                 return mail
@@ -122,7 +124,7 @@ class MailConnector:
                                      
                             # If refresh failed (returned empty tokens) or new token still fails, try full re-auth
                             logger.info("Refreshing failed, attempting full re-authorization...")
-                            new_auth = self.auth_manager.reauthorize_oauth2(account, auth_password)
+                            new_auth = self.auth_manager.reauthorize_oauth2(account, auth_password, non_interactive=self.non_interactive)
                             if new_auth and (new_token_encrypted := new_auth.get('access_token')):
                                 account['auth'] = new_auth
                                 self.save_config_callback()
@@ -139,7 +141,7 @@ class MailConnector:
         user = auth.get("username")
         
         match login_method:
-            case "Account/Password":
+            case "Password":
                 server.login(user, auth['password'])
                 logger.info(f"SMTP: Logged in as {user} using password")
             case _:
@@ -167,7 +169,7 @@ class MailConnector:
                                 
                         # If refresh failed (returned empty tokens) or new token still fails, try full re-auth
                         logger.info("SMTP: Refreshing failed, attempting full re-authorization...")
-                        new_auth = self.auth_manager.reauthorize_oauth2(account, auth_password)
+                        new_auth = self.auth_manager.reauthorize_oauth2(account, auth_password, non_interactive=self.non_interactive)
                         if new_auth and (new_token_encrypted := new_auth.get('access_token')):
                             account['auth'] = new_auth
                             self.save_config_callback()

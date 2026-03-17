@@ -31,7 +31,8 @@ def setup_scheduling(interval_minutes: int, encryption_password: str | None = No
                     return True
 
                 env_prefix = f'set WUGONG_PASSWORD={encryption_password} && ' if encryption_password else ""
-                task_command = f'cmd /c "{env_prefix}{wugong_bat} sync all >> \"{log_file}\" 2>&1"'
+                # Windows command: echo current date and time, then sync
+                task_command = f'cmd /c "{env_prefix}echo [%date% %time%] Syncing... >> \"{log_file}\" 2>&1 && {wugong_bat} sync -a all >> \"{log_file}\" 2>&1"'
 
                 cmd = ["schtasks", "/create", "/sc", "minute", "/mo", str(interval_minutes), "/tn", "WugongSync", "/tr", task_command, "/f"]
                 subprocess.run(cmd, check=True, capture_output=True)
@@ -47,11 +48,12 @@ def setup_scheduling(interval_minutes: int, encryption_password: str | None = No
                 except subprocess.CalledProcessError:
                     current_cron = ""
 
-                lines = [line for line in current_cron.splitlines() if "wugong sync all" not in line]
+                lines = [line for line in current_cron.splitlines() if "wugong sync" not in line]
 
                 if interval_minutes > 0:
                     env_prefix = f"WUGONG_PASSWORD={encryption_password} " if encryption_password else ""
-                    cron_job = f"*/{interval_minutes} * * * * {env_prefix}{wugong_exe} sync all >> {log_file} 2>&1"
+                    # Unix command: echo current date, then sync
+                    cron_job = f"*/{interval_minutes} * * * * {env_prefix}echo \"[`date`] Syncing...\" >> {log_file} 2>&1 && {wugong_exe} sync -a all >> {log_file} 2>&1"
                     lines.append(cron_job)
                     logger.info(f"Scheduled sync every {interval_minutes} minutes via Crontab.")
                     if encryption_password:

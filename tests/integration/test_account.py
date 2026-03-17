@@ -16,7 +16,7 @@ def test_account_add_all_params(mail_server, mail_config):
         "account", "add", 
         "--friendly-name", "full_param_user",
         "--provider", "other",
-        "--login-method", "Account/Password",
+        "--login-method", "Password",
         "--username", "user1",
         "--imap-server", "127.0.0.1",
         "--imap-port", str(imap_port),

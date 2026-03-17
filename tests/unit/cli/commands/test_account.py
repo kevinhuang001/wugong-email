@@ -60,6 +60,7 @@ def mock_manager():
     manager.accounts = [{"friendly_name": "test_acc", "imap_server": "imap.test.com", "imap_port": 993}]
     manager.get_account_by_name.return_value = manager.accounts[0]
     manager.encryption_enabled = False
+    manager.non_interactive = False
     manager.config = {"general": {"encrypt_emails": False}}
     manager.syncer = MagicMock()
     return manager
@@ -298,11 +299,13 @@ def test_handle_account_delete_not_found(mock_select, mock_render, mock_manager)
     # Ensure name is in choices to avoid questionary ValueError
     mock_manager.accounts = [{"friendly_name": "acc1"}]
     mock_manager.get_account_by_name.return_value = None
+    mock_manager.non_interactive = True
     mock_parser = MagicMock()
     
     handle_account(args, mock_manager, mock_parser)
     
     mock_render.assert_called_once_with(ANY, type="error", json_output=False)
+    assert "not found" in str(mock_render.call_args[0][0]).lower()
 
 @patch('cli.commands.account.questionary.select')
 @patch('cli.commands.account.questionary.confirm')
