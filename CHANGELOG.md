@@ -5,14 +5,22 @@ All notable changes to this project will be documented in this file.
 ## [1.1.2] - 2026-03-17
 
 ### Features
+- **PEP 517/518 Migration**: Migrated the project structure to the modern PEP 517/518 standard using `pyproject.toml` and the `hatchling` build system. This improves dependency management and installation reliability.
 - **Enhanced OAuth2 UX**: Added a prominent Rich-based panel to display the OAuth2 authorization URL in the console. This ensures usability in headless environments (e.g., SSH) where a browser cannot be automatically opened.
 - **Improved OAuth2 Response Time**: Reduced the server shutdown delay after successful OAuth2 authorization from 2 seconds to 0.5 seconds.
+- **Smarter Installation Scripts**:
+    - Updated `install.sh` and `install.ps1` to use `uv pip install -e .` for PEP 517 compatibility.
+    - Adjusted installation logic: local source installations now perform a fresh install without forced upgrades, while remote installations (via piping) still offer automatic upgrades if an existing version is detected.
 
 ### Performance
 - **Optimized Test Suite**: 
     - Reduced PBKDF2 iterations in test environments to significantly speed up cryptographic operations.
     - Optimized `cleanup_mailboxes` fixture to only run for integration tests, eliminating unnecessary delays in unit tests.
     - Implemented smarter Greenmail server detection with automatic retries and waits, ensuring better reliability in slow or CI environments.
+
+### Cleanup
+- **Removed Legacy Dependencies**: Excised `aiosmtpd` and `localmail` from the project's test dependencies and source code. All integration testing is now standardized on the Greenmail Docker environment.
+- **Simplified Project Structure**: Removed the legacy `requirements.txt` in favor of `pyproject.toml`.
 
 ## [1.1.1] - 2026-03-16
 

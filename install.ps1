@@ -28,16 +28,7 @@ try {
     Write-Error "❌ Error: python is not installed or not in PATH. Please install Python >= $MinPythonVersion first."
 }
 
-# 2. Check for existing installation
-if ((Test-Path $InstallDir) -and (Test-Path (Join-Path $InstallDir "main.py")) -and (Test-Path (Join-Path $InstallDir ".venv\Scripts\python.exe"))) {
-    Write-Host "💡 Wugong Email is already installed at $InstallDir." -ForegroundColor Blue
-    Write-Host "🔄 Switching to upgrade mode..." -ForegroundColor Blue
-     # Run the existing installation's upgrade command
-     & "$InstallDir\.venv\Scripts\python.exe" "$InstallDir\main.py" upgrade $args
-     exit
- }
-
-# 3. Source Directory Detection (Local vs Remote)
+# 2. Source Directory Detection (Local vs Remote)
 $SourceDir = $null
 $TempDir = $null
 
@@ -51,7 +42,18 @@ if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot "main.py")) -and (Tes
     Write-Host "📂 Source files found in current directory. Using local version." -ForegroundColor Blue
 } else {
     # Likely being piped or executed remotely (e.g., iwr ... | iex)
-    Write-Host "📡 Remote execution detected or source files not found. Cloning from GitHub..." -ForegroundColor Blue
+    Write-Host "📡 Remote execution detected. Checking for existing installation..." -ForegroundColor Blue
+    
+    # Check for existing installation - only for remote execution
+    if ((Test-Path $InstallDir) -and (Test-Path (Join-Path $InstallDir "main.py")) -and (Test-Path (Join-Path $InstallDir ".venv\Scripts\python.exe"))) {
+        Write-Host "💡 Wugong Email is already installed at $InstallDir." -ForegroundColor Blue
+        Write-Host "🔄 Switching to upgrade mode..." -ForegroundColor Blue
+        # Run the existing installation's upgrade command
+        & "$InstallDir\.venv\Scripts\python.exe" "$InstallDir\main.py" upgrade $args
+        exit
+    }
+
+    Write-Host "📡 Cloning from GitHub..." -ForegroundColor Blue
     $TempDir = Join-Path $env:TEMP "wugong_install_$(Get-Random)"
     New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
     try {
@@ -90,7 +92,7 @@ Write-Host "🐍 Setting up virtual environment..." -ForegroundColor Blue
 if (Get-Command uv -ErrorAction SilentlyContinue) {
     Write-Host "✨ uv found! Using uv for faster installation..." -ForegroundColor Green
     & uv venv --quiet
-    & uv pip install --quiet --python (Join-Path $InstallDir ".venv\Scripts\python.exe") -r requirements.txt
+    & uv pip install --quiet --python (Join-Path $InstallDir ".venv\Scripts\python.exe") -e .
 } else {
     Write-Error "❌ Error: uv not found. uv is required for installation."
     Write-Host "💡 Please install uv first: https://github.com/astral-sh/uv" -ForegroundColor Yellow

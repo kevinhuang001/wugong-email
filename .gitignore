@@ -29,6 +29,7 @@ ENV/
 # Configuration (Sensitive)
 config.toml
 *.toml
+!pyproject.toml
 !requirements.txt
 
 # OS

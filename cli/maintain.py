@@ -211,7 +211,9 @@ def handle_upgrade(args: Optional[argparse.Namespace] = None, manager: Any = Non
                         
                         # Use console.status to show activity during dependency update
                         with console.status("[bold blue]Updating dependencies...[/bold blue]") as status:
-                            subprocess.run([uv_path, "pip", "install", "--python", str(venv_python), "-r", str(install_dir / "requirements.txt")], check=True, capture_output=True)
+                            # Use uv pip install . to install dependencies from pyproject.toml
+                            # and include the project itself as an editable install
+                            subprocess.run([uv_path, "pip", "install", "--python", str(venv_python), "-e", "."], cwd=str(install_dir), check=True, capture_output=True)
                         
                         if not json_out:
                             console.print("[green]✅ Dependencies updated successfully.[/green]")

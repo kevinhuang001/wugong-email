@@ -28,17 +28,7 @@ if [[ $(echo -e "$PYTHON_VERSION\n$MIN_PYTHON_VERSION" | sort -V | head -n1) != 
 fi
 echo -e "${GREEN}✅ Python $PYTHON_VERSION found.${NC}"
 
-# 2. Check for existing installation
-if [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/main.py" ] && [ -f "$INSTALL_DIR/.venv/bin/python3" ]; then
-    echo -e "${BLUE}💡 Wugong Email is already installed at $INSTALL_DIR.${NC}"
-    echo -e "${BLUE}🔄 Switching to upgrade mode...${NC}"
-    # Run the existing installation's upgrade command
-    # Pass all original arguments (though install.sh usually doesn't have many)
-    "$INSTALL_DIR/.venv/bin/python3" "$INSTALL_DIR/main.py" upgrade "$@"
-    exit 0
-fi
-
-# 3. Check if running via local file or piped (remote)
+# 2. Check if running via local file or piped (remote)
  if [ -f "$0" ]; then
      # Script is being executed as a local file (e.g., ./install.sh or bash install.sh)
      SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
@@ -53,7 +43,18 @@ fi
      fi
  else
      # Script is likely being piped (e.g., curl ... | bash)
-     echo -e "${BLUE}📡 Remote execution detected. Cloning from GitHub...${NC}"
+     echo -e "${BLUE}📡 Remote execution detected. Checking for existing installation...${NC}"
+     
+     # Check for existing installation - only for remote/piped execution
+     if [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/main.py" ] && [ -f "$INSTALL_DIR/.venv/bin/python3" ]; then
+         echo -e "${BLUE}💡 Wugong Email is already installed at $INSTALL_DIR.${NC}"
+         echo -e "${BLUE}🔄 Switching to upgrade mode...${NC}"
+         # Run the existing installation's upgrade command
+         "$INSTALL_DIR/.venv/bin/python3" "$INSTALL_DIR/main.py" upgrade "$@"
+         exit 0
+     fi
+
+     echo -e "${BLUE}📡 Cloning from GitHub...${NC}"
      TEMP_DIR=$(mktemp -d)
      git clone --quiet --depth 1 "$REPO_URL" "$TEMP_DIR" || { echo -e "${RED}❌ Error: Failed to clone repository.${NC}"; exit 1; }
      SOURCE_DIR="$TEMP_DIR"
@@ -89,7 +90,8 @@ if command -v uv &> /dev/null; then
     echo -e "${GREEN}✨ uv found! Using uv for installation...${NC}"
     uv venv &> /dev/null
     source .venv/bin/activate
-    uv pip install --quiet -r requirements.txt
+    # Use uv pip install -e . to install dependencies from pyproject.toml
+    uv pip install --quiet -e .
 else
     echo -e "${RED}❌ Error: uv not found. uv is required for installation.${NC}"
     echo -e "${BLUE}💡 Please install uv first: https://github.com/astral-sh/uv${NC}"

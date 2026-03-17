@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wugong-email"
+dynamic = ["version"]
+description = "Wugong Email CLI Manager"
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+keywords = ["email", "cli", "imap", "smtp", "encryption"]
+authors = [
+  { name = "Kevin Huang", email = "kevinhuang001@gmail.com" },
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "Topic :: Communications :: Email",
+]
+dependencies = [
+  "toml",
+  "cryptography",
+  "questionary",
+  "requests-oauthlib",
+  "flask",
+  "rich",
+  "requests",
+  "werkzeug",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest",
+  "pytest-mock",
+]
+
+[project.urls]
+Documentation = "https://github.com/kevinhuang001/wugong-email#readme"
+Issues = "https://github.com/kevinhuang001/wugong-email/issues"
+Source = "https://github.com/kevinhuang001/wugong-email"
+
+[project.scripts]
+wugong = "main:main"
+
+[tool.hatch.version]
+path = ".version"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cli", "mail", "main.py", "logger.py", "config.py", "crypto_utils.py", "oauth2.py", "schedule.py"]
